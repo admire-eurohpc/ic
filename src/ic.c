@@ -1,9 +1,7 @@
 #include <errno.h>
 #include <margo.h>
 
-#include "ic.h"
 #include "ic_rpc.h"
-
 
 
 /* TODO
@@ -21,7 +19,9 @@ struct ic_context {
 
 
 /* Returns NULL on error */
-struct ic_context *ic_init(margo_log_level loglevel) {
+struct ic_context *
+ic_init(enum ic_log_level log_level)
+{
   hg_return_t hret;
 
   struct ic_context *icc = calloc(1, sizeof(struct ic_context));
@@ -35,7 +35,7 @@ struct ic_context *ic_init(margo_log_level loglevel) {
     return NULL;
   }
 
-  margo_set_log_level(icc->mid, loglevel);
+  margo_set_log_level(icc->mid, ic_to_margo_log_level(log_level));
 
   FILE *f = fopen(IC_ADDR_FILE, "r");
   if (!f) {
@@ -63,7 +63,9 @@ struct ic_context *ic_init(margo_log_level loglevel) {
 }
 
 
-int ic_fini(struct ic_context *icc) {
+int
+ic_fini(struct ic_context *icc)
+{
   int rc = EXIT_SUCCESS;
 
   if (!icc)
@@ -79,7 +81,9 @@ int ic_fini(struct ic_context *icc) {
 }
 
 
-int ic_make_rpc(struct ic_context *icc) {
+int
+ic_make_rpc(struct ic_context *icc)
+{
   hg_return_t hret;
   hg_handle_t handle;
   hello_out_t resp;

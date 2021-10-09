@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <margo.h>
 
-#include "ic.h"
 #include "ic_rpc.h"
 
 
