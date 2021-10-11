@@ -23,6 +23,7 @@ PKG_CONFIG := pkg-config
 # run with LD_LIBRARY_PATH=~/.local/lib/ ./intelligent_controller
 
 # XX --as-needed, -rpath?
+# XX add .h to deps
 
 
 CFLAGS := -Wall -Wpedantic -g

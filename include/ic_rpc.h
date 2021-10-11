@@ -11,7 +11,9 @@
 #define IC_ADDR_FILE "/tmp/ic.addr"
 #define IC_HG_PROVIDER "ofi+tcp"
 
-/* Translate from ic_log_level to margo_log_level */
+/**
+ * Translate from ic_log_level to margo_log_level.
+ */
 static inline margo_log_level
 ic_to_margo_log_level(enum ic_log_level ic_log_level)
 {
