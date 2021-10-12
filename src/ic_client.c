@@ -20,8 +20,7 @@ main(int argc, char **argv)
   if (rc == IC_SUCCESS) {
     printf("RPC successful: retcode=%d, \"%s\"\n", rpc_retcode, rpc_retmsg);
     free(rpc_retmsg);
-  }
-  else
+  } else
     fprintf(stderr, "Error making RPC to IC (retcode=%d)\n", rc);
 
   rc = ic_fini(icc);
