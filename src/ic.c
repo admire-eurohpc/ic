@@ -63,7 +63,9 @@ ic_init(enum ic_log_level log_level, struct ic_context **ic_context)
     return IC_FAILURE;
   }
 
-  icc->rpc_id[IC_RPC_HELLO] = MARGO_REGISTER(icc->mid, "hello", void, hello_out_t, NULL);
+  icc->provider_id = IC_MARGO_PROVIDER_ID_DEFAULT;
+
+  icc->rpc_id[IC_RPC_HELLO] = MARGO_REGISTER(icc->mid, "ic_hello", void, hello_out_t, NULL);
   /* register other RPCs here */
 
   *ic_context = icc;
@@ -104,8 +106,7 @@ ic_rpc_hello(struct ic_context *icc, int *retcode, char **retmsg)
     return IC_FAILURE;
   }
 
-  /* XX margo_provider_forward */
-  hret = margo_forward(handle, NULL);
+  hret = margo_provider_forward(icc->provider_id, handle, NULL);
   if (hret != HG_SUCCESS) {
     margo_error(icc->mid, "Could not forward Margo RPC: %s", HG_Error_to_string(hret));
     margo_destroy(handle);	/* XX check error */

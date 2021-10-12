@@ -11,6 +11,9 @@
 #define IC_ADDR_FILE "/tmp/ic.addr"
 #define IC_HG_PROVIDER "ofi+tcp"
 
+/* Margo provider != Hg network provider */
+#define IC_MARGO_PROVIDER_ID_DEFAULT 12
+
 /**
  * Translate from ic_log_level to margo_log_level.
  */

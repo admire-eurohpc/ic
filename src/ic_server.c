@@ -14,11 +14,17 @@ int main(int argc, char** argv) {
   margo_instance_id mid;
 
   mid = margo_init(IC_HG_PROVIDER, MARGO_SERVER_MODE, 0, -1);
-  if (!mid
+  if (!mid) {
     margo_error(mid, "Error initializing Margo instance with provider %s", IC_HG_PROVIDER);
     return EXIT_FAILURE;
   }
   margo_set_log_level(mid, MARGO_LOG_INFO);
+
+  if(margo_is_listening(mid) == HG_FALSE) {
+    margo_error(mid, "Margo instance is not a server");
+    margo_finalize(mid);
+    return EXIT_FAILURE;
+  }
 
   hg_return_t hret;
   hg_addr_t addr;
@@ -44,7 +50,7 @@ int main(int argc, char** argv) {
   if (hret != HG_SUCCESS)
     margo_error(mid, "Could not free Margo address");
 
-  margo_info(mid, "Margo Server running at address %s\n", addr_str);
+  margo_info(mid, "Margo Server running at address %s", addr_str);
 
   FILE *f = fopen(IC_ADDR_FILE, "w");
   if (f == NULL) {
@@ -61,8 +67,19 @@ int main(int argc, char** argv) {
   }
   fclose(f);
 
-  hg_id_t rpc_id_hello = MARGO_REGISTER(mid, "hello", void, hello_out_t, hello_world);
-  (void) rpc_id_hello;
+  hg_id_t rpc_id;
+  hg_bool_t flag;
+  margo_provider_registered_name(mid, "ic_hello", IC_MARGO_PROVIDER_ID_DEFAULT, &rpc_id, &flag);
+  if(flag == HG_TRUE) {
+    margo_error(mid, "Provider %d already exists", IC_MARGO_PROVIDER_ID_DEFAULT);
+    margo_finalize(mid);
+    return EXIT_FAILURE;
+  }
+
+  /* XX using default Argobot pool */
+  rpc_id = MARGO_REGISTER_PROVIDER(mid, "ic_hello", void, hello_out_t, hello_world, IC_MARGO_PROVIDER_ID_DEFAULT, ABT_POOL_NULL);
+  (void) rpc_id;
+  margo_info(mid, "ic_hello registered to provider %d", IC_MARGO_PROVIDER_ID_DEFAULT);
 
   margo_wait_for_finalize(mid);
 
