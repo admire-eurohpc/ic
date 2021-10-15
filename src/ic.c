@@ -106,7 +106,7 @@ ic_rpc_hello(struct ic_context *icc, int *retcode, char **retmsg)
     return IC_FAILURE;
   }
 
-  hret = margo_provider_forward(icc->provider_id, handle, NULL);
+  hret = margo_provider_forward_timed(icc->provider_id, handle, NULL, IC_RPC_TIMEOUT_MS);
   if (hret != HG_SUCCESS) {
     margo_error(icc->mid, "Could not forward Margo RPC: %s", HG_Error_to_string(hret));
     margo_destroy(handle);	/* XX check error */

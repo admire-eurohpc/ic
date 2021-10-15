@@ -9,8 +9,8 @@ int
 main(int argc, char **argv)
 {
   int rc;
-  struct ic_context *icc;
 
+  struct ic_context *icc;
   ic_init(IC_LOG_INFO, &icc);
   assert(icc != NULL);
 
