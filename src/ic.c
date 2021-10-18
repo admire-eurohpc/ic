@@ -30,37 +30,36 @@ ic_init(enum ic_log_level log_level, struct ic_context **ic_context)
 {
   hg_return_t hret;
 
+  *ic_context = NULL;
+
   struct ic_context *icc = calloc(1, sizeof(struct ic_context));
   if (!icc)
     return IC_FAILURE;
 
   icc->mid = margo_init(IC_HG_PROVIDER, MARGO_CLIENT_MODE, 0, 0);
   if (!icc->mid)
-    return IC_FAILURE;
+    goto error;
 
   margo_set_log_level(icc->mid, ic_to_margo_log_level(log_level));
 
   FILE *f = fopen(IC_ADDR_FILE, "r");
   if (!f) {
     margo_error(icc->mid, "Error opening Margo address file \""IC_ADDR_FILE"\": %s", strerror(errno));
-    margo_finalize(icc->mid);
-    return IC_FAILURE;
+    goto error;
   }
 
   char addr_str[IC_ADDR_MAX_SIZE];
   if (!fgets(addr_str, IC_ADDR_MAX_SIZE, f)) {
     margo_error(icc->mid, "Error reading from Margo address file: %s", strerror(errno));
     fclose(f);
-    margo_finalize(icc->mid);
-    return IC_FAILURE;
+    goto error;
   }
   fclose(f);
 
   hret = margo_addr_lookup(icc->mid, addr_str, &icc->addr);
   if (hret != HG_SUCCESS) {
     margo_error(icc->mid, "Could not get Margo address: %s", HG_Error_to_string(hret));
-    margo_finalize(icc->mid);
-    return IC_FAILURE;
+    goto error;
   }
 
   icc->provider_id = IC_MARGO_PROVIDER_ID_DEFAULT;
@@ -70,6 +69,14 @@ ic_init(enum ic_log_level log_level, struct ic_context **ic_context)
 
   *ic_context = icc;
   return IC_SUCCESS;
+
+ error:
+  if (icc) {
+    if (!icc->mid)
+      margo_finalize(icc->mid);
+    free(icc);
+  }
+  return IC_FAILURE;
 }
 
 
