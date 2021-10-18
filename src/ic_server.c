@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <inttypes.h>         /* PRIdxx */
 #include <stdio.h>
 #include <margo.h>
 
@@ -7,6 +8,7 @@
 
 static void hello_world(hg_handle_t h);
 DECLARE_MARGO_RPC_HANDLER(hello_world) /* place the cb in an Argobots ULT */
+DECLARE_MARGO_RPC_HANDLER(adhoc_nodes)
 
 
 int main(int argc, char** argv) {
@@ -67,19 +69,38 @@ int main(int argc, char** argv) {
   }
   fclose(f);
 
-  hg_id_t rpc_id;
+  hg_id_t rpc_hello_id;
   hg_bool_t flag;
-  margo_provider_registered_name(mid, "ic_hello", IC_MARGO_PROVIDER_ID_DEFAULT, &rpc_id, &flag);
+  margo_provider_registered_name(mid, "ic_hello", IC_MARGO_PROVIDER_ID_DEFAULT, &rpc_hello_id, &flag);
   if(flag == HG_TRUE) {
     margo_error(mid, "Provider %d already exists", IC_MARGO_PROVIDER_ID_DEFAULT);
     margo_finalize(mid);
     return EXIT_FAILURE;
   }
 
-  /* XX using default Argobot pool */
-  rpc_id = MARGO_REGISTER_PROVIDER(mid, "ic_hello", void, hello_out_t, hello_world, IC_MARGO_PROVIDER_ID_DEFAULT, ABT_POOL_NULL);
-  (void) rpc_id;
-  margo_info(mid, "ic_hello registered to provider %d", IC_MARGO_PROVIDER_ID_DEFAULT);
+  rpc_hello_id = MARGO_REGISTER_PROVIDER(mid, "ic_hello",
+                                         void,
+                                         hello_out_t,
+                                         hello_world,
+                                         IC_MARGO_PROVIDER_ID_DEFAULT,
+                                         /* XX using default Argobot pool */
+                                         ABT_POOL_NULL);
+
+  (void) rpc_hello_id;
+  margo_info(mid, "ic_hello RPC registered to provider %d", IC_MARGO_PROVIDER_ID_DEFAULT);
+
+  /* Ad-hoc storage RPCs */
+  hg_id_t rpc_adhoc_nodes_id;
+  rpc_adhoc_nodes_id = MARGO_REGISTER_PROVIDER(mid, "ic_adhoc_nodes",
+                                               adhoc_nodes_in_t,
+                                               adhoc_nodes_out_t,
+                                               adhoc_nodes,
+                                               IC_MARGO_PROVIDER_ID_DEFAULT,
+                                               ABT_POOL_NULL);
+  (void) rpc_adhoc_nodes_id;
+  margo_info(mid, "ic_adhoc_nodes RPC registered to provider %d", IC_MARGO_PROVIDER_ID_DEFAULT);
+
+  /* register other RPCs here */
 
   margo_wait_for_finalize(mid);
 
@@ -87,12 +108,13 @@ int main(int argc, char** argv) {
 }
 
 
-static void hello_world(hg_handle_t h)
+static void
+hello_world(hg_handle_t h)
 {
   hg_return_t hret;
 
   hello_out_t out;
-  out.rc = EXIT_SUCCESS;
+  out.rc = IC_SUCCESS;
   out.msg = "Hello from the intelligent controller!";
 
   margo_instance_id mid = margo_hg_handle_get_instance(h);
@@ -111,3 +133,38 @@ static void hello_world(hg_handle_t h)
   }
 }
 DEFINE_MARGO_RPC_HANDLER(hello_world)
+
+
+static void
+adhoc_nodes(hg_handle_t h)
+{
+  hg_return_t hret;
+
+  adhoc_nodes_in_t in;
+  adhoc_nodes_out_t out;
+
+  out.rc = IC_SUCCESS;
+
+  margo_instance_id mid = margo_hg_handle_get_instance(h);
+  if (mid) {
+    hret = margo_get_input(h, &in);
+    if (hret != HG_SUCCESS) {
+      out.rc = IC_FAILURE;
+      margo_error(mid, "Could not get RPC input");
+    }
+
+    margo_info(mid, "IC got adhoc_nodes request from job %"PRId32": %"PRId32" nodes (%"PRId32" nodes assigned by Slurm)",
+               in.slurm_jobid, in.adhoc_nnodes, in.slurm_nnodes);
+
+    hret = margo_respond(h, &out);
+    if (hret != HG_SUCCESS) {
+      margo_error(mid, "Could not respond to HPC");
+    }
+  }
+
+  hret = margo_destroy(h);
+  if (hret != HG_SUCCESS) {
+    margo_error(mid, "Could not destroy Margo RPC handle: %s", HG_Error_to_string(hret));
+  }
+}
+DEFINE_MARGO_RPC_HANDLER(adhoc_nodes)

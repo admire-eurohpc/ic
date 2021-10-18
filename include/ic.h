@@ -1,6 +1,8 @@
 #ifndef ADMIRE_IC_H
 #define ADMIRE_IC_H
 
+#include <stdint.h>
+
 struct ic_context;
 
 #define IC_SUCCESS  0
@@ -21,6 +23,7 @@ enum ic_log_level {
 enum ic_rpc {
   IC_RPC_ERROR,
   IC_RPC_HELLO,
+  IC_RPC_ADHOC_NODES,
   IC_RPC_COUNT
 };
 
@@ -49,5 +52,19 @@ int ic_fini(struct ic_context *icc);
  * the message buffer.
  */
 int ic_rpc_hello(struct ic_context *icc, int *retcode, char **retmsg);
+
+/**
+ * "adhoc_nodes" RPC.
+ *
+ * Request ADHOC_NODES for the slurm job identified by SLURM_JOBID
+ * that has been assigned SLURM_NNODES in total.
+ *
+ * Fill RETCODE on completion.
+ */
+int ic_rpc_adhoc_nodes(struct ic_context *icc,
+		       uint32_t slurm_jobid,
+		       uint32_t slurm_nnodes,
+		       uint32_t adhoc_nnodes,
+		       int *retcode);
 
 #endif

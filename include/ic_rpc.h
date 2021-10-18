@@ -43,7 +43,17 @@ ic_to_margo_log_level(enum ic_log_level ic_log_level)
 
 
 MERCURY_GEN_PROC(hello_out_t,
-		 ((int64_t)(rc)) ((hg_string_t)(msg)))
+                 ((int64_t)(rc)) ((hg_string_t)(msg)))
+
+
+/* Ad-hoc storage --adm-adhoc-nodes option */
+MERCURY_GEN_PROC(adhoc_nodes_in_t,
+		 ((uint32_t)(slurm_jobid))
+		 ((uint32_t)(slurm_nnodes))
+		 ((uint32_t)(adhoc_nnodes)))
+
+MERCURY_GEN_PROC(adhoc_nodes_out_t, ((int64_t)(rc)))
+
 
 
 #endif

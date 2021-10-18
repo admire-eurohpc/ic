@@ -9,6 +9,9 @@ LIB := $(SRC_DIR)/lib$(LIBSRC:.c=.so)
 SERVER := $(SRC_DIR)/$(SERVERSRC:.c=)
 CLIENT := $(SRC_DIR)/$(CLIENTSRC:.c=)
 
+# Ad-hoc storage targets
+ADCLI_SRC := $(SRC_DIR)/adhoc_cli.c
+ADCLI_LIB := $(SRC_DIR)/adhoccli.so
 
 PKG_CONFIG := pkg-config
 
@@ -19,8 +22,9 @@ PKG_CONFIG := pkg-config
 # - json-c    0.15
 # - margo     0.9.5
 #
-# compile with make all PKG_CONFIG_PATH=~/.local/lib
-# run with LD_LIBRARY_PATH=~/.local/lib/ ./intelligent_controller
+# compile with make all PKG_CONFIG_PATH=~/.local/lib/pkgconfig
+# run with LD_LIBRARY_PATH=~/.local/lib ./intelligent_controller
+# (or run ldconfig ~/.local/lib before)
 
 # XX --as-needed, -rpath?
 # XX add .h to deps
@@ -34,10 +38,10 @@ LDFLAGS += -Wl,--no-undefined,-rpath,"\$$ORIGIN"
 
 .PHONY: all clean
 
-all: $(LIB) $(SERVER) $(CLIENT)
+all: $(LIB) $(SERVER) $(CLIENT) $(ADCLI_LIB)
 
 $(LIB): $(SRC_DIR)/$(LIBSRC)
-	$(CC) $(CFLAGS) $< $(LDFLAGS) -shared -o $@
+	$(CC) $(CFLAGS) $< $(LDFLAGS) -fPIC -shared -o $@
 
 $(SERVER): $(SRC_DIR)/$(SERVERSRC)
 	$(CC) $(CFLAGS) $< $(LDFLAGS) -o $@
@@ -45,5 +49,13 @@ $(SERVER): $(SRC_DIR)/$(SERVERSRC)
 $(CLIENT): $(SRC_DIR)/$(CLIENTSRC)
 	$(CC) $(CFLAGS) $< $(LDFLAGS) -L$(SRC_DIR) -lic -o $@
 
+
+# XX compile separately?
+ADCLI_CFLAGS := -Wall -Wpedantic -g -I $(INC_DIR)
+ADCLI_LDFLAGS := -fPIC -shared -L$(SRC_DIR) -lic -lslurm -Wl,-rpath,"\$$ORIGIN"
+$(ADCLI_LIB): $(ADCLI_SRC)
+	$(CC) $(ADCLI_CFLAGS) $< $(ADCLI_LDFLAGS) -o $@
+
+
 clean:
-	rm -f $(LIB) $(SERVER) $(CLIENT)
+	rm -f $(LIB) $(SERVER) $(CLIENT) $(ADCLI_LIB)
