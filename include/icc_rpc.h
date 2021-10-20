@@ -1,5 +1,5 @@
-#ifndef ADMIRE_IC_RPC_H
-#define ADMIRE_IC_RPC_H
+#ifndef _ADMIRE_ICC_RPC_H
+#define _ADMIRE_ICC_RPC_H
 
 #include <mercury.h>
 #include <mercury_macros.h>
@@ -7,34 +7,34 @@
 
 #include "icc.h"
 
-#define IC_ADDR_MAX_SIZE 128
-#define IC_ADDR_FILE "/tmp/ic.addr"
-#define IC_HG_PROVIDER "ofi+tcp"
-#define IC_RPC_TIMEOUT_MS 10000
+#define ICC_ADDR_MAX_SIZE 128
+#define ICC_ADDR_FILE "/tmp/ic.addr"
+#define ICC_HG_PROVIDER "ofi+tcp"
+#define ICC_RPC_TIMEOUT_MS 10000
 
 /* Margo provider != Hg network provider */
-#define IC_MARGO_PROVIDER_ID_DEFAULT 12
+#define ICC_MARGO_PROVIDER_ID_DEFAULT 12
 
 /**
- * Translate from ic_log_level to margo_log_level.
+ * Translate from icc_log_level to margo_log_level.
  */
 static inline margo_log_level
-ic_to_margo_log_level(enum ic_log_level ic_log_level)
+icc_to_margo_log_level(enum icc_log_level icc_log_level)
 {
-  switch (ic_log_level) {
-  case IC_LOG_EXTERNAL:
+  switch (icc_log_level) {
+  case ICC_LOG_EXTERNAL:
     return MARGO_LOG_EXTERNAL;
-  case IC_LOG_TRACE:
+  case ICC_LOG_TRACE:
     return MARGO_LOG_TRACE;
-  case IC_LOG_DEBUG:
+  case ICC_LOG_DEBUG:
     return MARGO_LOG_DEBUG;
-  case IC_LOG_INFO:
+  case ICC_LOG_INFO:
     return MARGO_LOG_INFO;
-  case IC_LOG_WARNING:
+  case ICC_LOG_WARNING:
     return MARGO_LOG_WARNING;
-  case IC_LOG_ERROR:
+  case ICC_LOG_ERROR:
     return MARGO_LOG_ERROR;
-  case IC_LOG_CRITICAL:
+  case ICC_LOG_CRITICAL:
     return MARGO_LOG_CRITICAL;
   default:
     return MARGO_LOG_ERROR;

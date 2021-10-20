@@ -1,33 +1,33 @@
-#ifndef ADMIRE_IC_H
-#define ADMIRE_IC_H
+#ifndef _ADMIRE_ICC_H
+#define _ADMIRE_ICC_H
 
 #include <stdint.h>
 
-struct ic_context;
+struct icc_context;
 
-#define IC_SUCCESS  0
-#define IC_FAILURE -1
+#define ICC_SUCCESS  0
+#define ICC_FAILURE -1
 
 
 /* Log levels lifted from Margo */
-enum ic_log_level {
-    IC_LOG_EXTERNAL,
-    IC_LOG_TRACE,
-    IC_LOG_DEBUG,
-    IC_LOG_INFO,
-    IC_LOG_WARNING,
-    IC_LOG_ERROR,
-    IC_LOG_CRITICAL
+enum icc_log_level {
+    ICC_LOG_EXTERNAL,
+    ICC_LOG_TRACE,
+    ICC_LOG_DEBUG,
+    ICC_LOG_INFO,
+    ICC_LOG_WARNING,
+    ICC_LOG_ERROR,
+    ICC_LOG_CRITICAL
 };
 
-enum ic_rpc {
-  IC_RPC_ERROR,
-  IC_RPC_HELLO,
-  IC_RPC_ADHOC_NODES,
-  IC_RPC_COUNT
+enum icc_rpc {
+  ICC_RPC_ERROR,
+  ICC_RPC_HELLO,
+  ICC_RPC_ADHOC_NODES,
+  ICC_RPC_COUNT
 };
 
-struct ic_rpc_ret {
+struct icc_rpc_ret {
   int  retcode;
   char *msg;
 };
@@ -35,14 +35,14 @@ struct ic_rpc_ret {
 
 /**
  * Initialize a Margo client context.
- * Return IC_SUCCESS or error code.
+ * Return ICC_SUCCESS or error code.
 */
-int ic_init(enum ic_log_level log_level, struct ic_context **icc);
+int icc_init(enum icc_log_level log_level, struct icc_context **icc);
 
 /**
- * Finalize the Margo instance associated with ic_context ICC.
+ * Finalize the Margo instance associated with icc_context ICC.
  */
-int ic_fini(struct ic_context *icc);
+int icc_fini(struct icc_context *icc);
 
 /**
  * Make the "hello" RPC.
@@ -51,7 +51,7 @@ int ic_fini(struct ic_context *icc);
  * the server, up to MSGSIZE. The client is responsible for freeing
  * the message buffer.
  */
-int ic_rpc_hello(struct ic_context *icc, int *retcode, char **retmsg);
+int icc_rpc_hello(struct icc_context *icc, int *retcode, char **retmsg);
 
 /**
  * "adhoc_nodes" RPC.
@@ -61,7 +61,7 @@ int ic_rpc_hello(struct ic_context *icc, int *retcode, char **retmsg);
  *
  * Fill RETCODE on completion.
  */
-int ic_rpc_adhoc_nodes(struct ic_context *icc,
+int icc_rpc_adhoc_nodes(struct icc_context *icc,
 		       uint32_t slurm_jobid,
 		       uint32_t slurm_nnodes,
 		       uint32_t adhoc_nnodes,

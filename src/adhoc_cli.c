@@ -76,25 +76,25 @@ slurm_spank_local_user_init(spank_t sp, int ac, char **av)
 
   slurm_info("ADMIRE: Hello from %s (context=%d, jobid=%d)", __func__, spank_context(), jobid);
 
-  struct ic_context *icc;
+  struct icc_context *icc;
   int rpc_retcode;
   int rc;
 
-  rc = ic_init(IC_LOG_INFO, &icc);
-  if (rc != IC_SUCCESS) {
+  rc = icc_init(ICC_LOG_INFO, &icc);
+  if (rc != ICC_SUCCESS) {
     slurm_error("ADMIRE: Could not initialize connection to IC");
     return -1;
   }
 
-  rc = ic_rpc_adhoc_nodes(icc, jobid, nnodes, adhoc_nnodes, &rpc_retcode);
-  if (rc == IC_SUCCESS) {
+  rc = icc_rpc_adhoc_nodes(icc, jobid, nnodes, adhoc_nnodes, &rpc_retcode);
+  if (rc == ICC_SUCCESS) {
     slurm_info("RPC adhoc_nodes successful: retcode=%d", rpc_retcode);
   } else {
     slurm_error("Error making RPC to IC (retcode=%d)", rc);
   }
 
-  rc = ic_fini(icc);
-  if (rc != IC_SUCCESS)
+  rc = icc_fini(icc);
+  if (rc != ICC_SUCCESS)
     slurm_error("ADMIRE: Could not destroy IC context");
 
   return 0;
