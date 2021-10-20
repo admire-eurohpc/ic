@@ -14,6 +14,7 @@
  * how to pass return struct to ic_client?
  * XX malloc intempestif,
  * strlen, strcpy?? => msg from server is safe?
+ * Cleanup error/info messages
 */
 
 
