@@ -2,7 +2,7 @@
 #include <margo.h>
 #include <string.h>
 
-#include "ic_rpc.h"
+#include "icc_rpc.h"
 
 
 /* TODO

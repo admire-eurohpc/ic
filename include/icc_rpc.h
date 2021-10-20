@@ -5,12 +5,12 @@
 #include <mercury_macros.h>
 #include <mercury_proc_string.h>
 
-#include "ic.h"
+#include "icc.h"
 
 #define IC_ADDR_MAX_SIZE 128
 #define IC_ADDR_FILE "/tmp/ic.addr"
 #define IC_HG_PROVIDER "ofi+tcp"
-#define IC_RPC_TIMEOUT_MS 2000
+#define IC_RPC_TIMEOUT_MS 10000
 
 /* Margo provider != Hg network provider */
 #define IC_MARGO_PROVIDER_ID_DEFAULT 12

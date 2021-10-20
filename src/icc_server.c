@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <margo.h>
 
-#include "ic_rpc.h"
+#include "icc_rpc.h"
 
 
 static void hello_world(hg_handle_t h);

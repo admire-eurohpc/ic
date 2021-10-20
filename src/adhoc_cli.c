@@ -6,7 +6,7 @@
 #include <string.h>             /* strerror */
 #include <slurm/spank.h>
 
-#include "ic.h"
+#include "icc.h"
 
 SPANK_PLUGIN (adhoc-cli, 1)
 

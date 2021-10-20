@@ -1,9 +1,9 @@
 SRC_DIR := src
 INC_DIR := include
 
-LIBSRC := ic.c
-SERVERSRC := ic_server.c
-CLIENTSRC := ic_client.c
+LIBSRC := icc.c
+SERVERSRC := icc_server.c
+CLIENTSRC := icc_client.c
 
 LIB := $(SRC_DIR)/lib$(LIBSRC:.c=.so)
 SERVER := $(SRC_DIR)/$(SERVERSRC:.c=)
@@ -47,12 +47,12 @@ $(SERVER): $(SRC_DIR)/$(SERVERSRC)
 	$(CC) $(CFLAGS) $< $(LDFLAGS) -o $@
 
 $(CLIENT): $(SRC_DIR)/$(CLIENTSRC)
-	$(CC) $(CFLAGS) $< $(LDFLAGS) -L$(SRC_DIR) -lic -o $@
+	$(CC) $(CFLAGS) $< $(LDFLAGS) -L$(SRC_DIR) -licc -o $@
 
 
 # XX compile separately?
 ADCLI_CFLAGS := -Wall -Wpedantic -g -I $(INC_DIR)
-ADCLI_LDFLAGS := -fPIC -shared -L$(SRC_DIR) -lic -lslurm -Wl,-rpath,"\$$ORIGIN"
+ADCLI_LDFLAGS := -fPIC -shared -L$(SRC_DIR) -licc -lslurm -Wl,-rpath,"\$$ORIGIN"
 $(ADCLI_LIB): $(ADCLI_SRC)
 	$(CC) $(ADCLI_CFLAGS) $< $(ADCLI_LDFLAGS) -o $@
 
