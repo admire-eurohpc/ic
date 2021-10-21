@@ -20,16 +20,34 @@ enum icc_log_level {
     ICC_LOG_CRITICAL
 };
 
-enum icc_rpc {
+/**
+ * ICC RPC codes.
+ *
+ * ICC_RPC_TEST: test the server by sending a number and having it
+ * logged.
+ *
+ * ICC_RPC_ADHOC_NODES: Request ADHOC_NODES for the slurm job
+ * identified by SLURM_JOBID that has been assigned SLURM_NNODES in
+ * total.
+ *
+ * Fill RETCODE on completion.
+ */
+enum icc_rpc_code {
   ICC_RPC_ERROR,
-  ICC_RPC_HELLO,
+  ICC_RPC_TEST,
   ICC_RPC_ADHOC_NODES,
   ICC_RPC_COUNT
 };
 
-struct icc_rpc_ret {
-  int  retcode;
-  char *msg;
+
+struct icc_rpc_test_in {
+  uint8_t number;
+};
+
+struct icc_rpc_adhoc_nodes_in {
+  uint32_t slurm_jobid;
+  uint32_t slurm_nnodes;
+  uint32_t adhoc_nnodes;
 };
 
 
@@ -45,26 +63,15 @@ int icc_init(enum icc_log_level log_level, struct icc_context **icc);
 int icc_fini(struct icc_context *icc);
 
 /**
- * Make the "hello" RPC.
+ * Generic RPC call to the Intelligent Controller.
  *
- * Fill RETCODE and RETMSG with the the code and return message from
- * the server, up to MSGSIZE. The client is responsible for freeing
- * the message buffer.
+ * The RPC is identified by the ICC_CODE, see enum icc_rpc_code.
+ *
+ * DATA_IN is a pointer to a structure which depends on the RPC type
+ *
+ * RETCODE is filled with the RPC return status code on completion.
  */
-int icc_rpc_hello(struct icc_context *icc, int *retcode, char **retmsg);
+int icc_rpc_send(struct icc_context *icc, enum icc_rpc_code icc_code, void *data_in, int *retcode);
 
-/**
- * "adhoc_nodes" RPC.
- *
- * Request ADHOC_NODES for the slurm job identified by SLURM_JOBID
- * that has been assigned SLURM_NNODES in total.
- *
- * Fill RETCODE on completion.
- */
-int icc_rpc_adhoc_nodes(struct icc_context *icc,
-		       uint32_t slurm_jobid,
-		       uint32_t slurm_nnodes,
-		       uint32_t adhoc_nnodes,
-		       int *retcode);
 
 #endif

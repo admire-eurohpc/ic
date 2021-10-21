@@ -86,7 +86,13 @@ slurm_spank_local_user_init(spank_t sp, int ac, char **av)
     return -1;
   }
 
-  rc = icc_rpc_adhoc_nodes(icc, jobid, nnodes, adhoc_nnodes, &rpc_retcode);
+  struct icc_rpc_adhoc_nodes_in in = {
+    .slurm_jobid=jobid,
+    .slurm_nnodes=nnodes,
+    .adhoc_nnodes=adhoc_nnodes
+  };
+
+  rc = icc_rpc_send(icc, ICC_RPC_ADHOC_NODES, &in, &rpc_retcode);
   if (rc == ICC_SUCCESS) {
     slurm_info("RPC adhoc_nodes successful: retcode=%d", rpc_retcode);
   } else {

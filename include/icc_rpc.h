@@ -41,16 +41,20 @@ icc_to_margo_log_level(enum icc_log_level icc_log_level)
   }
 }
 
+/* Generic output struct */
+MERCURY_GEN_PROC(rpc_out_t, ((int64_t)(rc)))
 
-MERCURY_GEN_PROC(hello_out_t,
-                 ((int64_t)(rc)) ((hg_string_t)(msg)))
 
+/* Mercury-generated struct
+ *
+ * /!\ Copied in the icc.h public header file, keep in sync!
+ */
+MERCURY_GEN_PROC(test_in_t, ((uint8_t)(number)))
 
-/* Ad-hoc storage --adm-adhoc-nodes option */
 MERCURY_GEN_PROC(adhoc_nodes_in_t,
-		 ((uint32_t)(slurm_jobid))
-		 ((uint32_t)(slurm_nnodes))
-		 ((uint32_t)(adhoc_nnodes)))
+                 ((uint32_t)(slurm_jobid))
+                 ((uint32_t)(slurm_nnodes))
+                 ((uint32_t)(adhoc_nnodes)))
 
 MERCURY_GEN_PROC(adhoc_nodes_out_t, ((int64_t)(rc)))
 

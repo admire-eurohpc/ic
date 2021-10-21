@@ -15,12 +15,12 @@ main(int argc, char **argv)
   assert(icc != NULL);
 
   int rpc_retcode;
-  char *rpc_retmsg;
-  rc = icc_rpc_hello(icc, &rpc_retcode, &rpc_retmsg);
-  if (rc == ICC_SUCCESS) {
-    printf("RPC successful: retcode=%d, \"%s\"\n", rpc_retcode, rpc_retmsg);
-    free(rpc_retmsg);
-  } else
+  struct icc_rpc_test_in rpc_in = { .number=32 };
+
+  rc = icc_rpc_send(icc, ICC_RPC_TEST, &rpc_in, &rpc_retcode);
+  if (rc == ICC_SUCCESS)
+    printf("RPC successful: retcode=%d\n", rpc_retcode);
+  else
     fprintf(stderr, "Error making RPC to IC (retcode=%d)\n", rc);
 
   rc = icc_fini(icc);

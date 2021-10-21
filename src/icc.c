@@ -15,6 +15,7 @@
  * XX malloc intempestif,
  * strlen, strcpy?? => msg from server is safe?
  * Cleanup error/info messages
+ * margo_free_input in callback!
 */
 
 
@@ -24,6 +25,9 @@ struct icc_context {
   uint16_t          provider_id;
   hg_id_t           rpc_id[ICC_RPC_COUNT];
 };
+
+
+static hg_id_t rpc_hg_ids[ICC_RPC_COUNT];
 
 
 int
@@ -65,8 +69,9 @@ icc_init(enum icc_log_level log_level, struct icc_context **icc_context)
 
   icc->provider_id = ICC_MARGO_PROVIDER_ID_DEFAULT;
 
-  icc->rpc_id[ICC_RPC_HELLO] = MARGO_REGISTER(icc->mid, "icc_hello", void, hello_out_t, NULL);
-  icc->rpc_id[ICC_RPC_ADHOC_NODES] = MARGO_REGISTER(icc->mid, "icc_adhoc_nodes", adhoc_nodes_in_t, adhoc_nodes_out_t, NULL);
+  /* RPCs */
+  rpc_hg_ids[ICC_RPC_TEST] = MARGO_REGISTER(icc->mid, "icc_test", test_in_t, rpc_out_t, NULL);
+  rpc_hg_ids[ICC_RPC_ADHOC_NODES] = MARGO_REGISTER(icc->mid, "icc_adhoc_nodes", adhoc_nodes_in_t, rpc_out_t, NULL);
   /* register other RPCs here */
 
   *icc_context = icc;
@@ -102,89 +107,41 @@ icc_fini(struct icc_context *icc)
 
 
 int
-icc_rpc_hello(struct icc_context *icc, int *retcode, char **retmsg)
-{
+icc_rpc_send(struct icc_context *icc, enum icc_rpc_code rpc_code, void *data, int *retcode) {
   hg_return_t hret;
   hg_handle_t handle;
 
-  hg_id_t rpc_id = icc->rpc_id[ICC_RPC_HELLO];
+  switch (rpc_code) {
+  case ICC_RPC_TEST:
+  case ICC_RPC_ADHOC_NODES:
+    break;
+  default:
+    margo_error(icc->mid, "Unknown ICC RPC id %d", rpc_code);
+    return ICC_FAILURE;
+  }
 
-  hret = margo_create(icc->mid, icc->addr, rpc_id, &handle);
+  hret = margo_create(icc->mid, icc->addr, rpc_hg_ids[rpc_code], &handle);
   if (hret != HG_SUCCESS) {
     margo_error(icc->mid, "Could not create Margo RPC: %s", HG_Error_to_string(hret));
     return ICC_FAILURE;
   }
 
-  hret = margo_provider_forward_timed(icc->provider_id, handle, NULL, ICC_RPC_TIMEOUT_MS);
+  /* XX cast public struct to HG struct, hackish and dangerous */
+  hret = margo_provider_forward_timed(icc->provider_id, handle, data, ICC_RPC_TIMEOUT_MS);
   if (hret != HG_SUCCESS) {
     margo_error(icc->mid, "Could not forward Margo RPC: %s", HG_Error_to_string(hret));
     margo_destroy(handle);      /* XX check error */
     return ICC_FAILURE;
   }
 
-  hello_out_t resp;
+  rpc_out_t resp;
   hret = margo_get_output(handle, &resp);
   if (hret != HG_SUCCESS) {
     margo_error(icc->mid, "Could not get RPC output: %s", HG_Error_to_string(hret));
   }
   else {
     *retcode = resp.rc;
-    *retmsg = calloc(1, strlen(resp.msg) + 1);
-    strcpy(*retmsg, resp.msg);
 
-    hret = margo_free_output(handle, &resp);
-    if (hret != HG_SUCCESS) {
-      margo_error(icc->mid, "Could not free RPC output: %s", HG_Error_to_string(hret));
-    }
-  }
-
-  hret = margo_destroy(handle);
-  if (hret != HG_SUCCESS) {
-    margo_error(icc->mid, "Could not destroy Margo RPC handle: %s", HG_Error_to_string(hret));
-    return ICC_FAILURE;
-  }
-
-  return ICC_SUCCESS;
-}
-
-
-int
-icc_rpc_adhoc_nodes(struct icc_context *icc,
-                   uint32_t slurm_jobid,
-                   uint32_t slurm_nnodes,
-                   uint32_t adhoc_nnodes,
-		   int *retcode)
-{
-  hg_return_t hret;
-  hg_handle_t handle;
-
-  hg_id_t rpc_id = icc->rpc_id[ICC_RPC_ADHOC_NODES];
-
-  hret = margo_create(icc->mid, icc->addr, rpc_id, &handle);
-  if (hret != HG_SUCCESS) {
-    margo_error(icc->mid, "Could not create Margo RPC: %s", HG_Error_to_string(hret));
-    return ICC_FAILURE;
-  }
-
-  adhoc_nodes_in_t in;
-  in.slurm_jobid = slurm_jobid;
-  in.slurm_nnodes = slurm_nnodes;
-  in.adhoc_nnodes = adhoc_nnodes;
-
-  hret = margo_provider_forward_timed(icc->provider_id, handle, &in, ICC_RPC_TIMEOUT_MS);
-  if (hret != HG_SUCCESS) {
-    margo_error(icc->mid, "Could not forward Margo RPC: %s", HG_Error_to_string(hret));
-    margo_destroy(handle);	/* XX check error */
-    return ICC_FAILURE;
-  }
-
-  adhoc_nodes_out_t resp;
-  hret = margo_get_output(handle, &resp);
-  if (hret != HG_SUCCESS) {
-    margo_error(icc->mid, "Could not get RPC output: %s", HG_Error_to_string(hret));
-  }
-  else {
-    *retcode = resp.rc;
     hret = margo_free_output(handle, &resp);
     if (hret != HG_SUCCESS) {
       margo_error(icc->mid, "Could not free RPC output: %s", HG_Error_to_string(hret));
