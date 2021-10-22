@@ -9,11 +9,9 @@
  * factorize with goto?
  * hg_error_to_string everywhere
  * Margo logging inside lib?
- * hello -> status
- * rpc_id array -> list of explicit rpc_id?
- * how to pass return struct to icc_client?
+ * icc_status RPC (~dummy?)
+ * Return struct or rc only?
  * XX malloc intempestif,
- * strlen, strcpy?? => msg from server is safe?
  * Cleanup error/info messages
  * margo_free_input in callback!
 */
@@ -23,7 +21,6 @@ struct icc_context {
   margo_instance_id mid;
   hg_addr_t         addr;
   uint16_t          provider_id;
-  hg_id_t           rpc_id[ICC_RPC_COUNT];
 };
 
 
@@ -110,6 +107,14 @@ int
 icc_rpc_send(struct icc_context *icc, enum icc_rpc_code rpc_code, void *data, int *retcode) {
   hg_return_t hret;
   hg_handle_t handle;
+
+  if (!icc)
+    return ICC_FAILURE;
+
+  if (!data) {
+    margo_error(icc->mid, "Null RPC data argument");
+    return ICC_FAILURE;
+  }
 
   switch (rpc_code) {
   case ICC_RPC_TEST:

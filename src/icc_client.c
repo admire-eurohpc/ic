@@ -21,7 +21,7 @@ main(int argc, char **argv)
   if (rc == ICC_SUCCESS)
     printf("RPC successful: retcode=%d\n", rpc_retcode);
   else
-    fprintf(stderr, "Error making RPC to IC (retcode=%d)\n", rc);
+    fprintf(stderr, "Error sending RPC to IC (retcode=%d)\n", rc);
 
   rc = icc_fini(icc);
   assert(rc == 0);
