@@ -6,7 +6,7 @@
 
 
 int
-main(int argc, char **argv)
+main(int argc __attribute__((unused)), char **argv __attribute__((unused)))
 {
   int rc;
 

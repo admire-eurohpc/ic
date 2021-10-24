@@ -12,7 +12,9 @@ DECLARE_MARGO_RPC_HANDLER(icc_test_cb) /* place the cb in an Argobots ULT */
 DECLARE_MARGO_RPC_HANDLER(icc_adhoc_nodes_cb)
 
 
-int main(int argc, char** argv) {
+int
+main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
+{
 
   margo_instance_id mid;
 
@@ -62,7 +64,8 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  if (fprintf(f, "%s", addr_str) != addr_str_size - 1) {
+  int nbytes = fprintf(f, "%s", addr_str);
+  if (nbytes < 0 || (unsigned)nbytes != addr_str_size - 1) {
     margo_error(mid, "Error writing to address file", strerror(errno));
     fclose(f);
     margo_finalize(mid);

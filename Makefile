@@ -1,61 +1,48 @@
-SRC_DIR := src
-INC_DIR := include
-
-LIBSRC := icc.c
-SERVERSRC := icc_server.c
-CLIENTSRC := icc_client.c
-
-LIB := $(SRC_DIR)/lib$(LIBSRC:.c=.so)
-SERVER := $(SRC_DIR)/$(SERVERSRC:.c=)
-CLIENT := $(SRC_DIR)/$(CLIENTSRC:.c=)
-
-# Ad-hoc storage targets
-ADCLI_SRC := $(SRC_DIR)/adhoc_cli.c
-ADCLI_LIB := $(SRC_DIR)/adhoccli.so
-
+CC := gcc
 PKG_CONFIG := pkg-config
 
-# requires:
-# - libfabric 1.12.1 (/!\ stable with ofi+tcp provider)
-# - mercury   2.0.1 (compiled with system libboost-wave-dev preprocessor)
-# - argobots  1.1
-# - json-c    0.15
-# - margo     0.9.5
-#
-# compile with make all PKG_CONFIG_PATH=~/.local/lib/pkgconfig
-# run with LD_LIBRARY_PATH=~/.local/lib ./intelligent_controller
-# (or run ldconfig ~/.local/lib before)
+sources := icc_server.c icc_client.c
+# keep libicc in front
+binaries := libicc.so $(sources:.c=) libadhoccli.so
+sources += icc.c adhoccli.c
 
-# XX --as-needed, -rpath?
-# XX add .h to deps
+objects := $(sources:.c=.o)
+depends := $(sources:.c=.d)
 
+includedir := include
+sourcedir := src
 
-CFLAGS := -Wall -Wpedantic -g
-CFLAGS += -I$(INC_DIR) `$(PKG_CONFIG) --cflags margo`
-LDFLAGS := `$(PKG_CONFIG) --libs margo`
-LDFLAGS += -Wl,--no-undefined,-rpath,"\$$ORIGIN"
+vpath %.c $(sourcedir)
+
+CPPFLAGS := -I$(includedir) -MMD
+CFLAGS := -Wall -Wextra -Wpedantic -O2 -g
+LDFLAGS := -Wl,-rpath,"\$$ORIGIN"
+LDLIBS :=
 
 
 .PHONY: all clean
 
-all: $(LIB) $(SERVER) $(CLIENT) $(ADCLI_LIB)
-
-$(LIB): $(SRC_DIR)/$(LIBSRC)
-	$(CC) $(CFLAGS) $< $(LDFLAGS) -fPIC -shared -o $@
-
-$(SERVER): $(SRC_DIR)/$(SERVERSRC)
-	$(CC) $(CFLAGS) $< $(LDFLAGS) -o $@
-
-$(CLIENT): $(SRC_DIR)/$(CLIENTSRC)
-	$(CC) $(CFLAGS) $< $(LDFLAGS) -L$(SRC_DIR) -licc -o $@
-
-
-# XX compile separately?
-ADCLI_CFLAGS := -Wall -Wpedantic -g -I $(INC_DIR)
-ADCLI_LDFLAGS := -fPIC -shared -L$(SRC_DIR) -licc -lslurm -Wl,-rpath,"\$$ORIGIN"
-$(ADCLI_LIB): $(ADCLI_SRC)
-	$(CC) $(ADCLI_CFLAGS) $< $(ADCLI_LDFLAGS) -o $@
-
+all: $(binaries)
 
 clean:
-	rm -f $(LIB) $(SERVER) $(CLIENT) $(ADCLI_LIB)
+	$(RM) $(binaries)
+	$(RM) $(objects)
+	$(RM) $(depends)
+
+# forces the creation of object files
+# necessary for automatic dependency handling
+$(objects): %.o: %.c
+
+libicc.so icc_server: CFLAGS += `$(PKG_CONFIG) --cflags margo`
+libicc.so icc_server icc_client: LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined
+
+icc_client: LDLIBS += -L. -licc
+
+libadhoccli.so: LDLIBS += -L. -licc -lslurm
+
+lib%.so: CFLAGS += -fpic
+lib%.so: LDFLAGS += -shared
+lib%.so: %.o
+	$(LINK.o) $^ $(LDLIBS) -o $@
+
+-include $(depends)
