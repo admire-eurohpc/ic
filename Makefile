@@ -15,7 +15,7 @@ sourcedir := src
 vpath %.c $(sourcedir)
 
 CPPFLAGS := -I$(includedir) -MMD
-CFLAGS := -Wall -Wextra -Wpedantic -O2 -g
+CFLAGS := -Wall -Wextra -O2 -g
 LDFLAGS := -Wl,-rpath,"\$$ORIGIN"
 LDLIBS :=
 

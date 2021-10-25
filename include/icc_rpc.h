@@ -1,19 +1,43 @@
 #ifndef _ADMIRE_ICC_RPC_H
 #define _ADMIRE_ICC_RPC_H
 
+#include <stdlib.h>		/* getenv   */
 #include <mercury.h>
 #include <mercury_macros.h>
 #include <mercury_proc_string.h>
 
 #include "icc.h"
 
+#define IC_RUNTIME_DIR_DEFAULT "."
+
+#define ICC_ADDR_FILENAME "icc.addr"
 #define ICC_ADDR_MAX_SIZE 128
-#define ICC_ADDR_FILE "/tmp/ic.addr"
 #define ICC_HG_PROVIDER "ofi+tcp"
 #define ICC_RPC_TIMEOUT_MS 10000
 
 /* Margo provider != Hg network provider */
 #define ICC_MARGO_PROVIDER_ID_DEFAULT 12
+
+
+/**
+ * Return a path to the file storing the ICC address. The caller is
+ * responsible for freeing it
+ */
+static inline char *
+icc_addr_file() {
+  char *runtimedir = getenv("IC_RUNTIME_DIR");
+  if (!runtimedir)
+    runtimedir = getenv("HOME");
+  if (!runtimedir)
+    runtimedir = ".";
+
+  char *path = malloc(strlen(runtimedir) + strlen(ICC_ADDR_FILENAME) + 2);
+  if (path) {
+    sprintf(path, "%s/%s", runtimedir, ICC_ADDR_FILENAME);
+  }
+  return path;
+}
+
 
 /**
  * Translate from icc_log_level to margo_log_level.
@@ -52,9 +76,9 @@ MERCURY_GEN_PROC(rpc_out_t, ((int64_t)(rc)))
 MERCURY_GEN_PROC(test_in_t, ((uint8_t)(number)))
 
 MERCURY_GEN_PROC(adhoc_nodes_in_t,
-                 ((uint32_t)(slurm_jobid))
-                 ((uint32_t)(slurm_nnodes))
-                 ((uint32_t)(adhoc_nnodes)))
+		 ((uint32_t)(slurm_jobid))
+		 ((uint32_t)(slurm_nnodes))
+		 ((uint32_t)(adhoc_nnodes)))
 
 MERCURY_GEN_PROC(adhoc_nodes_out_t, ((int64_t)(rc)))
 

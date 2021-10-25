@@ -57,12 +57,15 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
 
   margo_info(mid, "Margo Server running at address %s", addr_str);
 
-  FILE *f = fopen(ICC_ADDR_FILE, "w");
+  char *path = icc_addr_file();
+  FILE *f = fopen(path, "w");
   if (f == NULL) {
     margo_error(mid, "Could not open address file: %s", strerror(errno));
+    free(path);
     margo_finalize(mid);
     return EXIT_FAILURE;
   }
+  free(path);
 
   int nbytes = fprintf(f, "%s", addr_str);
   if (nbytes < 0 || (unsigned)nbytes != addr_str_size - 1) {

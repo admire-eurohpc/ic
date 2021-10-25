@@ -33,7 +33,7 @@ struct spank_option spank_options [] = {
 
 
 static int
-process_opts(int val, const char *optarg, int remote)
+process_opts(int val __attribute__((unused)), const char *optarg, int remote)
 {
   if (spank_context() != S_CTX_LOCAL)
     return 0;
@@ -54,7 +54,8 @@ process_opts(int val, const char *optarg, int remote)
  * Called locally in srun, after jobid & stepid are available.
  */
 int
-slurm_spank_local_user_init(spank_t sp, int ac, char **av)
+slurm_spank_local_user_init(spank_t sp, int ac __attribute__((unused)),
+                                        char **av __attribute__((unused)))
 {
   if (!adhoc_flag)
     return 0;

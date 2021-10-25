@@ -44,11 +44,14 @@ icc_init(enum icc_log_level log_level, struct icc_context **icc_context)
 
   margo_set_log_level(icc->mid, icc_to_margo_log_level(log_level));
 
-  FILE *f = fopen(ICC_ADDR_FILE, "r");
+  char *path = icc_addr_file();
+  FILE *f = fopen(path, "r");
   if (!f) {
-    margo_error(icc->mid, "Error opening Margo address file \""ICC_ADDR_FILE"\": %s", strerror(errno));
+    margo_error(icc->mid, "Error opening Margo address file \"%s\": %s", icc_addr_file(), strerror(errno));
+    free(path);
     goto error;
   }
+  free(path);
 
   char addr_str[ICC_ADDR_MAX_SIZE];
   if (!fgets(addr_str, ICC_ADDR_MAX_SIZE, f)) {
