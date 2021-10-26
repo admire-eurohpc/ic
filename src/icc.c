@@ -47,7 +47,7 @@ icc_init(enum icc_log_level log_level, struct icc_context **icc_context)
   char *path = icc_addr_file();
   FILE *f = fopen(path, "r");
   if (!f) {
-    margo_error(icc->mid, "Error opening Margo address file \"%s\": %s", icc_addr_file(), strerror(errno));
+    margo_error(icc->mid, "Error opening Margo address file \"%s\": %s", path ? path : "(NULL)", strerror(errno));
     free(path);
     goto error;
   }

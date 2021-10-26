@@ -99,8 +99,10 @@ make install
 ```
 
 ## libicc compilation
-Go to the libicc directory (src/ic/ in the ADMIRE Git repository) and
-compile the library with:
+
+libicc is developed in the ADMIRE Git repository, in the `src/ic`
+directory. The library, the server executable and the example client
+executable can be compiled compiled with:
 
 ```
 make all PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
@@ -110,14 +112,14 @@ make all PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
 ## Running the ICC
 
 Note: if the dependent libraries are stored in a non-standard
-directory, run with LD_LIBRARY_PATH=/usr/local/lib, or run ldconfig
-before.
+directory, e.g. `/usr/local/lib`, run with the environment variable
+`LD_LIBRARY_PATH=/usr/local/lib`, or run ldconfig before.
 
 The ICC server must be run first. It will write its address to a file
-that MUST be on local storage, so that all clients can read it. To
+that MUST be on shared storage, so that all clients can read it. To
 find the directory, the ICC server will try the environment variable
-IC_RUNTIME_DIR, then HOME and finally default to the current directory
-(".").
+`IC_RUNTIME_DIR`, then `HOME` and finally default to the current
+directory (".").
 
 To run the ICC server, simply use the executable:
 
@@ -134,3 +136,7 @@ For example, to run the test ICC client, run:
 ```
 ./icc_client
 ```
+
+If the shared library libicc.so is in the same directory as the client
+executable, it will get picked up. Otherwise, the environment variable
+`LD_LIBRARY_PATH` must be adjusted.

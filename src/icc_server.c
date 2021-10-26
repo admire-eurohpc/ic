@@ -60,7 +60,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   char *path = icc_addr_file();
   FILE *f = fopen(path, "w");
   if (f == NULL) {
-    margo_error(mid, "Could not open address file: %s", strerror(errno));
+    margo_error(mid, "Could not open address file \"%s\": %s", path ? path : "(NULL)", strerror(errno));
     free(path);
     margo_finalize(mid);
     return EXIT_FAILURE;
