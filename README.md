@@ -1,6 +1,7 @@
 # libicc: Intelligent controller communication library
 
 ## Dependencies
+
 The libicc depends on Margo, which itself depends on a couple of
 libraries. The following versions have been tested and confirmed to
 work:
@@ -27,6 +28,7 @@ make install
 ```
 
 ### Mercury
+
 Get the release from:
 https://github.com/mercury-hpc/mercury/releases/download/v2.0.1/mercury-2.0.1.tar.bz2
 
@@ -49,12 +51,14 @@ cmake .. -DBUILD_SHARED_LIBS:BOOL=ON \
 	 -Dpkgcfg_lib_PC_OFI_fabric:FILEPATH=/usr/local/lib/libfabric.so
 make
 make install
+```
 
 ### Argobots
 Get the release from:
 https://github.com/pmodels/argobots/releases/download/v1.1/argobots-1.1.tar.gz
 
 From the Argobots directory run:
+
 ```
 ./configure --prefix=/usr/local
 make
@@ -79,6 +83,7 @@ make install
 ```
 
 ### Margo
+
 Get release from:
 https://github.com/mochi-hpc/mochi-margo/archive/refs/tags/v0.9.5.tar.gz
 
