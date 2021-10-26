@@ -1,5 +1,9 @@
 CC := gcc
 PKG_CONFIG := pkg-config
+MKDIR_P := mkdir -p
+INSTALL := install
+
+PREFIX ?= /usr/local
 
 sources := icc_server.c icc_client.c
 # keep libicc in front
@@ -20,7 +24,7 @@ LDFLAGS := -Wl,-rpath,"\$$ORIGIN"
 LDLIBS :=
 
 
-.PHONY: all clean
+.PHONY: all clean install uninstall
 
 all: $(binaries)
 
@@ -28,6 +32,18 @@ clean:
 	$(RM) $(binaries)
 	$(RM) $(objects)
 	$(RM) $(depends)
+
+install: all
+	$(MKDIR_P) $(PREFIX)/{lib,bin}
+	$(INSTALL) -m 644 libicc.so   $(PREFIX)/lib
+	$(INSTALL) -m 755 icc_server  $(PREFIX)/bin
+	$(INSTALL) -m 755 icc_client  $(PREFIX)/bin
+
+uninstall:
+	$(RM) $(PREFIX)/lib/libicc.so
+	$(RM) $(PREFIX)/bin/icc_server
+	$(RM) $(PREFIX)/bin/icc_client
+
 
 # forces the creation of object files
 # necessary for automatic dependency handling
