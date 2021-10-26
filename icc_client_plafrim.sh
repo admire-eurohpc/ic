@@ -3,20 +3,17 @@
 # in the IC_RUNTIME_DIR directory.
 
 #SBATCH --job-name=admire_icc_server
-#SBATCH --output=out.txt
-#SBATCH --time=00:10:00
+#SBATCH --output=icc_client_out.txt
+#SBATCH --time=00:00:30
 #SBATCH --ntasks=1
 
 ADMIRE_DIR=/projets/admire
 
 PATH=$ADMIRE_DIR/local/bin:$PATH
 LD_LIBRARY_PATH=$ADMIRE_DIR/local/lib
-IC_RUNTIME_DIR==$ADMIRE_DIR/icc
+IC_RUNTIME_DIR=$ADMIRE_DIR/icc
 
 export PATH LD_LIBRARY_PATH IC_RUNTIME_DIR 
 
-mkdir -p $IC_RUNTIME_DIR
-
-srun icc_server &
 srun icc_client
 

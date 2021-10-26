@@ -38,6 +38,8 @@ install: all
 	$(INSTALL) -m 644 libicc.so   $(PREFIX)/lib
 	$(INSTALL) -m 755 icc_server  $(PREFIX)/bin
 	$(INSTALL) -m 755 icc_client  $(PREFIX)/bin
+	$(INSTALL) -m 755 icc_server_plafrim.sh  $(PREFIX)/bin/icc_server_plafrim
+	$(INSTALL) -m 755 icc_client_plafrim.sh  $(PREFIX)/bin/icc_client_plafrim
 
 uninstall:
 	$(RM) $(PREFIX)/lib/libicc.so

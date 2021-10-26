@@ -140,3 +140,21 @@ For example, to run the test ICC client, run:
 If the shared library libicc.so is in the same directory as the client
 executable, it will get picked up. Otherwise, the environment variable
 `LD_LIBRARY_PATH` must be adjusted.
+
+To make things easier to test, two scripts `icc_server_plafrim.sh` and
+`icc_client_plafrim.sh` are provided, they respectively launch the ICC
+server and ICC client with the right environment variables on the
+[PlaFRIM](https://www.plafrim.fr/) cluster. With these script The ICC
+server runs for 10 minutes and the ICC client makes a single RPC and
+exits. They can be run using the `sbatch` or `srun` commands:
+
+```
+srun src/ic/icc_server_plafrim.sh
+```
+
+and once the server is running:
+
+```
+srun src/ic/icc_client_plafrim.sh
+```
+
