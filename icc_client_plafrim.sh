@@ -15,5 +15,5 @@ IC_RUNTIME_DIR=$ADMIRE_DIR/icc
 
 export PATH LD_LIBRARY_PATH IC_RUNTIME_DIR 
 
-srun icc_client
+srun --time=00:00:30 icc_client
 

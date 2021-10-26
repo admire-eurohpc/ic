@@ -17,5 +17,5 @@ export PATH LD_LIBRARY_PATH IC_RUNTIME_DIR
 
 mkdir -p $IC_RUNTIME_DIR
 
-srun icc_server
+srun --time=00:10:00 icc_server
 

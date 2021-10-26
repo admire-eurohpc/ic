@@ -141,20 +141,23 @@ If the shared library libicc.so is in the same directory as the client
 executable, it will get picked up. Otherwise, the environment variable
 `LD_LIBRARY_PATH` must be adjusted.
 
-To make things easier to test, two scripts `icc_server_plafrim.sh` and
-`icc_client_plafrim.sh` are provided, they respectively launch the ICC
-server and ICC client with the right environment variables on the
-[PlaFRIM](https://www.plafrim.fr/) cluster. With these script The ICC
-server runs for 10 minutes and the ICC client makes a single RPC and
-exits. They can be run using the `sbatch` or `srun` commands:
+
+To make things easier to test on the
+[PlaFRIM](https://www.plafrim.fr/) cluster two scripts
+`icc_server_plafrim` and `icc_client_plafrim` are provided in the
+`/projets/admire/local/bin` directory , they respectively launch the
+ICC server and ICC client with the right environment variables. With
+these script The ICC server runs for 10 minutes and the ICC client
+makes a single RPC and exits. They can be run using the `sbatch`
+command or directly:
 
 ```
-srun src/ic/icc_server_plafrim.sh
+/projets/admire/local/bin/icc_server_plafrim
 ```
 
 and once the server is running:
 
 ```
-srun src/ic/icc_client_plafrim.sh
+/projets/admire/local/bin/icc_client_plafrim
 ```
 
