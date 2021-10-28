@@ -14,6 +14,7 @@
  * XX malloc intempestif,
  * Cleanup error/info messages
  * margo_free_input in callback!
+ * icc_init error code errno vs ICC?
 */
 
 
@@ -31,16 +32,19 @@ int
 icc_init(enum icc_log_level log_level, struct icc_context **icc_context)
 {
   hg_return_t hret;
+  int rc = ICC_SUCCESS;
 
   *icc_context = NULL;
 
   struct icc_context *icc = calloc(1, sizeof(struct icc_context));
   if (!icc)
-    return ICC_FAILURE;
+    return -errno;
 
   icc->mid = margo_init(ICC_HG_PROVIDER, MARGO_CLIENT_MODE, 0, 0);
-  if (!icc->mid)
+  if (!icc->mid) {
+    rc = ICC_FAILURE;
     goto error;
+  }
 
   margo_set_log_level(icc->mid, icc_to_margo_log_level(log_level));
 
@@ -49,6 +53,7 @@ icc_init(enum icc_log_level log_level, struct icc_context **icc_context)
   if (!f) {
     margo_error(icc->mid, "Error opening Margo address file \"%s\": %s", path ? path : "(NULL)", strerror(errno));
     free(path);
+    rc = -errno;
     goto error;
   }
   free(path);
@@ -57,6 +62,7 @@ icc_init(enum icc_log_level log_level, struct icc_context **icc_context)
   if (!fgets(addr_str, ICC_ADDR_MAX_SIZE, f)) {
     margo_error(icc->mid, "Error reading from Margo address file: %s", strerror(errno));
     fclose(f);
+    rc = -errno;
     goto error;
   }
   fclose(f);
@@ -64,6 +70,7 @@ icc_init(enum icc_log_level log_level, struct icc_context **icc_context)
   hret = margo_addr_lookup(icc->mid, addr_str, &icc->addr);
   if (hret != HG_SUCCESS) {
     margo_error(icc->mid, "Could not get Margo address: %s", HG_Error_to_string(hret));
+    rc = ICC_FAILURE;
     goto error;
   }
 
@@ -71,7 +78,10 @@ icc_init(enum icc_log_level log_level, struct icc_context **icc_context)
 
   /* RPCs */
   rpc_hg_ids[ICC_RPC_TEST] = MARGO_REGISTER(icc->mid, "icc_test", test_in_t, rpc_out_t, NULL);
+  rpc_hg_ids[ICC_RPC_JOBMON_SUBMIT] = MARGO_REGISTER(icc->mid, "icc_jobmon_submit", jobmon_submit_in_t, rpc_out_t, NULL);
+  rpc_hg_ids[ICC_RPC_JOBMON_EXIT] = MARGO_REGISTER(icc->mid, "icc_jobmon_exit", jobmon_exit_in_t, rpc_out_t, NULL);
   rpc_hg_ids[ICC_RPC_ADHOC_NODES] = MARGO_REGISTER(icc->mid, "icc_adhoc_nodes", adhoc_nodes_in_t, rpc_out_t, NULL);
+
   /* register other RPCs here */
 
   *icc_context = icc;
@@ -83,7 +93,7 @@ icc_init(enum icc_log_level log_level, struct icc_context **icc_context)
       margo_finalize(icc->mid);
     free(icc);
   }
-  return ICC_FAILURE;
+  return rc;
 }
 
 
@@ -122,6 +132,8 @@ icc_rpc_send(struct icc_context *icc, enum icc_rpc_code rpc_code, void *data, in
   switch (rpc_code) {
   case ICC_RPC_TEST:
   case ICC_RPC_ADHOC_NODES:
+  case ICC_RPC_JOBMON_SUBMIT:
+  case ICC_RPC_JOBMON_EXIT:
     break;
   default:
     margo_error(icc->mid, "Unknown ICC RPC id %d", rpc_code);

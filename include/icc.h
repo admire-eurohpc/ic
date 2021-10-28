@@ -35,13 +35,25 @@ enum icc_log_level {
 enum icc_rpc_code {
   ICC_RPC_ERROR,
   ICC_RPC_TEST,
+  ICC_RPC_JOBMON_SUBMIT,
+  ICC_RPC_JOBMON_EXIT,
   ICC_RPC_ADHOC_NODES,
   ICC_RPC_COUNT
 };
 
-
 struct icc_rpc_test_in {
   uint8_t number;
+};
+
+struct icc_rpc_jobmon_submit_in {
+  uint32_t slurm_jobid;
+  uint32_t slurm_jobstepid;
+  uint32_t slurm_nnodes;
+};
+
+struct icc_rpc_jobmon_exit_in {
+  uint32_t slurm_jobid;
+  uint32_t slurm_jobstepid;
 };
 
 struct icc_rpc_adhoc_nodes_in {

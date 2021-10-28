@@ -7,8 +7,8 @@ PREFIX ?= /usr/local
 
 sources := icc_server.c icc_client.c
 # keep libicc in front
-binaries := libicc.so $(sources:.c=) libadhoccli.so
-sources += icc.c adhoccli.c
+binaries := libicc.so $(sources:.c=) libadhoccli.so libjobmon.so
+sources += icc.c adhoccli.c jobmon.c
 
 objects := $(sources:.c=.o)
 depends := $(sources:.c=.d)
@@ -56,7 +56,7 @@ libicc.so icc_server icc_client: LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no
 
 icc_client: LDLIBS += -L. -licc
 
-libadhoccli.so: LDLIBS += -L. -licc -lslurm
+libjobmon.so libadhoccli.so: LDLIBS += -L. -licc -lslurm
 
 lib%.so: CFLAGS += -fpic
 lib%.so: LDFLAGS += -shared

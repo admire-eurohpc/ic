@@ -1,7 +1,7 @@
 #ifndef _ADMIRE_ICC_RPC_H
 #define _ADMIRE_ICC_RPC_H
 
-#include <stdlib.h>		/* getenv   */
+#include <stdlib.h>            /* getenv   */
 #include <mercury.h>
 #include <mercury_macros.h>
 #include <mercury_proc_string.h>
@@ -76,12 +76,17 @@ MERCURY_GEN_PROC(rpc_out_t, ((int64_t)(rc)))
 MERCURY_GEN_PROC(test_in_t, ((uint8_t)(number)))
 
 MERCURY_GEN_PROC(adhoc_nodes_in_t,
-		 ((uint32_t)(slurm_jobid))
-		 ((uint32_t)(slurm_nnodes))
-		 ((uint32_t)(adhoc_nnodes)))
+                 ((uint32_t)(slurm_jobid))
+                 ((uint32_t)(slurm_nnodes))
+                 ((uint32_t)(adhoc_nnodes)))
 
-MERCURY_GEN_PROC(adhoc_nodes_out_t, ((int64_t)(rc)))
+MERCURY_GEN_PROC(jobmon_submit_in_t,
+                 ((uint32_t)(slurm_jobid))
+                 ((uint32_t)(slurm_jobstepid))
+                 ((uint32_t)(slurm_nnodes)))
 
-
+MERCURY_GEN_PROC(jobmon_exit_in_t,
+                 ((uint32_t)(slurm_jobid))
+                 ((uint32_t)(slurm_jobstepid)))
 
 #endif
