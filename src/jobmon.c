@@ -8,7 +8,7 @@
 
 #include "icc.h"
 
-SPANK_PLUGIN (job-monitor, 1)
+SPANK_PLUGIN(job-monitor, 1)
 
 struct jobmonctx {
   uint32_t jobid;
@@ -20,6 +20,20 @@ struct jobmonctx jmctx = {.jobid = 0, .jobstepid = 0, .nnodes = 0};
 
 
 /**
+ * Return 1 if the ADMIRE plugin should be used.
+ */
+static int
+adm_enabled() {
+  char *adm_enabled = getenv("ADMIRE_ENABLE");
+  if (!adm_enabled || !strcmp(adm_enabled, "") || !strcmp(adm_enabled, "0")
+      || !strcmp(adm_enabled, "no") || !strcmp(adm_enabled, "NO"))
+    return 0;
+  else
+    return 1;
+}
+
+
+/**
  * Called locally in srun, after jobid & stepid are available.
  */
 int
@@ -27,6 +41,9 @@ slurm_spank_local_user_init(spank_t sp,
                             int ac __attribute__((unused)),
                             char **av __attribute__((unused)))
 {
+  if (!adm_enabled())
+    return 0;
+
   spank_err_t sprc;
 
   sprc = spank_get_item(sp, S_JOB_ID, &jmctx.jobid);
@@ -82,6 +99,9 @@ int
 slurm_spank_exit(spank_t sp,
                  int ac __attribute__((unused)), char **av __attribute__((unused)))
 {
+  if (!adm_enabled())
+    return 0;
+
   /* run in local (srun) context only */
   if (spank_remote(sp))
     return 0;
@@ -103,7 +123,7 @@ slurm_spank_exit(spank_t sp,
 
   rc = icc_rpc_send(icc, ICC_RPC_JOBMON_EXIT, &in, &rpc_retcode);
   if (rc == ICC_SUCCESS) {
-    slurm_info("RPC jobmon_submit successful: retcode=%d", rpc_retcode);
+    slurm_info("RPC jobmon_exit successful: retcode=%d", rpc_retcode);
   } else {
     slurm_error("Error making RPC to IC (retcode=%d)", rc);
   }
