@@ -79,7 +79,7 @@ icc_init(enum icc_log_level log_level, struct icc_context **icc_context)
 
  error:
   if (icc) {
-    if (!icc->mid)
+    if (icc->mid)
       margo_finalize(icc->mid);
     free(icc);
   }
