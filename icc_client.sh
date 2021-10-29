@@ -10,8 +10,8 @@
 case `hostname` in
     *"plafrim.cluster")
         default_dir=/projets/admire
-        path=local/bin
-        libpath=local/lib
+        path=$default_dir/local/bin
+        libpath=$default_dir/local/lib
         ;;
     *)
         default_dir=/tmp
