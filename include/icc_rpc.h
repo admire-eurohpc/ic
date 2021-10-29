@@ -8,8 +8,6 @@
 
 #include "icc.h"
 
-#define IC_RUNTIME_DIR_DEFAULT "."
-
 #define ICC_ADDR_FILENAME "icc.addr"
 #define ICC_ADDR_MAX_SIZE 128
 #define ICC_HG_PROVIDER "ofi+tcp"
@@ -21,11 +19,11 @@
 
 /**
  * Return a path to the file storing the ICC address. The caller is
- * responsible for freeing it
+ * responsible for freeing it.
  */
 static inline char *
 icc_addr_file() {
-  char *runtimedir = getenv("IC_RUNTIME_DIR");
+  char *runtimedir = getenv("ADMIRE_DIR");
   if (!runtimedir)
     runtimedir = getenv("HOME");
   if (!runtimedir)

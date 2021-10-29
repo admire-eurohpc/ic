@@ -123,8 +123,7 @@ directory, e.g. `/usr/local/lib`, run with the environment variable
 The ICC server must be run first. It will write its address to a file
 that MUST be on shared storage, so that all clients can read it. To
 find the directory, the ICC server will try the environment variable
-`IC_RUNTIME_DIR`, then `HOME` and finally default to the current
-directory (".").
+`AMIRE_DIR`, then `HOME` and finally default to the current directory (".").
 
 To run the ICC server, simply use the executable:
 
