@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <margo.h>
+#include <stdlib.h>		/* malloc */
 #include <string.h>
 
 #include "icc_rpc.h"
@@ -14,7 +15,8 @@
  * XX malloc intempestif,
  * Cleanup error/info messages
  * margo_free_input in callback!
- * icc_init error code errno vs ICC?
+ * icc_init error code errno vs ICC? cleanup all
+ * do we need an include directory?
 */
 
 

@@ -4,6 +4,7 @@
 #include <margo.h>
 
 #include "icc_rpc.h"
+#include "icdb.h"
 
 
 static void icc_test_cb(hg_handle_t h);
@@ -14,6 +15,10 @@ DECLARE_MARGO_RPC_HANDLER(icc_test_cb) /* place the cb in an Argobots ULT */
 DECLARE_MARGO_RPC_HANDLER(icc_jobmon_submit_cb)
 DECLARE_MARGO_RPC_HANDLER(icc_jobmon_exit_cb)
 DECLARE_MARGO_RPC_HANDLER(icc_adhoc_nodes_cb)
+
+
+/* XX bad global variable? */
+static struct icdb_context *icdb = NULL;
 
 
 int
@@ -90,39 +95,56 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   }
 
   rpc_test_id = MARGO_REGISTER_PROVIDER(mid, "icc_test",
-					 test_in_t,
-					 rpc_out_t,
-					 icc_test_cb,
-					 ICC_MARGO_PROVIDER_ID_DEFAULT,
-					 /* XX using default Argobot pool */
-					 ABT_POOL_NULL);
+                                         test_in_t,
+                                         rpc_out_t,
+                                         icc_test_cb,
+                                         ICC_MARGO_PROVIDER_ID_DEFAULT,
+                                         /* XX using default Argobot pool */
+                                         ABT_POOL_NULL);
 
   (void)rpc_test_id;
   margo_info(mid, "icc_test RPC registered to provider %d", ICC_MARGO_PROVIDER_ID_DEFAULT);
 
   /* Job monitoring RPCs */
   MARGO_REGISTER_PROVIDER(mid, "icc_jobmon_submit", jobmon_submit_in_t, rpc_out_t,
-			  icc_jobmon_submit_cb, ICC_MARGO_PROVIDER_ID_DEFAULT, ABT_POOL_NULL);
+                          icc_jobmon_submit_cb, ICC_MARGO_PROVIDER_ID_DEFAULT, ABT_POOL_NULL);
   margo_info(mid, "icc_jobmon_submit RPC registered to provider %d", ICC_MARGO_PROVIDER_ID_DEFAULT);
 
   MARGO_REGISTER_PROVIDER(mid, "icc_jobmon_exit", jobmon_exit_in_t, rpc_out_t,
-			  icc_jobmon_exit_cb, ICC_MARGO_PROVIDER_ID_DEFAULT, ABT_POOL_NULL);
+                          icc_jobmon_exit_cb, ICC_MARGO_PROVIDER_ID_DEFAULT, ABT_POOL_NULL);
   margo_info(mid, "icc_jobmon_exit RPC registered to provider %d", ICC_MARGO_PROVIDER_ID_DEFAULT);
 
   /* Ad-hoc storage RPCs */
   hg_id_t rpc_adhoc_nodes_id;
   rpc_adhoc_nodes_id = MARGO_REGISTER_PROVIDER(mid, "icc_adhoc_nodes",
-					       adhoc_nodes_in_t,
-					       rpc_out_t,
-					       icc_adhoc_nodes_cb,
-					       ICC_MARGO_PROVIDER_ID_DEFAULT,
-					       ABT_POOL_NULL);
+                                               adhoc_nodes_in_t,
+                                               rpc_out_t,
+                                               icc_adhoc_nodes_cb,
+                                               ICC_MARGO_PROVIDER_ID_DEFAULT,
+                                               ABT_POOL_NULL);
   (void) rpc_adhoc_nodes_id;
   margo_info(mid, "icc_adhoc_nodes RPC registered to provider %d", ICC_MARGO_PROVIDER_ID_DEFAULT);
 
   /* register other RPCs here */
 
+  /* initialize connection to DB */
+  int icdb_rc;
+  icdb_rc = icdb_init(&icdb);
+  if (!icdb) {
+    margo_error(mid, "Could not initialize IC database");
+    margo_finalize(mid);
+    return EXIT_FAILURE;
+  }
+  else if (icdb_rc != ICDB_SUCCESS) {
+    margo_error(mid, "Could not initialize IC database: %s", icdb_errstr(icdb));
+    margo_finalize(mid);
+    return EXIT_FAILURE;
+  }
+
   margo_wait_for_finalize(mid);
+
+  /* close connection to DB */
+  icdb_fini(&icdb);
 
   return EXIT_SUCCESS;
 }
@@ -182,7 +204,13 @@ icc_jobmon_submit_cb(hg_handle_t h)
     }
 
     margo_info(mid, "Slurm Job %"PRId32".%"PRId32" started on %"PRId32" node%s",
-	       in.slurm_jobid, in.slurm_jobstepid, in.slurm_nnodes, in.slurm_nnodes > 1 ? "s" : "");
+               in.slurm_jobid, in.slurm_jobstepid, in.slurm_nnodes, in.slurm_nnodes > 1 ? "s" : "");
+
+    int icdb_rc = icdb_command(icdb, "SET nnodes:%"PRId32".%"PRId32" %"PRId32,
+                               in.slurm_jobid, in.slurm_jobstepid, in.slurm_nnodes);
+    if (icdb_rc != ICDB_SUCCESS) {
+      margo_error(mid, "Could not write to IC database: %s", icdb_errstr(icdb));
+    }
 
     hret = margo_respond(h, &out);
     if (hret != HG_SUCCESS) {
@@ -250,7 +278,7 @@ icc_adhoc_nodes_cb(hg_handle_t h)
     }
 
     margo_info(mid, "IC got adhoc_nodes request from job %"PRId32": %"PRId32" nodes (%"PRId32" nodes assigned by Slurm)",
-	       in.slurm_jobid, in.adhoc_nnodes, in.slurm_nnodes);
+               in.slurm_jobid, in.adhoc_nnodes, in.slurm_nnodes);
 
     hret = margo_respond(h, &out);
     if (hret != HG_SUCCESS) {

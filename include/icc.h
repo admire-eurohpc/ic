@@ -66,7 +66,7 @@ struct icc_rpc_adhoc_nodes_in {
 /**
  * Initialize a Margo client context.
  * Return ICC_SUCCESS or error code.
-*/
+ */
 int icc_init(enum icc_log_level log_level, struct icc_context **icc);
 
 /**

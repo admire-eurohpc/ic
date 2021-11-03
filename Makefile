@@ -5,10 +5,12 @@ INSTALL := install
 
 PREFIX ?= /usr/local
 
-sources := icc_server.c icc_client.c
+# XX libicc soname
+
+
+sources := icc_server.c icc_client.c icdb.c icc.c adhoccli.c jobmon.c
 # keep libicc in front
-binaries := libicc.so $(sources:.c=) libadhoccli.so libjobmon.so
-sources += icc.c adhoccli.c jobmon.c
+binaries := libicc.so icc_server icc_client libadhoccli.so libjobmon.so
 
 objects := $(sources:.c=.o)
 depends := $(sources:.c=.d)
@@ -51,9 +53,16 @@ uninstall:
 # necessary for automatic dependency handling
 $(objects): %.o: %.c
 
-libicc.so icc_server: CFLAGS += `$(PKG_CONFIG) --cflags margo`
-libicc.so icc_server icc_client: LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined
+icdb.o: CFLAGS += `$(PKG_CONFIG) --cflags hiredis`
 
+icc_server: icdb.o
+icc_server: CFLAGS += `$(PKG_CONFIG) --cflags margo`
+icc_server: LDLIBS += `$(PKG_CONFIG) --libs margo` `$(PKG_CONFIG) --libs hiredis` -Wl,--no-undefined
+
+libicc.so: CFLAGS += `$(PKG_CONFIG) --cflags margo`
+libicc.so: LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined
+
+icc_client: LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined
 icc_client: LDLIBS += -L. -licc
 
 libjobmon.so libadhoccli.so: LDLIBS += -L. -licc -lslurm
