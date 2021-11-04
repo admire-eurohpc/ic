@@ -1,29 +1,41 @@
 CC := gcc
-PKG_CONFIG := pkg-config
-MKDIR_P := mkdir -p
+
+PREFIX ?=/usr/local
+INSTALL_PATH_LIB := $(PREFIX)/lib
+INSTALL_PATH_BIN := $(PREFIX)/bin
 INSTALL := install
+MKDIR_P := mkdir -p
+PKG_CONFIG ?= pkg-config
 
-PREFIX ?= /usr/local
+includedir := include
+sourcedir := src
 
-# XX libicc soname
+ICC_MAJOR := $(shell grep ICC_MAJOR $(includedir)/icc.h | awk '{print $$3}')
+ICC_MINOR := $(shell grep ICC_MINOR $(includedir)/icc.h | awk '{print $$3}')
+ICC_PATCH := $(shell grep ICC_PATCH $(includedir)/icc.h | awk '{print $$3}')
+
+
+LIBICC_SO := libicc.so
+LIBICC_SONAME :=  $(LIBICC_SO).$(ICC_MAJOR)
+LIBICC_MINORNAME := $(LIBICC_SONAME).$(ICC_MINOR).$(ICC_PATCH)
+
+ICC_SERVER_BIN := icc-server
+ICC_CLIENT_BIN := icc-client
+LIBADHOCCLI_BIN := libadhoccli.so
+LIBJOBMON_BIN := libjobmon.so
 
 
 sources := icc_server.c icc_client.c icdb.c icc.c adhoccli.c jobmon.c
 # keep libicc in front
-binaries := libicc.so icc_server icc_client libadhoccli.so libjobmon.so
+binaries := $(LIBICC_SO) icc_server icc_client libadhoccli.so libjobmon.so
 
 objects := $(sources:.c=.o)
 depends := $(sources:.c=.d)
-
-includedir := include
-sourcedir := src
 
 vpath %.c $(sourcedir)
 
 CPPFLAGS := -I$(includedir) -MMD
 CFLAGS := -Wall -Wextra -O2 -g
-LDFLAGS := -Wl,-rpath,"\$$ORIGIN"
-LDLIBS :=
 
 
 .PHONY: all clean install uninstall
@@ -36,17 +48,20 @@ clean:
 	$(RM) $(depends)
 
 install: all
-	$(MKDIR_P) $(PREFIX)/{lib,bin}
-	$(INSTALL) -m 644 libicc.so   $(PREFIX)/lib
-	$(INSTALL) -m 755 icc_server  $(PREFIX)/bin
-	$(INSTALL) -m 755 icc_client  $(PREFIX)/bin
-	$(INSTALL) -m 755 icc_server.sh  $(PREFIX)/bin/icc_server.sh
-	$(INSTALL) -m 755 icc_client.sh  $(PREFIX)/bin/icc_client_test.sh
+	$(MKDIR_P) $(INSTALL_PATH_LIB) $(INSTALL_PATH_BIN)
+	$(INSTALL) -m 644 $(LIBICC_SO) $(INSTALL_PATH_LIB)/$(LIBICC_MINORNAME)
+	cd $(INSTALL_PATH_LIB) && ln -sf $(LIBICC_MINORNAME) $(LIBICC_SONAME)
+	$(INSTALL) -m 755 icc_server $(INSTALL_PATH_BIN)
+	$(INSTALL) -m 755 icc_client $(INSTALL_PATH_BIN)
+	$(INSTALL) -m 755 icc_server.sh $(INSTALL_PATH_BIN)/icc_server.sh
+	$(INSTALL) -m 755 icc_client.sh $(INSTALL_PATH_BIN)/icc_client_test.sh
 
 uninstall:
-	$(RM) $(PREFIX)/lib/libicc.so
-	$(RM) $(PREFIX)/bin/icc_server
-	$(RM) $(PREFIX)/bin/icc_client_test
+	$(RM) $(INSTALL_PATH_LIB)/$(LIBICC_SONAME) $(INSTALL_PATH_LIB)/$(LIBICC_MINORNAME)
+	$(RM) $(INSTALL_PATH_BIN)/icc_server
+	$(RM) $(INSTALL_PATH_BIN)/icc_client
+	$(RM) $(INSTALL_PATH_BIN)/icc_server.sh
+	$(RM) $(INSTALL_PATH_BIN)/icc_client_test.sh
 
 
 # forces the creation of object files
@@ -59,8 +74,8 @@ icc_server: icdb.o
 icc_server: CFLAGS += `$(PKG_CONFIG) --cflags margo`
 icc_server: LDLIBS += `$(PKG_CONFIG) --libs margo` `$(PKG_CONFIG) --libs hiredis` -Wl,--no-undefined
 
-libicc.so: CFLAGS += `$(PKG_CONFIG) --cflags margo`
-libicc.so: LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined
+$(LIBICC_SO): CFLAGS += `$(PKG_CONFIG) --cflags margo`
+$(LIBICC_SO): LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined,-h$(LIBICC_MINORNAME)
 
 icc_client: LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined
 icc_client: LDLIBS += -L. -licc
