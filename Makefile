@@ -14,20 +14,19 @@ ICC_MAJOR := $(shell grep ICC_MAJOR $(includedir)/icc.h | awk '{print $$3}')
 ICC_MINOR := $(shell grep ICC_MINOR $(includedir)/icc.h | awk '{print $$3}')
 ICC_PATCH := $(shell grep ICC_PATCH $(includedir)/icc.h | awk '{print $$3}')
 
+libicc_so := libicc.so
+libicc_soname :=  $(libicc_so).$(ICC_MAJOR)
+libicc_minorname := $(libicc_soname).$(ICC_MINOR).$(ICC_PATCH)
 
-LIBICC_SO := libicc.so
-LIBICC_SONAME :=  $(LIBICC_SO).$(ICC_MAJOR)
-LIBICC_MINORNAME := $(LIBICC_SONAME).$(ICC_MINOR).$(ICC_PATCH)
-
-ICC_SERVER_BIN := icc-server
-ICC_CLIENT_BIN := icc-client
-LIBADHOCCLI_BIN := libadhoccli.so
-LIBJOBMON_BIN := libjobmon.so
+icc_server_bin := icc_server
+icc_client_bin := icc_client
+libadhoccli_so := libadhoccli.so
+libjobmon_so := libjobmon.so
 
 
 sources := icc_server.c icc_client.c icdb.c icc.c adhoccli.c jobmon.c
 # keep libicc in front
-binaries := $(LIBICC_SO) icc_server icc_client libadhoccli.so libjobmon.so
+binaries := $(libicc_so) $(icc_server_bin) $(icc_client_bin) $(libadhoccli_so) $(libjobmon_so)
 
 objects := $(sources:.c=.o)
 depends := $(sources:.c=.d)
@@ -49,19 +48,19 @@ clean:
 
 install: all
 	$(MKDIR_P) $(INSTALL_PATH_LIB) $(INSTALL_PATH_BIN)
-	$(INSTALL) -m 644 $(LIBICC_SO) $(INSTALL_PATH_LIB)/$(LIBICC_MINORNAME)
-	cd $(INSTALL_PATH_LIB) && ln -sf $(LIBICC_MINORNAME) $(LIBICC_SONAME)
-	$(INSTALL) -m 755 icc_server $(INSTALL_PATH_BIN)
-	$(INSTALL) -m 755 icc_client $(INSTALL_PATH_BIN)
+	$(INSTALL) -m 644 $(libicc_so) $(INSTALL_PATH_LIB)/$(libicc_minorname)
+	cd $(INSTALL_PATH_LIB) && ln -sf $(libicc_minorname) $(libicc_soname)
+	$(INSTALL) -m 755 $(icc_server_bin) $(INSTALL_PATH_BIN)
+	$(INSTALL) -m 755 $(icc_client_bin) $(INSTALL_PATH_BIN)
 	$(INSTALL) -m 755 icc_server.sh $(INSTALL_PATH_BIN)/icc_server.sh
-	$(INSTALL) -m 755 icc_client.sh $(INSTALL_PATH_BIN)/icc_client_test.sh
+	$(INSTALL) -m 755 icc_client.sh $(INSTALL_PATH_BIN)/icc_client.sh
 
 uninstall:
-	$(RM) $(INSTALL_PATH_LIB)/$(LIBICC_SONAME) $(INSTALL_PATH_LIB)/$(LIBICC_MINORNAME)
-	$(RM) $(INSTALL_PATH_BIN)/icc_server
-	$(RM) $(INSTALL_PATH_BIN)/icc_client
+	$(RM) $(INSTALL_PATH_LIB)/$(libicc_soname) $(INSTALL_PATH_LIB)/$(libicc_minorname)
+	$(RM) $(INSTALL_PATH_BIN)/$(icc_server_bin)
+	$(RM) $(INSTALL_PATH_BIN)/$(icc_client_bin)
 	$(RM) $(INSTALL_PATH_BIN)/icc_server.sh
-	$(RM) $(INSTALL_PATH_BIN)/icc_client_test.sh
+	$(RM) $(INSTALL_PATH_BIN)/icc_client-test.sh
 
 
 # forces the creation of object files
@@ -70,17 +69,17 @@ $(objects): %.o: %.c
 
 icdb.o: CFLAGS += `$(PKG_CONFIG) --cflags hiredis`
 
-icc_server: icdb.o
-icc_server: CFLAGS += `$(PKG_CONFIG) --cflags margo`
-icc_server: LDLIBS += `$(PKG_CONFIG) --libs margo` `$(PKG_CONFIG) --libs hiredis` -Wl,--no-undefined
+$(icc_server_bin): icdb.o
+$(icc_server_bin): CFLAGS += `$(PKG_CONFIG) --cflags margo`
+$(icc_server_bin): LDLIBS += `$(PKG_CONFIG) --libs margo` `$(PKG_CONFIG) --libs hiredis` -Wl,--no-undefined
 
-$(LIBICC_SO): CFLAGS += `$(PKG_CONFIG) --cflags margo`
-$(LIBICC_SO): LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined,-h$(LIBICC_MINORNAME)
+$(libicc_so): CFLAGS += `$(PKG_CONFIG) --cflags margo`
+$(libicc_so): LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined,-h$(libicc_minorname)
 
-icc_client: LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined
-icc_client: LDLIBS += -L. -licc
+$(icc_client_bin): LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined
+$(icc_client_bin): LDLIBS += -L. -licc
 
-libjobmon.so libadhoccli.so: LDLIBS += -L. -licc -lslurm
+$(libjobmon_so) $(libadhoccli_so): LDLIBS += -L. -licc -lslurm
 
 lib%.so: CFLAGS += -fpic
 lib%.so: LDFLAGS += -shared
