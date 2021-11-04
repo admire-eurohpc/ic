@@ -120,17 +120,6 @@ make install PREFIX=/usr/local
 From there, the Redis server can be run through the binary
 `redis-server`.
 
-
-## libicc compilation
-
-libicc is developed in the ADMIRE Git repository, in the `src/ic`
-directory. The library, the server executable and the example client
-executable can be compiled compiled with:
-
-```
-make all PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
-```
-
 ### Hiredis
 Hiredis is the official C client library for Redis. 
 
@@ -141,6 +130,17 @@ The library can be built and installed with:
 ```
 make
 make install PREFIX=/usr/local
+```
+
+
+## libicc compilation
+
+libicc is developed in the ADMIRE Git repository, in the `src/ic`
+directory. The library, the server executable and the example client
+executable can be compiled compiled with:
+
+```
+make all PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
 ```
 
 
