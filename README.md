@@ -128,9 +128,11 @@ https://github.com/redis/hiredis/archive/refs/tags/v1.0.2.tar.gz
 
 The library can be built and installed with:
 ```
-make
 make install PREFIX=/usr/local
 ```
+
+Note that the PREFIX environment variable must be set at compilation
+time, so that the pkg-config file takes it into account.
 
 
 ## libicc compilation
