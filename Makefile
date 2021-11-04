@@ -52,15 +52,15 @@ install: all
 	cd $(INSTALL_PATH_LIB) && ln -sf $(libicc_minorname) $(libicc_soname)
 	$(INSTALL) -m 755 $(icc_server_bin) $(INSTALL_PATH_BIN)
 	$(INSTALL) -m 755 $(icc_client_bin) $(INSTALL_PATH_BIN)
-	$(INSTALL) -m 755 icc_server.sh $(INSTALL_PATH_BIN)/icc_server.sh
-	$(INSTALL) -m 755 icc_client.sh $(INSTALL_PATH_BIN)/icc_client.sh
+	$(INSTALL) -m 755 scripts/icc_server.sh $(INSTALL_PATH_BIN)/icc_server.sh
+	$(INSTALL) -m 755 scripts/icc_client.sh $(INSTALL_PATH_BIN)/icc_client.sh
 
 uninstall:
 	$(RM) $(INSTALL_PATH_LIB)/$(libicc_soname) $(INSTALL_PATH_LIB)/$(libicc_minorname)
 	$(RM) $(INSTALL_PATH_BIN)/$(icc_server_bin)
 	$(RM) $(INSTALL_PATH_BIN)/$(icc_client_bin)
 	$(RM) $(INSTALL_PATH_BIN)/icc_server.sh
-	$(RM) $(INSTALL_PATH_BIN)/icc_client-test.sh
+	$(RM) $(INSTALL_PATH_BIN)/icc_client.sh
 
 
 # forces the creation of object files
