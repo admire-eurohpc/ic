@@ -1,7 +1,12 @@
 #ifndef _ADMIRE_ICC_H
 #define _ADMIRE_ICC_H
 
-#include <stdint.h>
+#include <stdint.h>		/* uintXX_t */
+
+#define ICC_MAJOR 1
+#define ICC_MINOR 0
+#define ICC_PATCH 0
+
 
 struct icc_context;
 

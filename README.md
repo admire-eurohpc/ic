@@ -10,6 +10,8 @@ work:
 - argobots  1.1
 - json-c    0.15
 - margo     0.9.5
+- redis     6.2
+- hiredis   1.0.2
 
 In the following, it is supposed that the librarie need to be
 installed in `/usr/local`, adapt if necessary.
@@ -103,6 +105,36 @@ make
 make install
 ```
 
+### Redis
+
+Get stable release from:
+http://download.redis.io/redis-stable.tar.gz
+
+Redis only uses requires Make and and a C compiler
+
+```
+make
+make install PREFIX=/usr/local
+```
+
+From there, the Redis server can be run through the binary
+`redis-server`.
+
+### Hiredis
+Hiredis is the official C client library for Redis. 
+
+The latest release can be downloaded from:
+https://github.com/redis/hiredis/archive/refs/tags/v1.0.2.tar.gz
+
+The library can be built and installed with:
+```
+make install PREFIX=/usr/local
+```
+
+Note that the PREFIX environment variable must be set at compilation
+time, so that the pkg-config file takes it into account.
+
+
 ## libicc compilation
 
 libicc is developed in the ADMIRE Git repository, in the `src/ic`
@@ -146,22 +178,22 @@ executable, it will get picked up. Otherwise, the environment variable
 `LD_LIBRARY_PATH` must be adjusted.
 
 
-To make things easier to test on the
-[PlaFRIM](https://www.plafrim.fr/) cluster two scripts
-`icc_server_plafrim` and `icc_client_plafrim` are provided in the
+To make things easier to test two scripts `icc_server.sh` and
+`icc_client.sh` are provided. On the
+[PlaFRIM](https://www.plafrim.fr/) cluster they are in the
 `/projets/admire/local/bin` directory , they respectively launch the
-ICC server and ICC client with the right environment variables. With
-these script The ICC server runs for 10 minutes and the ICC client
-makes a single RPC and exits. They can be run using the `sbatch`
-command or directly:
+ICC server and an ICC client with the right environment
+variables. With these script The ICC server runs for 10 minutes and
+the ICC client makes a single RPC and exits. They can be run using the
+`sbatch` command or directly:
 
 ```
-/projets/admire/local/bin/icc_server_plafrim
+/projets/admire/local/bin/icc_server.sh
 ```
 
 and once the server is running:
 
 ```
-/projets/admire/local/bin/icc_client_plafrim
+/projets/admire/local/bin/icc_client.sh
 ```
 

@@ -1,6 +1,6 @@
 #!/bin/sh
-# Run the ICC server for 10 minutes. The address file will be written
-# in the ADMIRE_DIR directory.
+# Run Redis server and the ICC server for 10 minutes. The ICC address
+# file will be written in the ADMIRE_DIR directory.
 
 #SBATCH --job-name=admire_icc_server
 #SBATCH --output=icc_server_out.txt
@@ -28,4 +28,7 @@ export PATH LD_LIBRARY_PATH ADMIRE_DIR
 
 mkdir -p $ADMIRE_DIR
 
+srun --time=00:10:00 redis-server &
 srun --time=00:10:00 icc_server
+
+wait
