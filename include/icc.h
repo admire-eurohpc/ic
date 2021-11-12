@@ -35,6 +35,11 @@ enum icc_log_level {
 enum icc_rpc_code {
   ICC_RPC_ERROR,
   ICC_RPC_TEST,
+  ICC_RPC_MALLEABILITY,
+  ICC_RPC_SLURM,
+  ICC_RPC_IOSCHED,
+  ICC_RPC_ADHOC,
+  ICC_RPC_MONITOR,
   ICC_RPC_JOBMON_SUBMIT,
   ICC_RPC_JOBMON_EXIT,
   ICC_RPC_ADHOC_NODES,
@@ -44,6 +49,30 @@ enum icc_rpc_code {
 struct icc_rpc_test_in {
   uint8_t number;
 };
+
+/* Structs for RPC communications between Root Controller and other components*/
+struct icc_rpc_malleability_manager_in{
+    uint8_t number;
+};
+
+struct icc_rpc_slurm_manager_in{
+    uint8_t number;
+};
+
+struct icc_rpc_io_scheduler_in{
+    uint8_t number;
+};
+
+struct icc_rpc_adhoc_manager_in{
+    uint8_t number;
+};
+
+struct icc_rpc_monitoring_manager_in{
+    uint8_t number;
+};
+/* End of root controller rpc structs*/
+
+
 
 struct icc_rpc_jobmon_submit_in {
   uint32_t slurm_jobid;

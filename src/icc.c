@@ -3,7 +3,7 @@
 #include <stdlib.h>		/* malloc */
 #include <string.h>
 
-#include "icc_rpc.h"
+#include "../include/icc_rpc.h"
 
 
 /* TODO
@@ -80,9 +80,17 @@ icc_init(enum icc_log_level log_level, struct icc_context **icc_context)
 
   /* RPCs */
   rpc_hg_ids[ICC_RPC_TEST] = MARGO_REGISTER(icc->mid, "icc_test", test_in_t, rpc_out_t, NULL);
+  rpc_hg_ids[ICC_RPC_MALLEABILITY] = MARGO_REGISTER(icc->mid, "icc_malleabMan", malleabilityman_in_t, rpc_out_t, NULL);
+  rpc_hg_ids[ICC_RPC_SLURM] = MARGO_REGISTER(icc->mid, "icc_slurmMan", slurmman_in_t, rpc_out_t, NULL);
+  rpc_hg_ids[ICC_RPC_IOSCHED] = MARGO_REGISTER(icc->mid, "icc_iosched", iosched_in_t, rpc_out_t, NULL);
+  rpc_hg_ids[ICC_RPC_ADHOC] = MARGO_REGISTER(icc->mid, "icc_adhocMan", adhocman_in_t, rpc_out_t, NULL);
+  rpc_hg_ids[ICC_RPC_MONITOR] = MARGO_REGISTER(icc->mid, "icc_monitorMan", monitor_in_t, rpc_out_t, NULL);
+
   rpc_hg_ids[ICC_RPC_JOBMON_SUBMIT] = MARGO_REGISTER(icc->mid, "icc_jobmon_submit", jobmon_submit_in_t, rpc_out_t, NULL);
   rpc_hg_ids[ICC_RPC_JOBMON_EXIT] = MARGO_REGISTER(icc->mid, "icc_jobmon_exit", jobmon_exit_in_t, rpc_out_t, NULL);
   rpc_hg_ids[ICC_RPC_ADHOC_NODES] = MARGO_REGISTER(icc->mid, "icc_adhoc_nodes", adhoc_nodes_in_t, rpc_out_t, NULL);
+
+
 
   /* register other RPCs here */
 
@@ -136,6 +144,11 @@ icc_rpc_send(struct icc_context *icc, enum icc_rpc_code rpc_code, void *data, in
   case ICC_RPC_ADHOC_NODES:
   case ICC_RPC_JOBMON_SUBMIT:
   case ICC_RPC_JOBMON_EXIT:
+  case ICC_RPC_MALLEABILITY:
+  case ICC_RPC_SLURM:
+  case ICC_RPC_IOSCHED:
+  case ICC_RPC_ADHOC:
+  case ICC_RPC_MONITOR:
     break;
   default:
     margo_error(icc->mid, "Unknown ICC RPC id %d", rpc_code);

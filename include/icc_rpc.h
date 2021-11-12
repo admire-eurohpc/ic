@@ -23,13 +23,13 @@
  */
 static inline char *
 icc_addr_file() {
-  char *runtimedir = getenv("ADMIRE_DIR");
+  const char *runtimedir = getenv("ADMIRE_DIR");
   if (!runtimedir)
     runtimedir = getenv("HOME");
   if (!runtimedir)
     runtimedir = ".";
 
-  char *path = malloc(strlen(runtimedir) + strlen(ICC_ADDR_FILENAME) + 2);
+  char *path = (char*)malloc(strlen(runtimedir) + strlen(ICC_ADDR_FILENAME) + 2);
   if (path) {
     sprintf(path, "%s/%s", runtimedir, ICC_ADDR_FILENAME);
   }
@@ -72,6 +72,12 @@ MERCURY_GEN_PROC(rpc_out_t, ((int64_t)(rc)))
  * /!\ Copied in the icc.h public header file, keep in sync!
  */
 MERCURY_GEN_PROC(test_in_t, ((uint8_t)(number)))
+
+MERCURY_GEN_PROC(malleabilityman_in_t, ((uint8_t)(number)))
+MERCURY_GEN_PROC(slurmman_in_t, ((uint8_t)(number)))
+MERCURY_GEN_PROC(iosched_in_t, ((uint8_t)(number)))
+MERCURY_GEN_PROC(adhocman_in_t, ((uint8_t)(number)))
+MERCURY_GEN_PROC(monitor_in_t, ((uint8_t)(number)))
 
 MERCURY_GEN_PROC(adhoc_nodes_in_t,
                  ((uint32_t)(slurm_jobid))
