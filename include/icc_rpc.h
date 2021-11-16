@@ -74,10 +74,12 @@ MERCURY_GEN_PROC(rpc_out_t, ((int64_t)(rc)))
 MERCURY_GEN_PROC(test_in_t, ((uint8_t)(number)))
 
 MERCURY_GEN_PROC(malleabilityman_in_t, ((uint8_t)(number)))
+MERCURY_GEN_PROC(malleabilityman_out_t, ((uint8_t)(number)))
 MERCURY_GEN_PROC(slurmman_in_t, ((uint8_t)(number)))
-MERCURY_GEN_PROC(iosched_in_t, ((uint8_t)(number)))
-MERCURY_GEN_PROC(adhocman_in_t, ((uint8_t)(number)))
-MERCURY_GEN_PROC(monitor_in_t, ((uint8_t)(number)))
+MERCURY_GEN_PROC(slurmman_out_t, ((uint8_t)(number)))
+MERCURY_GEN_PROC(iosched_out_t, ((uint8_t)(number)))
+MERCURY_GEN_PROC(adhocman_out_t, ((uint8_t)(number)))
+MERCURY_GEN_PROC(monitor_out_t, ((uint8_t)(number)))
 
 MERCURY_GEN_PROC(adhoc_nodes_in_t,
                  ((uint32_t)(slurm_jobid))

@@ -32,7 +32,7 @@ add_subdirectory(src)
 
 # Link libraries previously compiled by INRIA Makefile
 add_library(libicc SHARED IMPORTED)
-set_property(TARGET libicc PROPERTY IMPORTED_LOCATION "../libicc.so")
+set_property(TARGET libicc PROPERTY IMPORTED_LOCATION "../libicc.so.1.0.0")
 add_library(libadhoccli SHARED IMPORTED)
 set_property(TARGET libadhoccli PROPERTY IMPORTED_LOCATION "../libadhoccli.so")
 add_library(libjobmon SHARED IMPORTED)
@@ -53,14 +53,28 @@ set_property(TARGET libna PROPERTY IMPORTED_LOCATION "/usr/local/lib/libna.so")
 add_library(icdb STATIC ${CMAKE_CURRENT_SOURCE_DIR}/src/icdb.c)
 target_link_libraries( icdb /usr/local/lib/libhiredis.so )
 
+
+# object root_connection
+add_library(rcon STATIC ${CMAKE_CURRENT_SOURCE_DIR}/src/root_connections.cpp)
+target_link_libraries( rcon /usr/local/lib/libmargo.so /usr/local/lib/libmercury.so /usr/local/lib/libabt.so)
+
+
+# Generating client test
+add_executable(rpc_client_test test/rpc_client_test.cpp include/root_connections.h)
+target_link_libraries(rpc_client_test /usr/local/lib/libmargo.so /usr/local/lib/libmercury.so /usr/local/lib/libabt.so icdb rcon  -MMD -pthread -Wl,--no-as-needed)
+
+
 # Resources references in headers
 file(GLOB_RECURSE SOURCES
         ../include/icc.h
         ../include/icc_rpc.h
         ../include/icdb.h
+        include/root_connections.h
         src/root_controller.cpp)
 
 
 # Generate binary and link margo
-add_executable(${PROJECT_NAME} ${SOURCES})
-target_link_libraries(${PROJECT_NAME} /usr/local/lib/libmargo.so /usr/local/lib/libmercury.so /usr/local/lib/libabt.so icdb -MMD -pthread -Wl,--no-as-needed)
+add_executable(${PROJECT_NAME} ${SOURCES} )
+target_link_libraries(${PROJECT_NAME} /usr/local/lib/libmargo.so /usr/local/lib/libmercury.so /usr/local/lib/libabt.so icdb rcon -MMD -pthread -Wl,--no-as-needed)
+
+
