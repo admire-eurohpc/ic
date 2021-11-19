@@ -1,6 +1,6 @@
 #include <stdlib.h>             /* malloc */
 #include <hiredis.h>
-#include "icdb.h"
+#include "../include/icdb.h"
 
 struct icdb_context {
   redisContext *redisctx;

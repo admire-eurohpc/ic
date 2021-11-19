@@ -20,13 +20,15 @@ libicc_minorname := $(libicc_soname).$(ICC_MINOR).$(ICC_PATCH)
 
 icc_server_bin := icc_server
 icc_client_bin := icc_client
+root_controller_bin := root_controller
 libadhoccli_so := libadhoccli.so
 libjobmon_so := libjobmon.so
+librootcon_so := librootcon.so
 
 
-sources := icc_server.c icc_client.c icdb.c icc.c adhoccli.c jobmon.c
+sources := icc_server.c icc_client.c root_controller.c icdb.c icc.c adhoccli.c jobmon.c root_connections.c 
 # keep libicc in front
-binaries := $(libicc_so) $(icc_server_bin) $(icc_client_bin) $(libadhoccli_so) $(libjobmon_so)
+binaries := $(libicc_so) $(icc_server_bin) $(icc_client_bin) $(root_controller_bin) $(libadhoccli_so) $(libjobmon_so) 
 
 objects := $(sources:.c=.o)
 depends := $(sources:.c=.d)
@@ -52,6 +54,7 @@ install: all
 	cd $(INSTALL_PATH_LIB) && ln -sf $(libicc_minorname) $(libicc_soname)
 	$(INSTALL) -m 755 $(icc_server_bin) $(INSTALL_PATH_BIN)
 	$(INSTALL) -m 755 $(icc_client_bin) $(INSTALL_PATH_BIN)
+	$(INSTALL) -m 755 $(root_controller_bin) $(INSTALL_PATH_BIN)
 	$(INSTALL) -m 755 scripts/icc_server.sh $(INSTALL_PATH_BIN)/icc_server.sh
 	$(INSTALL) -m 755 scripts/icc_client.sh $(INSTALL_PATH_BIN)/icc_client.sh
 
@@ -59,6 +62,7 @@ uninstall:
 	$(RM) $(INSTALL_PATH_LIB)/$(libicc_soname) $(INSTALL_PATH_LIB)/$(libicc_minorname)
 	$(RM) $(INSTALL_PATH_BIN)/$(icc_server_bin)
 	$(RM) $(INSTALL_PATH_BIN)/$(icc_client_bin)
+	$(RM) $(INSTALL_PATH_BIN)/$(root_controller_bin)
 	$(RM) $(INSTALL_PATH_BIN)/icc_server.sh
 	$(RM) $(INSTALL_PATH_BIN)/icc_client.sh
 
@@ -69,15 +73,22 @@ $(objects): %.o: %.c
 
 icdb.o: CFLAGS += `$(PKG_CONFIG) --cflags hiredis`
 
-$(icc_server_bin): icdb.o
+root_connections.o: CFLAGS += `$(PKG_CONFIG) --cflags margo`
+
+$(icc_server_bin): icdb.o  
 $(icc_server_bin): CFLAGS += `$(PKG_CONFIG) --cflags margo`
 $(icc_server_bin): LDLIBS += `$(PKG_CONFIG) --libs margo` `$(PKG_CONFIG) --libs hiredis` -Wl,--no-undefined
+
+$(root_controller_bin): icdb.o root_connections.o
+$(root_controller_bin): CFLAGS += `$(PKG_CONFIG) --cflags margo` -Wno-unused-variable
+$(root_controller_bin): LDLIBS += `$(PKG_CONFIG) --libs margo` `$(PKG_CONFIG) --libs hiredis` -L. -licc -Wl,--no-undefined -pthread
 
 $(libicc_so): CFLAGS += `$(PKG_CONFIG) --cflags margo`
 $(libicc_so): LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined,-h$(libicc_minorname)
 
+$(icc_client_bin): root_connections.o
 $(icc_client_bin): LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined
-$(icc_client_bin): LDLIBS += -L. -licc
+$(icc_client_bin): LDLIBS += -L. -licc -pthread
 
 $(libjobmon_so) $(libadhoccli_so): LDLIBS += -L. -licc -lslurm
 

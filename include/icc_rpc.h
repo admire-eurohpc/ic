@@ -7,6 +7,7 @@
 #include <mercury_proc_string.h>
 
 #include "icc.h"
+#include "root_connections.h"
 
 #define ICC_ADDR_FILENAME "icc.addr"
 #define ICC_ADDR_MAX_SIZE 128
@@ -35,6 +36,29 @@ icc_addr_file() {
   }
   return path;
 }
+
+
+/**
+ * Return a path to the file storing the ICC address. The caller is
+ * responsible for freeing it.
+ * @param Identifier for the component (margo_server) (described in root_connections.h)
+ */
+static inline char *
+icc_addr_file_opt(int server_id) {
+  const char *runtimedir = getenv("ADMIRE_DIR");
+  if (!runtimedir)
+    runtimedir = getenv("HOME");
+  if (!runtimedir)
+    runtimedir = ".";
+
+  char *path = (char*)malloc(strlen(runtimedir) + strlen(ICC_ADDR_FILENAME) + 3);
+  if (path) {
+    sprintf(path, "%s/%s%d", runtimedir, ICC_ADDR_FILENAME, server_id);
+    printf("OPENING PATH: %s\n", path);
+  }
+  return path;
+}
+
 
 
 /**
@@ -74,11 +98,17 @@ MERCURY_GEN_PROC(rpc_out_t, ((int64_t)(rc)))
 MERCURY_GEN_PROC(test_in_t, ((uint8_t)(number)))
 
 MERCURY_GEN_PROC(malleabilityman_in_t, ((uint8_t)(number)))
+
 MERCURY_GEN_PROC(malleabilityman_out_t, ((uint8_t)(number)))
+
 MERCURY_GEN_PROC(slurmman_in_t, ((uint8_t)(number)))
+
 MERCURY_GEN_PROC(slurmman_out_t, ((uint8_t)(number)))
+
 MERCURY_GEN_PROC(iosched_out_t, ((uint8_t)(number)))
+
 MERCURY_GEN_PROC(adhocman_out_t, ((uint8_t)(number)))
+
 MERCURY_GEN_PROC(monitor_out_t, ((uint8_t)(number)))
 
 MERCURY_GEN_PROC(adhoc_nodes_in_t,

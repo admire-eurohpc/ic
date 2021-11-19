@@ -2,6 +2,8 @@
 #include <inttypes.h>         /* PRIdxx */
 #include <stdio.h>
 #include <margo.h>
+#include <unistd.h>
+#include <pthread.h>
 
 #include "icc_rpc.h"
 #include "icdb.h"
@@ -19,6 +21,8 @@ DECLARE_MARGO_RPC_HANDLER(icc_adhoc_nodes_cb)
 
 /* XX bad global variable? */
 static struct icdb_context *icdb = NULL;
+
+
 
 
 int

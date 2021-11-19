@@ -14,6 +14,7 @@ struct icc_context;
 #define ICC_FAILURE -1
 
 
+
 /* Log levels lifted from Margo */
 enum icc_log_level {
     ICC_LOG_EXTERNAL,
@@ -116,6 +117,8 @@ struct icc_rpc_adhoc_nodes_in {
  * Return ICC_SUCCESS or error code.
  */
 int icc_init(enum icc_log_level log_level, struct icc_context **icc);
+int icc_init_opt(enum icc_log_level log_level, struct icc_context **icc, int server_id);
+
 
 /**
  * Finalize the Margo instance associated with icc_context ICC.
