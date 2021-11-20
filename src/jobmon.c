@@ -65,7 +65,7 @@ slurm_spank_local_user_init(spank_t sp,
   int rpc_retcode;
   int rc;
 
-  rc = icc_init(ICC_LOG_INFO, &icc);
+  rc = icc_init(ICC_LOG_INFO,0, &icc);
   if (rc != ICC_SUCCESS) {
     slurm_error("ADMIRE jobmon: Could not initialize connection to IC: %d", rc);
     return -1;
@@ -110,7 +110,7 @@ slurm_spank_exit(spank_t sp,
   int rpc_retcode;
   int rc;
 
-  rc = icc_init(ICC_LOG_INFO, &icc);
+  rc = icc_init(ICC_LOG_INFO, 0, &icc);
   if (rc != ICC_SUCCESS) {
     slurm_error("ADMIRE jobmon: Could not initialize connection to IC: %d", rc);
     return 0;

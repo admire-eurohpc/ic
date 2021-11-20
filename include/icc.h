@@ -1,7 +1,7 @@
 #ifndef _ADMIRE_ICC_H
 #define _ADMIRE_ICC_H
 
-#include <stdint.h>		/* uintXX_t */
+#include <stdint.h>             /* uintXX_t */
 
 #define ICC_MAJOR 1
 #define ICC_MINOR 0
@@ -113,15 +113,21 @@ struct icc_rpc_adhoc_nodes_in {
 
 
 /**
- * Initialize a Margo client context.
+ * Initialize an ICC client instance and returns the associated
+ * context in ICC_CONTEXT.
+ *
+ * If argument BIDIRECTIONAL is non-zero, arrange that this ICC client
+ * can receive RPCs from the intelligent controller, not just send
+ * them.
+ *
  * Return ICC_SUCCESS or error code.
  */
-int icc_init(enum icc_log_level log_level, struct icc_context **icc);
+int icc_init(enum icc_log_level log_level, int bidirectional, struct icc_context **icc);
 int icc_init_opt(enum icc_log_level log_level, struct icc_context **icc, int server_id);
 
 
 /**
- * Finalize the Margo instance associated with icc_context ICC.
+ * Finalize the ICC client instance associated with the context passed as argument.
  */
 int icc_fini(struct icc_context *icc);
 

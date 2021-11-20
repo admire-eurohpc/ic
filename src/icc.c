@@ -31,7 +31,7 @@ static hg_id_t rpc_hg_ids[ICC_RPC_COUNT];
 
 
 int
-icc_init(enum icc_log_level log_level, struct icc_context **icc_context)
+icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_context)
 {
   hg_return_t hret;
   int rc = ICC_SUCCESS;
@@ -42,7 +42,8 @@ icc_init(enum icc_log_level log_level, struct icc_context **icc_context)
   if (!icc)
     return -errno;
 
-  icc->mid = margo_init(ICC_HG_PROVIDER, MARGO_CLIENT_MODE, 0, 0);
+  icc->mid = margo_init(ICC_HG_PROVIDER,
+			bidir ? MARGO_SERVER_MODE : MARGO_CLIENT_MODE, 0, -1);
   if (!icc->mid) {
     rc = ICC_FAILURE;
     goto error;
