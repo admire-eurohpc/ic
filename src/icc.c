@@ -3,7 +3,7 @@
 #include <stdlib.h>		/* malloc */
 #include <string.h>
 
-#include "../include/icc_rpc.h"
+#include "icc_rpc.h"
 
 
 /* TODO
@@ -52,27 +52,33 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
   margo_set_log_level(icc->mid, icc_to_margo_log_level(log_level));
 
   char *path = icc_addr_file();
+  if (!path) {
+    margo_error(icc->mid, "Could not get ICC address file");
+    rc = ICC_FAILURE;
+    goto error;
+  }
+
   FILE *f = fopen(path, "r");
   if (!f) {
-    margo_error(icc->mid, "Error opening Margo address file \"%s\": %s", path ? path : "(NULL)", strerror(errno));
+    margo_error(icc->mid, "Error opening ICC address file \"%s\": %s", path ? path : "(NULL)", strerror(errno));
     free(path);
-    rc = -errno;
+    rc = ICC_FAILURE;
     goto error;
   }
   free(path);
 
   char addr_str[ICC_ADDR_MAX_SIZE];
   if (!fgets(addr_str, ICC_ADDR_MAX_SIZE, f)) {
-    margo_error(icc->mid, "Error reading from Margo address file: %s", strerror(errno));
+    margo_error(icc->mid, "Error reading from ICC address file: %s", strerror(errno));
     fclose(f);
-    rc = -errno;
+    rc = ICC_FAILURE;
     goto error;
   }
   fclose(f);
 
   hret = margo_addr_lookup(icc->mid, addr_str, &icc->addr);
   if (hret != HG_SUCCESS) {
-    margo_error(icc->mid, "Could not get Margo address: %s", HG_Error_to_string(hret));
+    margo_error(icc->mid, "Could not get Margo address from ICC address file: %s", HG_Error_to_string(hret));
     rc = ICC_FAILURE;
     goto error;
   }
@@ -91,8 +97,6 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
   rpc_hg_ids[ICC_RPC_JOBMON_SUBMIT] = MARGO_REGISTER(icc->mid, "icc_jobmon_submit", jobmon_submit_in_t, rpc_out_t, NULL);
   rpc_hg_ids[ICC_RPC_JOBMON_EXIT] = MARGO_REGISTER(icc->mid, "icc_jobmon_exit", jobmon_exit_in_t, rpc_out_t, NULL);
   rpc_hg_ids[ICC_RPC_ADHOC_NODES] = MARGO_REGISTER(icc->mid, "icc_adhoc_nodes", adhoc_nodes_in_t, rpc_out_t, NULL);
-
-
 
   /* register other RPCs here */
 

@@ -19,23 +19,24 @@
 
 
 /**
+ * Get the Mercury (Hg) address string from the Margo server instance
+ * MID and write it to ADDR_STR.
+ *
+ * Returns 0 if everything went fine, -1 otherwise.
+ */
+int
+icc_hg_addr(margo_instance_id mid, char *addr_str, hg_size_t *addr_str_size);
+
+
+/**
  * Return a path to the file storing the ICC address. The caller is
  * responsible for freeing it.
+ *
+ * The returned path will be NULL if the memory alllocation went
+ * wrong.
  */
-static inline char *
-icc_addr_file() {
-  const char *runtimedir = getenv("ADMIRE_DIR");
-  if (!runtimedir)
-    runtimedir = getenv("HOME");
-  if (!runtimedir)
-    runtimedir = ".";
-
-  char *path = (char*)malloc(strlen(runtimedir) + strlen(ICC_ADDR_FILENAME) + 2);
-  if (path) {
-    sprintf(path, "%s/%s", runtimedir, ICC_ADDR_FILENAME);
-  }
-  return path;
-}
+char *
+icc_addr_file(void);
 
 
 /**
@@ -58,7 +59,6 @@ icc_addr_file_opt(int server_id) {
   }
   return path;
 }
-
 
 
 /**
@@ -86,6 +86,7 @@ icc_to_margo_log_level(enum icc_log_level icc_log_level)
     return MARGO_LOG_ERROR;
   }
 }
+
 
 /* Generic output struct */
 MERCURY_GEN_PROC(rpc_out_t, ((int64_t)(rc)))

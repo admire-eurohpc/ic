@@ -2,10 +2,9 @@
 #include <inttypes.h>         /* PRIdxx */
 #include <stdio.h>
 #include <margo.h>
-#include <unistd.h>
-#include <pthread.h>
 
 #include "icc_rpc.h"
+#include "icc_common.h"
 #include "icdb.h"
 
 
@@ -23,60 +22,42 @@ DECLARE_MARGO_RPC_HANDLER(icc_adhoc_nodes_cb)
 static struct icdb_context *icdb = NULL;
 
 
-
-
 int
 main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
 {
-
   margo_instance_id mid;
 
   mid = margo_init(ICC_HG_PROVIDER, MARGO_SERVER_MODE, 0, -1);
   if (!mid) {
     margo_error(mid, "Error initializing Margo instance with provider %s", ICC_HG_PROVIDER);
-    return EXIT_FAILURE;
+    return ICC_FAILURE;
   }
   margo_set_log_level(mid, MARGO_LOG_INFO);
 
-  if(margo_is_listening(mid) == HG_FALSE) {
-    margo_error(mid, "Margo instance is not a server");
-    margo_finalize(mid);
-    return EXIT_FAILURE;
-  }
-
-  hg_return_t hret;
-  hg_addr_t addr;
-  hg_size_t addr_str_size = ICC_ADDR_MAX_SIZE;
   char addr_str[ICC_ADDR_MAX_SIZE];
-
-  hret = margo_addr_self(mid, &addr);
-  if (hret != HG_SUCCESS) {
-    margo_error(mid, "Could not get Margo self address");
+  hg_size_t addr_str_size = ICC_ADDR_MAX_SIZE;
+  if (icc_hg_addr(mid, addr_str, &addr_str_size)) {
+    margo_error(mid, "Could not get Mercury address");
     margo_finalize(mid);
-    return EXIT_FAILURE;
+    return ICC_FAILURE;
   }
-
-  hret = margo_addr_to_string(mid, addr_str, &addr_str_size, addr);
-  if (hret != HG_SUCCESS) {
-    margo_error(mid, "Could not convert Margo self address to string");
-    margo_addr_free(mid, addr);
-    margo_finalize(mid);
-    return EXIT_FAILURE;
-  }
-
-  hret = margo_addr_free(mid, addr);
-  if (hret != HG_SUCCESS)
-    margo_error(mid, "Could not free Margo address");
 
   margo_info(mid, "Margo Server running at address %s", addr_str);
 
+  /* Write Mercury address to file */
   char *path = icc_addr_file();
+  if (!path) {
+    margo_error(mid, "Could not get ICC address file");
+    margo_finalize(mid);
+    return ICC_FAILURE;
+  }
+
   FILE *f = fopen(path, "w");
   if (f == NULL) {
-    margo_error(mid, "Could not open address file \"%s\": %s", path ? path : "(NULL)", strerror(errno));
+    margo_error(mid, "Could not open ICC address file \"%s\": %s", path, strerror(errno));
     free(path);
     margo_finalize(mid);
-    return EXIT_FAILURE;
+    return ICC_FAILURE;
   }
   free(path);
 
@@ -85,26 +66,25 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
     margo_error(mid, "Error writing to address file", strerror(errno));
     fclose(f);
     margo_finalize(mid);
-    return EXIT_FAILURE;
+    return ICC_FAILURE;
   }
   fclose(f);
 
+  /* Register RPCs */
   hg_id_t rpc_test_id;
   hg_bool_t flag;
   margo_provider_registered_name(mid, "icc_test", ICC_MARGO_PROVIDER_ID_DEFAULT, &rpc_test_id, &flag);
   if(flag == HG_TRUE) {
     margo_error(mid, "Provider %d already exists", ICC_MARGO_PROVIDER_ID_DEFAULT);
     margo_finalize(mid);
-    return EXIT_FAILURE;
+    return ICC_FAILURE;
   }
 
-  rpc_test_id = MARGO_REGISTER_PROVIDER(mid, "icc_test",
-                                         test_in_t,
-                                         rpc_out_t,
-                                         icc_test_cb,
-                                         ICC_MARGO_PROVIDER_ID_DEFAULT,
-                                         /* XX using default Argobot pool */
-                                         ABT_POOL_NULL);
+  rpc_test_id = MARGO_REGISTER_PROVIDER(mid, "icc_test", test_in_t, rpc_out_t,
+					icc_test_cb,
+					ICC_MARGO_PROVIDER_ID_DEFAULT,
+					/* XX using default Argobot pool */
+					ABT_POOL_NULL);
 
   (void)rpc_test_id;
   margo_info(mid, "icc_test RPC registered to provider %d", ICC_MARGO_PROVIDER_ID_DEFAULT);
@@ -137,12 +117,12 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   if (!icdb) {
     margo_error(mid, "Could not initialize IC database");
     margo_finalize(mid);
-    return EXIT_FAILURE;
+    return ICC_FAILURE;
   }
   else if (icdb_rc != ICDB_SUCCESS) {
     margo_error(mid, "Could not initialize IC database: %s", icdb_errstr(icdb));
     margo_finalize(mid);
-    return EXIT_FAILURE;
+    return ICC_FAILURE;
   }
 
   margo_wait_for_finalize(mid);
@@ -150,7 +130,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   /* close connection to DB */
   icdb_fini(&icdb);
 
-  return EXIT_SUCCESS;
+  return ICC_SUCCESS;
 }
 
 

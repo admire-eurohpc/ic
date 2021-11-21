@@ -26,7 +26,8 @@ libjobmon_so := libjobmon.so
 librootcon_so := librootcon.so
 
 
-sources := icc_server.c icc_client.c root_controller.c icdb.c icc.c adhoccli.c jobmon.c root_connections.c 
+sources := icc_server.c icc_client.c icc_rpc.c root_controller.c icdb.c icc.c adhoccli.c jobmon.c root_connections.c
+
 # keep libicc in front
 binaries := $(libicc_so) $(icc_server_bin) $(icc_client_bin) $(root_controller_bin) $(libadhoccli_so) $(libjobmon_so) 
 
@@ -75,7 +76,7 @@ icdb.o: CFLAGS += `$(PKG_CONFIG) --cflags hiredis`
 
 root_connections.o: CFLAGS += `$(PKG_CONFIG) --cflags margo`
 
-$(icc_server_bin): icdb.o  
+$(icc_server_bin): icc_rpc.o icdb.o
 $(icc_server_bin): CFLAGS += `$(PKG_CONFIG) --cflags margo`
 $(icc_server_bin): LDLIBS += `$(PKG_CONFIG) --libs margo` `$(PKG_CONFIG) --libs hiredis` -Wl,--no-undefined
 
@@ -83,6 +84,7 @@ $(root_controller_bin): icdb.o root_connections.o
 $(root_controller_bin): CFLAGS += `$(PKG_CONFIG) --cflags margo` -Wno-unused-variable
 $(root_controller_bin): LDLIBS += `$(PKG_CONFIG) --libs margo` `$(PKG_CONFIG) --libs hiredis` -L. -licc -Wl,--no-undefined -pthread
 
+$(libicc_so): icc_rpc.o
 $(libicc_so): CFLAGS += `$(PKG_CONFIG) --cflags margo`
 $(libicc_so): LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined,-h$(libicc_minorname)
 
