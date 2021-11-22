@@ -7,6 +7,10 @@
 #include "icdb.h"
 
 
+/* internal rpcs */
+static void target_init_cb(hg_handle_t h);
+
+/* public rpcs */
 static void test_cb(hg_handle_t h);
 static void jobmon_submit_cb(hg_handle_t h);
 static void jobmon_exit_cb(hg_handle_t h);
@@ -76,6 +80,8 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
     return ICC_FAILURE;
   }
 
+  ICC_RPC_PREPARE(rpc_ids, callbacks, ICC_RPC_TARGET_ADDR_SEND, target_init_cb);
+
   ICC_RPC_PREPARE(rpc_ids, callbacks, ICC_RPC_TEST, test_cb);
   ICC_RPC_PREPARE(rpc_ids, callbacks, ICC_RPC_JOBMON_SUBMIT, jobmon_submit_cb);
   ICC_RPC_PREPARE(rpc_ids, callbacks, ICC_RPC_JOBMON_EXIT, jobmon_exit_cb);
@@ -103,6 +109,39 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   icdb_fini(&icdb);
 
   return ICC_SUCCESS;
+}
+
+
+static void
+target_init_cb(hg_handle_t h)
+{
+  hg_return_t hret;
+
+  target_addr_in_t in;
+  rpc_out_t out;
+
+  out.rc = ICC_SUCCESS;
+
+  margo_instance_id mid = margo_hg_handle_get_instance(h);
+  if (mid) {
+    hret = margo_get_input(h, &in);
+    if (hret != HG_SUCCESS) {
+      out.rc = ICC_FAILURE;
+      margo_error(mid, "Could not get RPC input");
+    }
+
+    margo_info(mid, "Got TARGET initiation request with address: %s", in.addr);
+
+    hret = margo_respond(h, &out);
+    if (hret != HG_SUCCESS) {
+      margo_error(mid, "Could not respond to HPC");
+    }
+  }
+
+  hret = margo_destroy(h);
+  if (hret != HG_SUCCESS) {
+    margo_error(mid, "Could not destroy Margo RPC handle: %s", HG_Error_to_string(hret));
+  }
 }
 
 

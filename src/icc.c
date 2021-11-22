@@ -17,6 +17,8 @@
  * margo_free_input in callback!
  * icc_init error code errno vs ICC? cleanup all
  * do we need an include directory?
+ * Factorize boilerplate out of callbacks
+ * Mercury macros move to .c?
 */
 
 
@@ -31,6 +33,13 @@ static hg_id_t rpc_hg_ids[ICC_RPC_COUNT] = { 0 };
 static icc_callback_t rpc_callbacks[ICC_RPC_COUNT] = { NULL };
 
 
+/* utils */
+static int
+rpc_send(margo_instance_id mid, hg_addr_t addr, uint16_t provid,
+         enum icc_rpc_code rpc_code, void *data, int *retcode);
+
+
+/* public functions */
 int
 icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_context)
 {
@@ -94,6 +103,10 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
   ICC_RPC_PREPARE(rpc_hg_ids, rpc_callbacks, ICC_RPC_ADHOC_NODES, NULL);
   /* ... register other RPCs here */
 
+  if (bidir) {
+    ICC_RPC_PREPARE(rpc_hg_ids, rpc_callbacks, ICC_RPC_TARGET_ADDR_SEND, NULL);
+  }
+
   register_rpcs(icc->mid, rpc_callbacks, rpc_hg_ids);
 
   rpc_hg_ids[ICC_RPC_MALLEABILITY_IN] = MARGO_REGISTER(icc->mid, "icc_malleabMan_in", malleabilityman_in_t, rpc_out_t, NULL);
@@ -103,6 +116,30 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
   rpc_hg_ids[ICC_RPC_IOSCHED_OUT] = MARGO_REGISTER(icc->mid, "icc_iosched_out", iosched_out_t, rpc_out_t, NULL);
   rpc_hg_ids[ICC_RPC_ADHOC_OUT] = MARGO_REGISTER(icc->mid, "icc_adhocMan_out", adhocman_out_t, rpc_out_t, NULL);
   rpc_hg_ids[ICC_RPC_MONITOR_OUT] = MARGO_REGISTER(icc->mid, "icc_monitorMan_out", monitor_out_t, rpc_out_t, NULL);
+
+  /* initialize RPC target */
+  if (bidir) {
+    char addr_str[ICC_ADDR_MAX_SIZE];
+    hg_size_t addr_str_size = ICC_ADDR_MAX_SIZE;
+    target_addr_in_t rpc_in;
+    int rpc_rc;
+
+    if (icc_hg_addr(icc->mid, addr_str, &addr_str_size)) {
+      margo_error(icc->mid, "Could not get Mercury self address");
+      rc = ICC_FAILURE;
+      goto error;
+    }
+
+    rpc_in.addr = addr_str;
+    rc = rpc_send(icc->mid, icc->addr, icc->provider_id,
+                  (int)ICC_RPC_TARGET_ADDR_SEND, &rpc_in, &rpc_rc);
+
+    if (rc || rpc_rc) {
+      margo_error(icc->mid, "Could not send target address of the bidirectional client");
+      rc = ICC_FAILURE;
+      goto error;
+    }
+  }
 
   *icc_context = icc;
   return ICC_SUCCESS;
@@ -216,9 +253,6 @@ icc_fini(struct icc_context *icc)
 
 int
 icc_rpc_send(struct icc_context *icc, enum icc_rpc_code rpc_code, void *data, int *retcode) {
-  hg_return_t hret;
-  hg_handle_t handle;
-
   if (!icc)
     return ICC_FAILURE;
 
@@ -232,39 +266,59 @@ icc_rpc_send(struct icc_context *icc, enum icc_rpc_code rpc_code, void *data, in
     return ICC_FAILURE;
   }
 
-  hret = margo_create(icc->mid, icc->addr, rpc_hg_ids[rpc_code], &handle);
-  if (hret != HG_SUCCESS) {
-    margo_error(icc->mid, "Could not create Margo RPC: %s", HG_Error_to_string(hret));
+  int rc = rpc_send(icc->mid, icc->addr, icc->provider_id, rpc_code, data, retcode);
+
+  if (rc)
     return ICC_FAILURE;
+  return ICC_SUCCESS;
+}
+
+
+static int
+rpc_send(margo_instance_id mid, hg_addr_t addr, uint16_t provider_id,
+         enum icc_rpc_code rpc_code, void *data, int *retcode)
+{
+  hg_return_t hret;
+  hg_handle_t handle;
+
+  if (rpc_code <= ICC_RPC_ERROR || rpc_code >= ICC_RPC_COUNT) {
+    margo_error(mid, "Unknown ICC RPC code %d", rpc_code);
+    return -1;
+  }
+
+  hret = margo_create(mid, addr, rpc_hg_ids[rpc_code], &handle);
+  if (hret != HG_SUCCESS) {
+    margo_error(mid, "Could not create Margo RPC: %s", HG_Error_to_string(hret));
+    return -1;
   }
 
   /* XX cast public struct to HG struct, hackish and dangerous */
-  hret = margo_provider_forward_timed(icc->provider_id, handle, data, ICC_RPC_TIMEOUT_MS);
+  hret = margo_provider_forward_timed(provider_id, handle, data, ICC_RPC_TIMEOUT_MS);
   if (hret != HG_SUCCESS) {
-    margo_error(icc->mid, "Could not forward Margo RPC: %s", HG_Error_to_string(hret));
+    margo_error(mid, "Could not forward Margo RPC: %s", HG_Error_to_string(hret));
     margo_destroy(handle);      /* XX check error */
-    return ICC_FAILURE;
+    return -1;
   }
 
   rpc_out_t resp;
   hret = margo_get_output(handle, &resp);
   if (hret != HG_SUCCESS) {
-    margo_error(icc->mid, "Could not get RPC output: %s", HG_Error_to_string(hret));
+    margo_error(mid, "Could not get RPC output: %s", HG_Error_to_string(hret));
   }
   else {
     *retcode = resp.rc;
 
     hret = margo_free_output(handle, &resp);
     if (hret != HG_SUCCESS) {
-      margo_error(icc->mid, "Could not free RPC output: %s", HG_Error_to_string(hret));
+      margo_error(mid, "Could not free RPC output: %s", HG_Error_to_string(hret));
     }
   }
 
   hret = margo_destroy(handle);
   if (hret != HG_SUCCESS) {
-    margo_error(icc->mid, "Could not destroy Margo RPC handle: %s", HG_Error_to_string(hret));
-    return ICC_FAILURE;
+    margo_error(mid, "Could not destroy Margo RPC handle: %s", HG_Error_to_string(hret));
+    return -1;
   }
 
-  return ICC_SUCCESS;
+  return 0;
 }

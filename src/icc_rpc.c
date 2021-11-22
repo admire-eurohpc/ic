@@ -98,6 +98,9 @@ register_rpcs(margo_instance_id mid, icc_callback_t callbacks[ICC_RPC_COUNT], hg
     return -1;
   }
 
+  /* internal RPCs */
+  ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_TARGET_ADDR_SEND, "icc_target_addr_send", target_addr_in_t, rpc_out_t);
+
   /* test RPC */
   ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_TEST, "icc_test", test_in_t, rpc_out_t);
 

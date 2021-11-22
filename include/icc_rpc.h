@@ -41,14 +41,15 @@ icc_addr_file(void);
 /**
  * Internal RPC. Codes 1 to 127 are reserved for internal use.
  *
- * ICC_RPC_TARGET_INIT: init an RPC target on the ICC *client*. After
- * calling this RPC the ICC *server* is able to initiate RPCs to the
- * client.
+ * ICC_RPC_TARGET_ADDR_SEND: Send the Mercury target address of a
+ * server. This RPC is meant to be called from a *client* that wants
+ * to be able to receive RPCs and not just send them. The client needs
+ * to be started in MARGO_SERVER_MODE to have an address.
  *
  */
 enum icc_rpc_internal_code {
   ICC_RPC_INTERN_ERROR = 0,
-  ICC_RPC_TARGET_INIT,
+  ICC_RPC_TARGET_ADDR_SEND,
   ICC_RPC_INTERN_COUNT = ICC_RPC_PRIVATE
 };
 
@@ -138,6 +139,8 @@ MERCURY_GEN_PROC(rpc_out_t, ((int64_t)(rc)))
  *
  * /!\ Copied in the icc.h public header file, keep in sync!
  */
+MERCURY_GEN_PROC(target_addr_in_t, ((hg_const_string_t)(addr)))
+
 MERCURY_GEN_PROC(test_in_t, ((uint8_t)(number)))
 
 MERCURY_GEN_PROC(malleabilityman_in_t, ((uint8_t)(number)))
