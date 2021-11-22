@@ -3,7 +3,7 @@
 
 
 int
-icc_hg_addr(margo_instance_id mid, char *addr_str, hg_size_t *addr_str_size)
+get_hg_addr(margo_instance_id mid, char *addr_str, hg_size_t *addr_str_size)
 {
   hg_return_t hret;
   int rc = 0;
@@ -50,44 +50,43 @@ icc_addr_file()
   if (!runtimedir)
     runtimedir = ".";
 
-  char *path = (char *)malloc(strlen(runtimedir) + strlen(ICC_ADDR_FILENAME) + 2);
+  char *path = (char *)malloc(strlen(runtimedir) + strlen(ADDR_FILENAME) + 2);
   if (path) {
-    sprintf(path, "%s/%s", runtimedir, ICC_ADDR_FILENAME);
+    sprintf(path, "%s/%s", runtimedir, ADDR_FILENAME);
   }
   return path;
 }
 
 
 /* Internal RPCs machinery */
-#define ICC_REGISTER_RPC(mid,ids,cbs,idx,name,in,out) if (ids[idx]) {   \
-    if (cbs[idx] == NULL) {                                     \
-      ids[idx] = MARGO_REGISTER(mid, name, in, out, NULL);              \
+#define ICC_REGISTER_RPC(mid, ids, cbs, idx, in, out) if (ids[idx]) {   \
+    if (cbs[idx] == NULL) {                                             \
+      ids[idx] = MARGO_REGISTER(mid, "rpc_"#idx, in, out, NULL);        \
     } else {                                                            \
-      ids[idx] = MARGO_REGISTER_PROVIDER(mid, name, in, out, cb, ICC_MARGO_PROVIDER_ID_DEFAULT, ABT_POOL_NULL); \
+      ids[idx] = MARGO_REGISTER_PROVIDER(mid, "rpc_"#idx, in, out, cb, MARGO_PROVIDER_ID_DEFAULT, ABT_POOL_NULL); \
       margo_register_data(mid, ids[idx], cbs[idx], NULL);               \
     }                                                                   \
   }
 
-
 static void cb(hg_handle_t);
-DEFINE_MARGO_RPC_HANDLER(cb)
+DEFINE_MARGO_RPC_HANDLER(cb);
 
 static void
 cb(hg_handle_t h)
 {
+  /* XX factorize all callbacks here? */
   margo_instance_id mid = margo_hg_handle_get_instance(h);
   const struct hg_info* info = margo_get_info(h);
 
   icc_callback_t realcb = margo_registered_data(mid, info->id);
   realcb(h);
 }
-DECLARE_MARGO_RPC_HANDLER(cb)
-
+DECLARE_MARGO_RPC_HANDLER(cb);
 
 int
 register_rpcs(margo_instance_id mid, icc_callback_t callbacks[ICC_RPC_COUNT], hg_id_t ids[ICC_RPC_COUNT])
 {
-  /* Algorithm reminder:
+  /* reminder:
      id == 0 => do not register RPC
      callback == NULL => register RPC as client
      callback != NULL => register RPC with given callback
@@ -99,17 +98,17 @@ register_rpcs(margo_instance_id mid, icc_callback_t callbacks[ICC_RPC_COUNT], hg
   }
 
   /* internal RPCs */
-  ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_TARGET_ADDR_SEND, "icc_target_addr_send", target_addr_in_t, rpc_out_t);
+  ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_TARGET_ADDR_SEND, target_addr_in_t, rpc_out_t);
 
   /* test RPC */
-  ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_TEST, "icc_test", test_in_t, rpc_out_t);
+  ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_TEST, test_in_t, rpc_out_t);
 
   /* job monitoring RPCs */
-  ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_JOBMON_SUBMIT, "icc_jobmon_submit", jobmon_submit_in_t, rpc_out_t);
-  ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_JOBMON_SUBMIT, "icc_jobmon_exit", jobmon_exit_in_t, rpc_out_t);
+  ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_JOBMON_SUBMIT, jobmon_submit_in_t, rpc_out_t);
+  ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_JOBMON_EXIT, jobmon_exit_in_t, rpc_out_t);
 
   /* ad-hoc storage RPCs */
-  ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_JOBMON_SUBMIT, "icc_adhoc_nodes", jobmon_exit_in_t, rpc_out_t);
+  ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_ADHOC_NODES, adhoc_nodes_in_t, rpc_out_t);
 
   return 0;
 }

@@ -9,13 +9,13 @@
 
 #include "icc.h"
 
-#define ICC_ADDR_FILENAME "icc.addr"
-#define ICC_ADDR_MAX_SIZE 128
-#define ICC_HG_PROVIDER "ofi+tcp" /* /!\ Hg provider != Margo provider  */
-#define ICC_RPC_TIMEOUT_MS 10000
+#define ADDR_FILENAME "icc.addr"
+#define ADDR_MAX_SIZE 128
+#define HG_PROVIDER "ofi+tcp" /* /!\ Hg provider != Margo provider  */
+#define RPC_TIMEOUT_MS 2000
 
 /* Margo provider != Hg network provider */
-#define ICC_MARGO_PROVIDER_ID_DEFAULT 12
+#define MARGO_PROVIDER_ID_DEFAULT 12
 
 /**
  * Get the Mercury (Hg) address string from the Margo server instance
@@ -24,7 +24,7 @@
  * Returns 0 if everything went fine, -1 otherwise.
  */
 int
-icc_hg_addr(margo_instance_id mid, char *addr_str, hg_size_t *addr_str_size);
+get_hg_addr(margo_instance_id mid, char *addr_str, hg_size_t *addr_str_size);
 
 
 /**
@@ -39,17 +39,21 @@ icc_addr_file(void);
 
 
 /**
- * Internal RPC. Codes 1 to 127 are reserved for internal use.
+ * Internal RPC. This enum is for codes 1 to 127, reserved for
+ * internal use, public RPCs go to icc.h.
  *
  * ICC_RPC_TARGET_ADDR_SEND: Send the Mercury target address of a
  * server. This RPC is meant to be called from a *client* that wants
  * to be able to receive RPCs and not just send them. The client needs
  * to be started in MARGO_SERVER_MODE to have an address.
  *
+ * ICC_RPC_PING: Send an RPC with argument "ping", expect a "pong"
+ * response.
  */
 enum icc_rpc_internal_code {
   ICC_RPC_INTERN_ERROR = 0,
   ICC_RPC_TARGET_ADDR_SEND,
+  ICC_RPC_PING,
   ICC_RPC_INTERN_COUNT = ICC_RPC_PRIVATE
 };
 
@@ -58,7 +62,7 @@ enum icc_rpc_internal_code {
  * Shorthand to set the id and callbacks arrays before registering the
  * RPC.
  */
-#define ICC_RPC_PREPARE(ids,callbacks,idx,cb) ids[idx] = 1; callbacks[idx]=cb;
+#define REGISTER_PREP(ids,callbacks,idx,cb) ids[idx] = 1; callbacks[idx]=cb;
 
 typedef void (*icc_callback_t)(hg_handle_t h);
 
@@ -76,7 +80,8 @@ typedef void (*icc_callback_t)(hg_handle_t h);
  * WARNING:
  * The function pointers in CALLBACKS will be passed to RPCs handler,
  * the caller must make sure that they don’t go out of scope before
- * margo_finalize is called.
+ * margo_finalize is called (how would a function go out of scope
+ * though?).
  */
 int
 register_rpcs(margo_instance_id mid, icc_callback_t callbacks[ICC_RPC_COUNT], hg_id_t ids[ICC_RPC_COUNT]);
@@ -95,9 +100,9 @@ icc_addr_file_opt(int server_id) {
   if (!runtimedir)
     runtimedir = ".";
 
-  char *path = (char*)malloc(strlen(runtimedir) + strlen(ICC_ADDR_FILENAME) + 3);
+  char *path = (char*)malloc(strlen(runtimedir) + strlen(ADDR_FILENAME) + 3);
   if (path) {
-    sprintf(path, "%s/%s%d", runtimedir, ICC_ADDR_FILENAME, server_id);
+    sprintf(path, "%s/%s%d", runtimedir, ADDR_FILENAME, server_id);
     printf("OPENING PATH: %s\n", path);
   }
   return path;

@@ -25,16 +25,16 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
 {
   margo_instance_id mid;
 
-  mid = margo_init(ICC_HG_PROVIDER, MARGO_SERVER_MODE, 0, -1);
+  mid = margo_init(HG_PROVIDER, MARGO_SERVER_MODE, 0, -1);
   if (!mid) {
-    margo_error(mid, "Error initializing Margo instance with provider %s", ICC_HG_PROVIDER);
+    margo_error(mid, "Error initializing Margo instance with Mercury provider %s", HG_PROVIDER);
     return ICC_FAILURE;
   }
   margo_set_log_level(mid, MARGO_LOG_INFO);
 
-  char addr_str[ICC_ADDR_MAX_SIZE];
-  hg_size_t addr_str_size = ICC_ADDR_MAX_SIZE;
-  if (icc_hg_addr(mid, addr_str, &addr_str_size)) {
+  char addr_str[ADDR_MAX_SIZE];
+  hg_size_t addr_str_size = ADDR_MAX_SIZE;
+  if (get_hg_addr(mid, addr_str, &addr_str_size)) {
     margo_error(mid, "Could not get Mercury address");
     margo_finalize(mid);
     return ICC_FAILURE;
@@ -73,21 +73,25 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   icc_callback_t callbacks[ICC_RPC_COUNT] = { NULL }; /* callback table */
 
   hg_bool_t flag;
-  margo_provider_registered_name(mid, "icc_test", ICC_MARGO_PROVIDER_ID_DEFAULT, &rpc_ids[ICC_RPC_COUNT], &flag);
+  margo_provider_registered_name(mid, "icc_test", MARGO_PROVIDER_ID_DEFAULT, &rpc_ids[ICC_RPC_COUNT], &flag);
   if(flag == HG_TRUE) {
-    margo_error(mid, "Provider %d already exists", ICC_MARGO_PROVIDER_ID_DEFAULT);
+    margo_error(mid, "Provider %d already exists", MARGO_PROVIDER_ID_DEFAULT);
     margo_finalize(mid);
     return ICC_FAILURE;
   }
 
-  ICC_RPC_PREPARE(rpc_ids, callbacks, ICC_RPC_TARGET_ADDR_SEND, target_init_cb);
+  REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_TARGET_ADDR_SEND, target_init_cb);
 
-  ICC_RPC_PREPARE(rpc_ids, callbacks, ICC_RPC_TEST, test_cb);
-  ICC_RPC_PREPARE(rpc_ids, callbacks, ICC_RPC_JOBMON_SUBMIT, jobmon_submit_cb);
-  ICC_RPC_PREPARE(rpc_ids, callbacks, ICC_RPC_JOBMON_EXIT, jobmon_exit_cb);
-  ICC_RPC_PREPARE(rpc_ids, callbacks, ICC_RPC_ADHOC_NODES, adhoc_nodes_cb);
+  REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_TEST, test_cb);
+  REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_JOBMON_SUBMIT, jobmon_submit_cb);
+  REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_JOBMON_EXIT, jobmon_exit_cb);
+  REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_ADHOC_NODES, adhoc_nodes_cb);
 
-  register_rpcs(mid, callbacks, rpc_ids);
+  if (register_rpcs(mid, callbacks, rpc_ids)) {
+    margo_error(mid, "Could not register RPCs");
+    margo_finalize(mid);
+    return ICC_FAILURE;
+  }
 
   /* initialize connection to DB */
   int icdb_rc;

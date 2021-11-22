@@ -10,7 +10,7 @@
  * factorize with goto?
  * hg_error_to_string everywhere
  * Margo logging inside lib?
- * icc_status RPC (~dummy?)
+ * icc_status RPC (~test?)
  * Return struct or rc only?
  * XX malloc intempestif,
  * Cleanup error/info messages
@@ -52,7 +52,7 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
   if (!icc)
     return -errno;
 
-  icc->mid = margo_init(ICC_HG_PROVIDER,
+  icc->mid = margo_init(HG_PROVIDER,
                         bidir ? MARGO_SERVER_MODE : MARGO_CLIENT_MODE, 0, -1);
   if (!icc->mid) {
     rc = ICC_FAILURE;
@@ -77,8 +77,8 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
   }
   free(path);
 
-  char addr_str[ICC_ADDR_MAX_SIZE];
-  if (!fgets(addr_str, ICC_ADDR_MAX_SIZE, f)) {
+  char addr_str[ADDR_MAX_SIZE];
+  if (!fgets(addr_str, ADDR_MAX_SIZE, f)) {
     margo_error(icc->mid, "Error reading from ICC address file: %s", strerror(errno));
     fclose(f);
     rc = ICC_FAILURE;
@@ -93,21 +93,27 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
     goto error;
   }
 
-  icc->provider_id = ICC_MARGO_PROVIDER_ID_DEFAULT;
+  icc->provider_id = MARGO_PROVIDER_ID_DEFAULT;
 
   /* register client RPCs (i.e cb is NULL)
      XX could be a for loop */
-  ICC_RPC_PREPARE(rpc_hg_ids, rpc_callbacks, ICC_RPC_TEST, NULL);
-  ICC_RPC_PREPARE(rpc_hg_ids, rpc_callbacks, ICC_RPC_JOBMON_SUBMIT, NULL);
-  ICC_RPC_PREPARE(rpc_hg_ids, rpc_callbacks, ICC_RPC_JOBMON_EXIT, NULL);
-  ICC_RPC_PREPARE(rpc_hg_ids, rpc_callbacks, ICC_RPC_ADHOC_NODES, NULL);
+  REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TEST, NULL);
+  REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_JOBMON_SUBMIT, NULL);
+  REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_JOBMON_EXIT, NULL);
+  REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_ADHOC_NODES, NULL);
   /* ... register other RPCs here */
 
   if (bidir) {
-    ICC_RPC_PREPARE(rpc_hg_ids, rpc_callbacks, ICC_RPC_TARGET_ADDR_SEND, NULL);
+    REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TARGET_ADDR_SEND, NULL);
   }
 
-  register_rpcs(icc->mid, rpc_callbacks, rpc_hg_ids);
+
+  rc = register_rpcs(icc->mid, rpc_callbacks, rpc_hg_ids);
+  if (rc) {
+    margo_error(icc->mid, "Could not register RPCs");
+    rc = ICC_FAILURE;
+    goto error;
+  }
 
   rpc_hg_ids[ICC_RPC_MALLEABILITY_IN] = MARGO_REGISTER(icc->mid, "icc_malleabMan_in", malleabilityman_in_t, rpc_out_t, NULL);
   rpc_hg_ids[ICC_RPC_MALLEABILITY_OUT] = MARGO_REGISTER(icc->mid, "icc_malleabMan_out", malleabilityman_out_t, rpc_out_t, NULL);
@@ -119,12 +125,12 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
 
   /* initialize RPC target */
   if (bidir) {
-    char addr_str[ICC_ADDR_MAX_SIZE];
-    hg_size_t addr_str_size = ICC_ADDR_MAX_SIZE;
+    char addr_str[ADDR_MAX_SIZE];
+    hg_size_t addr_str_size = ADDR_MAX_SIZE;
     target_addr_in_t rpc_in;
     int rpc_rc;
 
-    if (icc_hg_addr(icc->mid, addr_str, &addr_str_size)) {
+    if (get_hg_addr(icc->mid, addr_str, &addr_str_size)) {
       margo_error(icc->mid, "Could not get Mercury self address");
       rc = ICC_FAILURE;
       goto error;
@@ -166,7 +172,7 @@ icc_init_opt(enum icc_log_level log_level, struct icc_context **icc_context, int
   if (!icc)
     return -errno;
 
-  icc->mid = margo_init(ICC_HG_PROVIDER, MARGO_CLIENT_MODE, 0, 0);
+  icc->mid = margo_init(HG_PROVIDER, MARGO_CLIENT_MODE, 0, 0);
   if (!icc->mid) {
     rc = ICC_FAILURE;
     goto error;
@@ -184,8 +190,8 @@ icc_init_opt(enum icc_log_level log_level, struct icc_context **icc_context, int
   }
   free(path);
 
-  char addr_str[ICC_ADDR_MAX_SIZE];
-  if (!fgets(addr_str, ICC_ADDR_MAX_SIZE, f)) {
+  char addr_str[ADDR_MAX_SIZE];
+  if (!fgets(addr_str, ADDR_MAX_SIZE, f)) {
     margo_error(icc->mid, "Error reading from Margo address file: %s", strerror(errno));
     fclose(f);
     rc = -errno;
@@ -200,7 +206,7 @@ icc_init_opt(enum icc_log_level log_level, struct icc_context **icc_context, int
     goto error;
   }
 
-  icc->provider_id = ICC_MARGO_PROVIDER_ID_DEFAULT;
+  icc->provider_id = MARGO_PROVIDER_ID_DEFAULT;
 
   /* RPCs */
   rpc_hg_ids[ICC_RPC_TEST] = MARGO_REGISTER(icc->mid, "icc_test", test_in_t, rpc_out_t, NULL);
@@ -293,7 +299,7 @@ rpc_send(margo_instance_id mid, hg_addr_t addr, uint16_t provider_id,
   }
 
   /* XX cast public struct to HG struct, hackish and dangerous */
-  hret = margo_provider_forward_timed(provider_id, handle, data, ICC_RPC_TIMEOUT_MS);
+  hret = margo_provider_forward_timed(provider_id, handle, data, RPC_TIMEOUT_MS);
   if (hret != HG_SUCCESS) {
     margo_error(mid, "Could not forward Margo RPC: %s", HG_Error_to_string(hret));
     margo_destroy(handle);      /* XX check error */

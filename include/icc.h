@@ -130,8 +130,11 @@ int icc_init_opt(enum icc_log_level log_level, struct icc_context **icc, int ser
 
 /**
  * Finalize the ICC client instance associated with the context passed as argument.
+ *
+ * Return ICC_SUCCESS or an error code.
  */
 int icc_fini(struct icc_context *icc);
+
 
 /**
  * Generic RPC call to the Intelligent Controller.
@@ -141,6 +144,8 @@ int icc_fini(struct icc_context *icc);
  * DATA_IN is a pointer to a structure which depends on the RPC type
  *
  * RETCODE is filled with the RPC return status code on completion.
+ *
+ * Return ICC_SUCCESS or an error code.
  */
 int icc_rpc_send(struct icc_context *icc, enum icc_rpc_code icc_code, void *data_in, int *retcode);
 

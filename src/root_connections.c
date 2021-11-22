@@ -295,9 +295,9 @@ DEFINE_MARGO_RPC_HANDLER(icc_monitor_cb_out)
   */
 int
 load_environment_controller(margo_instance_id mid) {
-  mid = margo_init(ICC_HG_PROVIDER, MARGO_SERVER_MODE, 0, -1);
+  mid = margo_init(HG_PROVIDER, MARGO_SERVER_MODE, 0, -1);
   if (!mid) {
-    margo_error(mid, "Error initializing Margo instance with provider %s", ICC_HG_PROVIDER);
+    margo_error(mid, "Error initializing Margo instance with provider %s", HG_PROVIDER);
     return (EXIT_FAILURE);
   }
   margo_set_log_level(mid, MARGO_LOG_INFO);
@@ -310,8 +310,8 @@ load_environment_controller(margo_instance_id mid) {
 
   hg_return_t hret;
   hg_addr_t addr;
-  hg_size_t addr_str_size = ICC_ADDR_MAX_SIZE;
-  char addr_str[ICC_ADDR_MAX_SIZE];
+  hg_size_t addr_str_size = ADDR_MAX_SIZE;
+  char addr_str[ADDR_MAX_SIZE];
 
   hret = margo_addr_self(mid, &addr);
   if (hret != HG_SUCCESS) {
@@ -360,9 +360,9 @@ load_environment_controller(margo_instance_id mid) {
 int
 load_environment_controller_opt(margo_instance_id *mid, int opt) {
   printf("Setting up the margo server opt %d\n", opt);
-  *mid = margo_init(ICC_HG_PROVIDER, MARGO_SERVER_MODE, 0, -1);
+  *mid = margo_init(HG_PROVIDER, MARGO_SERVER_MODE, 0, -1);
   if (*mid == NULL) {
-    margo_error(*mid, "Error initializing Margo instance with provider %s", ICC_HG_PROVIDER);
+    margo_error(*mid, "Error initializing Margo instance with provider %s", HG_PROVIDER);
     return (EXIT_FAILURE);
   }
   margo_set_log_level(*mid, MARGO_LOG_INFO);
@@ -375,8 +375,8 @@ load_environment_controller_opt(margo_instance_id *mid, int opt) {
 
   hg_return_t hret;
   hg_addr_t addr;
-  hg_size_t addr_str_size = ICC_ADDR_MAX_SIZE;
-  char addr_str[ICC_ADDR_MAX_SIZE];
+  hg_size_t addr_str_size = ADDR_MAX_SIZE;
+  char addr_str[ADDR_MAX_SIZE];
 
   hret = margo_addr_self(*mid, &addr);
   if (hret != HG_SUCCESS) {
@@ -439,10 +439,10 @@ register_rpc(margo_instance_id mid, int option)
   if (option == ADM_GETSYSTEMSTATUS) { /* ADM_getSystemStatus RPC */
     hg_id_t rpc_malleab_in;
     hg_bool_t flag_mall;
-    margo_provider_registered_name(mid, "icc_malleabMan_in", ICC_MARGO_PROVIDER_ID_DEFAULT, &rpc_malleab_in,
+    margo_provider_registered_name(mid, "icc_malleabMan_in", MARGO_PROVIDER_ID_DEFAULT, &rpc_malleab_in,
                                    &flag_mall);
     if (flag_mall == HG_TRUE) {
-      margo_error(mid, "Provider %d already exists", ICC_MARGO_PROVIDER_ID_DEFAULT);
+      margo_error(mid, "Provider %d already exists", MARGO_PROVIDER_ID_DEFAULT);
       margo_finalize(mid);
       return (EXIT_FAILURE);
     }
@@ -451,19 +451,19 @@ register_rpc(margo_instance_id mid, int option)
                                              malleabilityman_in_t, /* CURRENTLY ALL RPCS HAVE THE SAME TYPE. IT WILL CHANGE (ICC_RPC.H) */
                                              rpc_out_t, /* GENERAL OUTPUT: RETCODE. IN SOME CASES IT WILL CHANGE */
                                              icc_malleab_cb_in, /* HANDLER CODED */
-                                             ICC_MARGO_PROVIDER_ID_DEFAULT,
+                                             MARGO_PROVIDER_ID_DEFAULT,
                                              ABT_POOL_NULL);
 
     (void) rpc_malleab_in;
-    margo_info(mid, "GetSystemStatus RPC registered to provider %d", ICC_MARGO_PROVIDER_ID_DEFAULT);
+    margo_info(mid, "GetSystemStatus RPC registered to provider %d", MARGO_PROVIDER_ID_DEFAULT);
   }
   else if (option == ADM_JOBSCHEDULESOLUTION) { /* ADM_jobScheduleSolution RPC */
     hg_id_t rpc_slurm_in;
     hg_bool_t flag_slurm;
-    margo_provider_registered_name(mid, "icc_slurmMan_in", ICC_MARGO_PROVIDER_ID_DEFAULT, &rpc_slurm_in,
+    margo_provider_registered_name(mid, "icc_slurmMan_in", MARGO_PROVIDER_ID_DEFAULT, &rpc_slurm_in,
                                    &flag_slurm);
     if (flag_slurm == HG_TRUE) {
-      margo_error(mid, "Provider %d already exists", ICC_MARGO_PROVIDER_ID_DEFAULT);
+      margo_error(mid, "Provider %d already exists", MARGO_PROVIDER_ID_DEFAULT);
       margo_finalize(mid);
       return (EXIT_FAILURE);
     }
@@ -472,19 +472,19 @@ register_rpc(margo_instance_id mid, int option)
                                            slurmman_in_t, /* CURRENTLY ALL RPCS HAVE THE SAME TYPE. IT WILL CHANGE (ICC_RPC.H) */
                                            rpc_out_t, /* GENERAL OUTPUT: RETCODE. IN SOME CASES IT WILL CHANGE */
                                            icc_slurm_cb_in, /* HANDLER CODED */
-                                           ICC_MARGO_PROVIDER_ID_DEFAULT,
+                                           MARGO_PROVIDER_ID_DEFAULT,
                                            ABT_POOL_NULL);
 
     (void) rpc_slurm_in;
-    margo_info(mid, "JobScheduleSolution RPC registered to provider %d", ICC_MARGO_PROVIDER_ID_DEFAULT);
+    margo_info(mid, "JobScheduleSolution RPC registered to provider %d", MARGO_PROVIDER_ID_DEFAULT);
   }
   else if (option == ADM_IOSCHEDULESOLUTION) { /* ADM_IOScgeduleSolution RPC */
     hg_id_t rpc_iosched_out;
     hg_bool_t flag_iosched;
-    margo_provider_registered_name(mid, "icc_iosched_out", ICC_MARGO_PROVIDER_ID_DEFAULT, &rpc_iosched_out,
+    margo_provider_registered_name(mid, "icc_iosched_out", MARGO_PROVIDER_ID_DEFAULT, &rpc_iosched_out,
                                    &flag_iosched);
     if (flag_iosched == HG_TRUE) {
-      margo_error(mid, "Provider %d already exists", ICC_MARGO_PROVIDER_ID_DEFAULT);
+      margo_error(mid, "Provider %d already exists", MARGO_PROVIDER_ID_DEFAULT);
       margo_finalize(mid);
       return (EXIT_FAILURE);
     }
@@ -493,19 +493,19 @@ register_rpc(margo_instance_id mid, int option)
                                               iosched_out_t, /* CURRENTLY ALL RPCS HAVE THE SAME TYPE. IT WILL CHANGE (ICC_RPC.H) */
                                               rpc_out_t, /* GENERAL OUTPUT: RETCODE. IN SOME CASES IT WILL CHANGE */
                                               icc_iosched_cb, /* HANDLER CODED  */
-                                              ICC_MARGO_PROVIDER_ID_DEFAULT,
+                                              MARGO_PROVIDER_ID_DEFAULT,
                                               ABT_POOL_NULL);
 
     (void) rpc_iosched_out;
-    margo_info(mid, "IOScheduleSolution RPC registered to provider %d", ICC_MARGO_PROVIDER_ID_DEFAULT);
+    margo_info(mid, "IOScheduleSolution RPC registered to provider %d", MARGO_PROVIDER_ID_DEFAULT);
   }
   else if (option == ADM_IOSTATUS) { /* ADM_IOStatus RPC */
     hg_id_t rpc_adhoc_out;
     hg_bool_t flag_adhoc;
-    margo_provider_registered_name(mid, "icc_adhocMan_out", ICC_MARGO_PROVIDER_ID_DEFAULT, &rpc_adhoc_out,
+    margo_provider_registered_name(mid, "icc_adhocMan_out", MARGO_PROVIDER_ID_DEFAULT, &rpc_adhoc_out,
                                    &flag_adhoc);
     if (flag_adhoc == HG_TRUE) {
-      margo_error(mid, "Provider %d already exists", ICC_MARGO_PROVIDER_ID_DEFAULT);
+      margo_error(mid, "Provider %d already exists", MARGO_PROVIDER_ID_DEFAULT);
       margo_finalize(mid);
       return (EXIT_FAILURE);
     }
@@ -514,19 +514,19 @@ register_rpc(margo_instance_id mid, int option)
                                             adhocman_out_t, /* CURRENTLY ALL RPCS HAVE THE SAME TYPE. IT WILL CHANGE (ICC_RPC.H) */
                                             rpc_out_t, /* GENERAL OUTPUT: RETCODE. IN SOME CASES IT WILL CHANGE */
                                             icc_adhoc_cb, /* HANDLER CODED  */
-                                            ICC_MARGO_PROVIDER_ID_DEFAULT,
+                                            MARGO_PROVIDER_ID_DEFAULT,
                                             ABT_POOL_NULL);
 
     (void) rpc_adhoc_out;
-    margo_info(mid, "IOStatus RPC registered to provider %d", ICC_MARGO_PROVIDER_ID_DEFAULT);
+    margo_info(mid, "IOStatus RPC registered to provider %d", MARGO_PROVIDER_ID_DEFAULT);
   }
   else if (option == ADM_SLURMSTATE) { /* ADM_SlurmState RPC */
     hg_id_t rpc_slurm_out;
     hg_bool_t flag_slurm;
-    margo_provider_registered_name(mid, "icc_slurmMan_out", ICC_MARGO_PROVIDER_ID_DEFAULT, &rpc_slurm_out,
+    margo_provider_registered_name(mid, "icc_slurmMan_out", MARGO_PROVIDER_ID_DEFAULT, &rpc_slurm_out,
                                    &flag_slurm);
     if (flag_slurm == HG_TRUE) {
-      margo_error(mid, "Provider %d already exists", ICC_MARGO_PROVIDER_ID_DEFAULT);
+      margo_error(mid, "Provider %d already exists", MARGO_PROVIDER_ID_DEFAULT);
       margo_finalize(mid);
       return (EXIT_FAILURE);
     }
@@ -535,19 +535,19 @@ register_rpc(margo_instance_id mid, int option)
                                             slurmman_out_t, /* CURRENTLY ALL RPCS HAVE THE SAME TYPE. IT WILL CHANGE (ICC_RPC.H) */
                                             rpc_out_t, /* GENERAL OUTPUT: RETCODE. IN SOME CASES IT WILL CHANGE */
                                             icc_slurm_cb_out, /* HANDLER CODED  */
-                                            ICC_MARGO_PROVIDER_ID_DEFAULT,
+                                            MARGO_PROVIDER_ID_DEFAULT,
                                             ABT_POOL_NULL);
 
     (void) rpc_slurm_out;
-    margo_info(mid, "SlurmState RPC registered to provider %d", ICC_MARGO_PROVIDER_ID_DEFAULT);
+    margo_info(mid, "SlurmState RPC registered to provider %d", MARGO_PROVIDER_ID_DEFAULT);
   }
   else if (option == ADM_SUGGESTSCHEDULESOLUTION) { /* ADM_SuggestScheduleSolution RPC */
     hg_id_t rpc;
     hg_bool_t flag;
-    margo_provider_registered_name(mid, "icc_malleabMan_out", ICC_MARGO_PROVIDER_ID_DEFAULT, &rpc,
+    margo_provider_registered_name(mid, "icc_malleabMan_out", MARGO_PROVIDER_ID_DEFAULT, &rpc,
                                    &flag);
     if (flag == HG_TRUE) {
-      margo_error(mid, "Provider %d already exists", ICC_MARGO_PROVIDER_ID_DEFAULT);
+      margo_error(mid, "Provider %d already exists", MARGO_PROVIDER_ID_DEFAULT);
       margo_finalize(mid);
       return (EXIT_FAILURE);
     }
@@ -556,11 +556,11 @@ register_rpc(margo_instance_id mid, int option)
                                   malleabilityman_out_t, /* CURRENTLY ALL RPCS HAVE THE SAME TYPE. IT WILL CHANGE (ICC_RPC.H) */
                                             rpc_out_t, /* GENERAL OUTPUT: RETCODE. IN SOME CASES IT WILL CHANGE */
                                             icc_malleab_cb_out, /* HANDLER CODED  */
-                                            ICC_MARGO_PROVIDER_ID_DEFAULT,
+                                            MARGO_PROVIDER_ID_DEFAULT,
                                             ABT_POOL_NULL);
 
     (void) rpc;
-    margo_info(mid, "SuggestScheduleSolution RPC registered to provider %d", ICC_MARGO_PROVIDER_ID_DEFAULT);
+    margo_info(mid, "SuggestScheduleSolution RPC registered to provider %d", MARGO_PROVIDER_ID_DEFAULT);
   }
   else {
     printf("Option %d for RPC registration is not valid.\n", option);
