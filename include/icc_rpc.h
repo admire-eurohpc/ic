@@ -11,7 +11,7 @@
 
 #define ICC_ADDR_FILENAME "icc.addr"
 #define ICC_ADDR_MAX_SIZE 128
-#define ICC_HG_PROVIDER "ofi+tcp"
+#define ICC_HG_PROVIDER "ofi+tcp" /* /!\ Hg provider != Margo provider  */
 #define ICC_RPC_TIMEOUT_MS 10000
 
 /* Margo provider != Hg network provider */
@@ -36,6 +36,21 @@ icc_hg_addr(margo_instance_id mid, char *addr_str, hg_size_t *addr_str_size);
  */
 char *
 icc_addr_file(void);
+
+
+/**
+ * Internal RPC. Codes 1 to 127 are reserved for internal use.
+ *
+ * ICC_RPC_TARGET_INIT: init an RPC target on the ICC *client*. After
+ * calling this RPC the ICC *server* is able to initiate RPCs to the
+ * client.
+ *
+ */
+enum icc_rpc_internal_code {
+  ICC_RPC_INTERN_ERROR = 0,
+  ICC_RPC_TARGET_INIT,
+  ICC_RPC_INTERN_COUNT = ICC_RPC_PRIVATE
+};
 
 
 /**

@@ -4,7 +4,6 @@
 #include <margo.h>
 
 #include "icc_rpc.h"
-#include "icc_common.h"
 #include "icdb.h"
 
 

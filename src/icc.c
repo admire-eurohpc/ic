@@ -227,21 +227,8 @@ icc_rpc_send(struct icc_context *icc, enum icc_rpc_code rpc_code, void *data, in
     return ICC_FAILURE;
   }
 
-  switch (rpc_code) {
-  case ICC_RPC_TEST:
-  case ICC_RPC_ADHOC_NODES:
-  case ICC_RPC_JOBMON_SUBMIT:
-  case ICC_RPC_JOBMON_EXIT:
-  case ICC_RPC_MALLEABILITY_IN:
-  case ICC_RPC_MALLEABILITY_OUT:
-  case ICC_RPC_SLURM_IN:
-  case ICC_RPC_SLURM_OUT:
-  case ICC_RPC_IOSCHED_OUT:
-  case ICC_RPC_ADHOC_OUT:
-  case ICC_RPC_MONITOR_OUT:
-    break;
-  default:
-    margo_error(icc->mid, "Unknown ICC RPC id %d", rpc_code);
+  if (rpc_code <= ICC_RPC_PRIVATE || rpc_code >= ICC_RPC_COUNT) {
+    margo_error(icc->mid, "Unknown ICC RPC code %d", rpc_code);
     return ICC_FAILURE;
   }
 

@@ -39,7 +39,9 @@ enum icc_log_level {
  * Fill RETCODE on completion.
  */
 enum icc_rpc_code {
-  ICC_RPC_ERROR,
+  ICC_RPC_ERROR = 0,
+  ICC_RPC_PRIVATE = 128,
+  /* RPC code 1 to 127 reserved for internal use */
   ICC_RPC_TEST,
   ICC_RPC_MALLEABILITY_IN,
   ICC_RPC_MALLEABILITY_OUT,
