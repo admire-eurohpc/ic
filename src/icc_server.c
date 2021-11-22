@@ -8,15 +8,10 @@
 #include "icdb.h"
 
 
-static void icc_test_cb(hg_handle_t h);
-static void icc_jobmon_submit_cb(hg_handle_t h);
-static void icc_jobmon_exit_cb(hg_handle_t h);
-static void icc_adhoc_nodes_cb(hg_handle_t h);
-DECLARE_MARGO_RPC_HANDLER(icc_test_cb) /* place the cb in an Argobots ULT */
-DECLARE_MARGO_RPC_HANDLER(icc_jobmon_submit_cb)
-DECLARE_MARGO_RPC_HANDLER(icc_jobmon_exit_cb)
-DECLARE_MARGO_RPC_HANDLER(icc_adhoc_nodes_cb)
-
+static void test_cb(hg_handle_t h);
+static void jobmon_submit_cb(hg_handle_t h);
+static void jobmon_exit_cb(hg_handle_t h);
+static void adhoc_nodes_cb(hg_handle_t h);
 
 /* XX bad global variable? */
 static struct icdb_context *icdb = NULL;
@@ -71,45 +66,23 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   fclose(f);
 
   /* Register RPCs */
-  hg_id_t rpc_test_id;
+  hg_id_t rpc_ids[ICC_RPC_COUNT] = { 0 };             /* RPC id table */
+  icc_callback_t callbacks[ICC_RPC_COUNT] = { NULL }; /* callback table */
+
   hg_bool_t flag;
-  margo_provider_registered_name(mid, "icc_test", ICC_MARGO_PROVIDER_ID_DEFAULT, &rpc_test_id, &flag);
+  margo_provider_registered_name(mid, "icc_test", ICC_MARGO_PROVIDER_ID_DEFAULT, &rpc_ids[ICC_RPC_COUNT], &flag);
   if(flag == HG_TRUE) {
     margo_error(mid, "Provider %d already exists", ICC_MARGO_PROVIDER_ID_DEFAULT);
     margo_finalize(mid);
     return ICC_FAILURE;
   }
 
-  rpc_test_id = MARGO_REGISTER_PROVIDER(mid, "icc_test", test_in_t, rpc_out_t,
-					icc_test_cb,
-					ICC_MARGO_PROVIDER_ID_DEFAULT,
-					/* XX using default Argobot pool */
-					ABT_POOL_NULL);
+  ICC_RPC_PREPARE(rpc_ids, callbacks, ICC_RPC_TEST, test_cb);
+  ICC_RPC_PREPARE(rpc_ids, callbacks, ICC_RPC_JOBMON_SUBMIT, jobmon_submit_cb);
+  ICC_RPC_PREPARE(rpc_ids, callbacks, ICC_RPC_JOBMON_EXIT, jobmon_exit_cb);
+  ICC_RPC_PREPARE(rpc_ids, callbacks, ICC_RPC_ADHOC_NODES, adhoc_nodes_cb);
 
-  (void)rpc_test_id;
-  margo_info(mid, "icc_test RPC registered to provider %d", ICC_MARGO_PROVIDER_ID_DEFAULT);
-
-  /* Job monitoring RPCs */
-  MARGO_REGISTER_PROVIDER(mid, "icc_jobmon_submit", jobmon_submit_in_t, rpc_out_t,
-                          icc_jobmon_submit_cb, ICC_MARGO_PROVIDER_ID_DEFAULT, ABT_POOL_NULL);
-  margo_info(mid, "icc_jobmon_submit RPC registered to provider %d", ICC_MARGO_PROVIDER_ID_DEFAULT);
-
-  MARGO_REGISTER_PROVIDER(mid, "icc_jobmon_exit", jobmon_exit_in_t, rpc_out_t,
-                          icc_jobmon_exit_cb, ICC_MARGO_PROVIDER_ID_DEFAULT, ABT_POOL_NULL);
-  margo_info(mid, "icc_jobmon_exit RPC registered to provider %d", ICC_MARGO_PROVIDER_ID_DEFAULT);
-
-  /* Ad-hoc storage RPCs */
-  hg_id_t rpc_adhoc_nodes_id;
-  rpc_adhoc_nodes_id = MARGO_REGISTER_PROVIDER(mid, "icc_adhoc_nodes",
-                                               adhoc_nodes_in_t,
-                                               rpc_out_t,
-                                               icc_adhoc_nodes_cb,
-                                               ICC_MARGO_PROVIDER_ID_DEFAULT,
-                                               ABT_POOL_NULL);
-  (void) rpc_adhoc_nodes_id;
-  margo_info(mid, "icc_adhoc_nodes RPC registered to provider %d", ICC_MARGO_PROVIDER_ID_DEFAULT);
-
-  /* register other RPCs here */
+  register_rpcs(mid, callbacks, rpc_ids);
 
   /* initialize connection to DB */
   int icdb_rc;
@@ -135,7 +108,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
 
 
 static void
-icc_test_cb(hg_handle_t h)
+test_cb(hg_handle_t h)
 {
   hg_return_t hret;
   test_in_t in;
@@ -166,11 +139,10 @@ icc_test_cb(hg_handle_t h)
     margo_error(mid, "Could not destroy Margo RPC handle: %s", HG_Error_to_string(hret));
   }
 }
-DEFINE_MARGO_RPC_HANDLER(icc_test_cb)
 
 
 static void
-icc_jobmon_submit_cb(hg_handle_t h)
+jobmon_submit_cb(hg_handle_t h)
 {
   hg_return_t hret;
 
@@ -207,11 +179,10 @@ icc_jobmon_submit_cb(hg_handle_t h)
     margo_error(mid, "Could not destroy Margo RPC handle: %s", HG_Error_to_string(hret));
   }
 }
-DEFINE_MARGO_RPC_HANDLER(icc_jobmon_submit_cb)
 
 
 static void
-icc_jobmon_exit_cb(hg_handle_t h)
+jobmon_exit_cb(hg_handle_t h)
 {
   hg_return_t hret;
 
@@ -241,10 +212,10 @@ icc_jobmon_exit_cb(hg_handle_t h)
     margo_error(mid, "Could not destroy Margo RPC handle: %s", HG_Error_to_string(hret));
   }
 }
-DEFINE_MARGO_RPC_HANDLER(icc_jobmon_exit_cb)
+
 
 static void
-icc_adhoc_nodes_cb(hg_handle_t h)
+adhoc_nodes_cb(hg_handle_t h)
 {
   hg_return_t hret;
 
@@ -275,4 +246,3 @@ icc_adhoc_nodes_cb(hg_handle_t h)
     margo_error(mid, "Could not destroy Margo RPC handle: %s", HG_Error_to_string(hret));
   }
 }
-DEFINE_MARGO_RPC_HANDLER(icc_adhoc_nodes_cb)

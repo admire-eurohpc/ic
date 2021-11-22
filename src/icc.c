@@ -1,6 +1,6 @@
 #include <errno.h>
 #include <margo.h>
-#include <stdlib.h>		/* malloc */
+#include <stdlib.h>             /* malloc */
 #include <string.h>
 
 #include "icc_rpc.h"
@@ -27,7 +27,8 @@ struct icc_context {
 };
 
 
-static hg_id_t rpc_hg_ids[ICC_RPC_COUNT];
+static hg_id_t rpc_hg_ids[ICC_RPC_COUNT] = { 0 };
+static icc_callback_t rpc_callbacks[ICC_RPC_COUNT] = { NULL };
 
 
 int
@@ -43,7 +44,7 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
     return -errno;
 
   icc->mid = margo_init(ICC_HG_PROVIDER,
-			bidir ? MARGO_SERVER_MODE : MARGO_CLIENT_MODE, 0, -1);
+                        bidir ? MARGO_SERVER_MODE : MARGO_CLIENT_MODE, 0, -1);
   if (!icc->mid) {
     rc = ICC_FAILURE;
     goto error;
@@ -85,8 +86,16 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
 
   icc->provider_id = ICC_MARGO_PROVIDER_ID_DEFAULT;
 
-  /* RPCs */
-  rpc_hg_ids[ICC_RPC_TEST] = MARGO_REGISTER(icc->mid, "icc_test", test_in_t, rpc_out_t, NULL);
+  /* register client RPCs (i.e cb is NULL)
+     XX could be a for loop */
+  ICC_RPC_PREPARE(rpc_hg_ids, rpc_callbacks, ICC_RPC_TEST, NULL);
+  ICC_RPC_PREPARE(rpc_hg_ids, rpc_callbacks, ICC_RPC_JOBMON_SUBMIT, NULL);
+  ICC_RPC_PREPARE(rpc_hg_ids, rpc_callbacks, ICC_RPC_JOBMON_EXIT, NULL);
+  ICC_RPC_PREPARE(rpc_hg_ids, rpc_callbacks, ICC_RPC_ADHOC_NODES, NULL);
+  /* ... register other RPCs here */
+
+  register_rpcs(icc->mid, rpc_callbacks, rpc_hg_ids);
+
   rpc_hg_ids[ICC_RPC_MALLEABILITY_IN] = MARGO_REGISTER(icc->mid, "icc_malleabMan_in", malleabilityman_in_t, rpc_out_t, NULL);
   rpc_hg_ids[ICC_RPC_MALLEABILITY_OUT] = MARGO_REGISTER(icc->mid, "icc_malleabMan_out", malleabilityman_out_t, rpc_out_t, NULL);
   rpc_hg_ids[ICC_RPC_SLURM_IN] = MARGO_REGISTER(icc->mid, "icc_slurmMan_in", slurmman_in_t, rpc_out_t, NULL);
@@ -94,11 +103,6 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
   rpc_hg_ids[ICC_RPC_IOSCHED_OUT] = MARGO_REGISTER(icc->mid, "icc_iosched_out", iosched_out_t, rpc_out_t, NULL);
   rpc_hg_ids[ICC_RPC_ADHOC_OUT] = MARGO_REGISTER(icc->mid, "icc_adhocMan_out", adhocman_out_t, rpc_out_t, NULL);
   rpc_hg_ids[ICC_RPC_MONITOR_OUT] = MARGO_REGISTER(icc->mid, "icc_monitorMan_out", monitor_out_t, rpc_out_t, NULL);
-  rpc_hg_ids[ICC_RPC_JOBMON_SUBMIT] = MARGO_REGISTER(icc->mid, "icc_jobmon_submit", jobmon_submit_in_t, rpc_out_t, NULL);
-  rpc_hg_ids[ICC_RPC_JOBMON_EXIT] = MARGO_REGISTER(icc->mid, "icc_jobmon_exit", jobmon_exit_in_t, rpc_out_t, NULL);
-  rpc_hg_ids[ICC_RPC_ADHOC_NODES] = MARGO_REGISTER(icc->mid, "icc_adhoc_nodes", adhoc_nodes_in_t, rpc_out_t, NULL);
-
-  /* register other RPCs here */
 
   *icc_context = icc;
   return ICC_SUCCESS;

@@ -2,12 +2,12 @@
 #define _ADMIRE_ICC_RPC_H
 
 #include <stdlib.h>            /* getenv   */
+#include <margo.h>
 #include <mercury.h>
 #include <mercury_macros.h>
 #include <mercury_proc_string.h>
 
 #include "icc.h"
-#include "root_connections.h"
 
 #define ICC_ADDR_FILENAME "icc.addr"
 #define ICC_ADDR_MAX_SIZE 128
@@ -16,7 +16,6 @@
 
 /* Margo provider != Hg network provider */
 #define ICC_MARGO_PROVIDER_ID_DEFAULT 12
-
 
 /**
  * Get the Mercury (Hg) address string from the Margo server instance
@@ -37,6 +36,34 @@ icc_hg_addr(margo_instance_id mid, char *addr_str, hg_size_t *addr_str_size);
  */
 char *
 icc_addr_file(void);
+
+
+/**
+ * Shorthand to set the id and callbacks arrays before registering the
+ * RPC.
+ */
+#define ICC_RPC_PREPARE(ids,callbacks,idx,cb) ids[idx] = 1; callbacks[idx]=cb;
+
+typedef void (*icc_callback_t)(hg_handle_t h);
+
+/**
+ * Register RPCs to Margo instance MID. If the id in IDS is 0, the
+ * corresponding RPC will not be registered. If it is not 0, the
+ * RPC will be registered with the callback given in CALLBACKS, or
+ * with NULL if no callback is given.
+ *
+ * Once registered the Mercury id of the RPC will be placed in the IDS
+ * array.
+ *
+ * Returns 0 if the registrations went fine, -1 otherwise.
+ *
+ * WARNING:
+ * The function pointers in CALLBACKS will be passed to RPCs handler,
+ * the caller must make sure that they don’t go out of scope before
+ * margo_finalize is called.
+ */
+int
+register_rpcs(margo_instance_id mid, icc_callback_t callbacks[ICC_RPC_COUNT], hg_id_t ids[ICC_RPC_COUNT]);
 
 
 /**
