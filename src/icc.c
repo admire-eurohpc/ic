@@ -22,6 +22,10 @@
 */
 
 
+/* RPC callbacks */
+static void test_cb(hg_handle_t h);
+
+
 struct icc_context {
   margo_instance_id mid;
   hg_addr_t         addr;
@@ -31,12 +35,6 @@ struct icc_context {
 
 static hg_id_t rpc_hg_ids[ICC_RPC_COUNT] = { 0 };
 static icc_callback_t rpc_callbacks[ICC_RPC_COUNT] = { NULL };
-
-
-/* utils */
-static int
-rpc_send(margo_instance_id mid, hg_addr_t addr, uint16_t provid,
-         enum icc_rpc_code rpc_code, void *data, int *retcode);
 
 
 /* public functions */
@@ -101,10 +99,11 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
   REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_JOBMON_SUBMIT, NULL);
   REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_JOBMON_EXIT, NULL);
   REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_ADHOC_NODES, NULL);
-  /* ... register other RPCs here */
+  /* ... prep registration of other RPCs here */
 
   if (bidir) {
     REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TARGET_ADDR_SEND, NULL);
+    REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TEST, test_cb); /* XX double registration */
   }
 
 
@@ -136,9 +135,10 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
       goto error;
     }
 
-    rpc_in.addr = addr_str;
+    rpc_in.addr_str = addr_str;
+    rpc_in.provid = MARGO_PROVIDER_ID_DEFAULT;
     rc = rpc_send(icc->mid, icc->addr, icc->provider_id,
-                  (int)ICC_RPC_TARGET_ADDR_SEND, &rpc_in, &rpc_rc);
+                  rpc_hg_ids[ICC_RPC_TARGET_ADDR_SEND], &rpc_in, &rpc_rc);
 
     if (rc || rpc_rc) {
       margo_error(icc->mid, "Could not send target address of the bidirectional client");
@@ -272,7 +272,8 @@ icc_rpc_send(struct icc_context *icc, enum icc_rpc_code rpc_code, void *data, in
     return ICC_FAILURE;
   }
 
-  int rc = rpc_send(icc->mid, icc->addr, icc->provider_id, rpc_code, data, retcode);
+  int rc = rpc_send(icc->mid, icc->addr, icc->provider_id, rpc_hg_ids[rpc_code],
+                    data, retcode);
 
   if (rc)
     return ICC_FAILURE;
@@ -280,51 +281,36 @@ icc_rpc_send(struct icc_context *icc, enum icc_rpc_code rpc_code, void *data, in
 }
 
 
-static int
-rpc_send(margo_instance_id mid, hg_addr_t addr, uint16_t provider_id,
-         enum icc_rpc_code rpc_code, void *data, int *retcode)
+/* RPC callbacks */
+static void
+test_cb(hg_handle_t h)
 {
   hg_return_t hret;
-  hg_handle_t handle;
+  test_in_t in;
+  rpc_out_t out;
 
-  if (rpc_code <= ICC_RPC_ERROR || rpc_code >= ICC_RPC_COUNT) {
-    margo_error(mid, "Unknown ICC RPC code %d", rpc_code);
-    return -1;
-  }
+  out.rc = ICC_SUCCESS;
 
-  hret = margo_create(mid, addr, rpc_hg_ids[rpc_code], &handle);
-  if (hret != HG_SUCCESS) {
-    margo_error(mid, "Could not create Margo RPC: %s", HG_Error_to_string(hret));
-    return -1;
-  }
-
-  /* XX cast public struct to HG struct, hackish and dangerous */
-  hret = margo_provider_forward_timed(provider_id, handle, data, RPC_TIMEOUT_MS);
-  if (hret != HG_SUCCESS) {
-    margo_error(mid, "Could not forward Margo RPC: %s", HG_Error_to_string(hret));
-    margo_destroy(handle);      /* XX check error */
-    return -1;
-  }
-
-  rpc_out_t resp;
-  hret = margo_get_output(handle, &resp);
-  if (hret != HG_SUCCESS) {
-    margo_error(mid, "Could not get RPC output: %s", HG_Error_to_string(hret));
-  }
+  margo_instance_id mid = margo_hg_handle_get_instance(h);
+  if (!mid)
+    out.rc = ICC_FAILURE;
   else {
-    *retcode = resp.rc;
-
-    hret = margo_free_output(handle, &resp);
+    hret = margo_get_input(h, &in);
     if (hret != HG_SUCCESS) {
-      margo_error(mid, "Could not free RPC output: %s", HG_Error_to_string(hret));
+      out.rc = ICC_FAILURE;
+      margo_error(mid, "Could not get RPC input: %s", HG_Error_to_string(hret));
+    } else {
+      margo_info(mid, "Got \"test\" RPC with argument %u\n", in.number);
     }
   }
 
-  hret = margo_destroy(handle);
+  hret = margo_respond(h, &out);
   if (hret != HG_SUCCESS) {
-    margo_error(mid, "Could not destroy Margo RPC handle: %s", HG_Error_to_string(hret));
-    return -1;
+    margo_error(mid, "Could not respond to HPC");
   }
 
-  return 0;
+  hret = margo_destroy(h);
+  if (hret != HG_SUCCESS) {
+    margo_error(mid, "Could not destroy Margo RPC handle: %s", HG_Error_to_string(hret));
+  }
 }

@@ -64,7 +64,10 @@ icc_addr_file()
       ids[idx] = MARGO_REGISTER(mid, "rpc_"#idx, in, out, NULL);        \
     } else {                                                            \
       ids[idx] = MARGO_REGISTER_PROVIDER(mid, "rpc_"#idx, in, out, cb, MARGO_PROVIDER_ID_DEFAULT, ABT_POOL_NULL); \
-      margo_register_data(mid, ids[idx], cbs[idx], NULL);               \
+      struct rpc_data *d = calloc(1, sizeof(*d));                       \
+      d->cb = cbs[idx];                                                 \
+      d->rpc_ids = ids;                                                 \
+      margo_register_data(mid, ids[idx], d, NULL);                      \
     }                                                                   \
   }
 
@@ -78,7 +81,8 @@ cb(hg_handle_t h)
   margo_instance_id mid = margo_hg_handle_get_instance(h);
   const struct hg_info* info = margo_get_info(h);
 
-  icc_callback_t realcb = margo_registered_data(mid, info->id);
+  struct rpc_data *data = margo_registered_data(mid, info->id);
+  icc_callback_t realcb = data->cb;
   realcb(h);
 }
 DECLARE_MARGO_RPC_HANDLER(cb);
@@ -109,6 +113,51 @@ register_rpcs(margo_instance_id mid, icc_callback_t callbacks[ICC_RPC_COUNT], hg
 
   /* ad-hoc storage RPCs */
   ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_ADHOC_NODES, adhoc_nodes_in_t, rpc_out_t);
+
+  return 0;
+}
+
+
+int
+rpc_send(margo_instance_id mid, hg_addr_t addr, uint16_t provid, hg_id_t rpc_id,
+         void *data, int *retcode)
+{
+  hg_return_t hret;
+  hg_handle_t handle;
+
+  hret = margo_create(mid, addr, rpc_id, &handle);
+  if (hret != HG_SUCCESS) {
+    margo_error(mid, "Could not create Margo RPC: %s", HG_Error_to_string(hret));
+    return -1;
+  }
+
+  /* XX cast public struct to HG struct, hackish and dangerous */
+  hret = margo_provider_forward_timed(provid, handle, data, RPC_TIMEOUT_MS);
+  if (hret != HG_SUCCESS) {
+    margo_error(mid, "Could not forward Margo RPC: %s", HG_Error_to_string(hret));
+    margo_destroy(handle);      /* XX check error */
+    return -1;
+  }
+
+  rpc_out_t resp;
+  hret = margo_get_output(handle, &resp);
+  if (hret != HG_SUCCESS) {
+    margo_error(mid, "Could not get RPC output: %s", HG_Error_to_string(hret));
+  }
+  else {
+    *retcode = resp.rc;
+
+    hret = margo_free_output(handle, &resp);
+    if (hret != HG_SUCCESS) {
+      margo_error(mid, "Could not free RPC output: %s", HG_Error_to_string(hret));
+    }
+  }
+
+  hret = margo_destroy(handle);
+  if (hret != HG_SUCCESS) {
+    margo_error(mid, "Could not destroy Margo RPC handle: %s", HG_Error_to_string(hret));
+    return -1;
+  }
 
   return 0;
 }

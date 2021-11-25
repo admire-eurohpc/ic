@@ -40,8 +40,8 @@ enum icc_log_level {
  */
 enum icc_rpc_code {
   ICC_RPC_ERROR = 0,
-  ICC_RPC_PRIVATE = 128,
   /* RPC code 1 to 127 reserved for internal use */
+  ICC_RPC_PRIVATE = 128,
   ICC_RPC_TEST,
   ICC_RPC_MALLEABILITY_IN,
   ICC_RPC_MALLEABILITY_OUT,
@@ -148,6 +148,14 @@ int icc_fini(struct icc_context *icc);
  * Return ICC_SUCCESS or an error code.
  */
 int icc_rpc_send(struct icc_context *icc, enum icc_rpc_code icc_code, void *data_in, int *retcode);
+
+
+/**
+ * Register the RPC identified by ICC_RPC_CODE.
+ *
+ * Return ICC_SUCCESS or an error code.
+ */
+int icc_rpc_register(struct icc_context *icc, enum icc_rpc_code icc_code);
 
 
 #endif

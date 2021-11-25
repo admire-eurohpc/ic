@@ -66,6 +66,11 @@ enum icc_rpc_internal_code {
 
 typedef void (*icc_callback_t)(hg_handle_t h);
 
+struct rpc_data {
+  hg_id_t        *rpc_ids;
+  icc_callback_t cb;
+};
+
 /**
  * Register RPCs to Margo instance MID. If the id in IDS is 0, the
  * corresponding RPC will not be registered. If it is not 0, the
@@ -110,6 +115,18 @@ icc_addr_file_opt(int server_id) {
 
 
 /**
+ * Send RPC identifed by RPC_CODE from Margo instance MID to the Margo
+ * provider identified by ADDR & PROVID with input struct DATA.
+ *
+ * Returns 0 or -1 in case of error. RETCODE is filled with the RPC
+ * return code.
+ */
+int
+rpc_send(margo_instance_id mid, hg_addr_t addr, uint16_t provid, hg_id_t rpc_id,
+         void *data, int *retcode);
+
+
+/**
  * Translate from icc_log_level to margo_log_level.
  */
 static inline margo_log_level
@@ -144,7 +161,8 @@ MERCURY_GEN_PROC(rpc_out_t, ((int64_t)(rc)))
  *
  * /!\ Copied in the icc.h public header file, keep in sync!
  */
-MERCURY_GEN_PROC(target_addr_in_t, ((hg_const_string_t)(addr)))
+MERCURY_GEN_PROC(target_addr_in_t, ((hg_const_string_t)(addr_str))
+		                   ((uint16_t)(provid)))
 
 MERCURY_GEN_PROC(test_in_t, ((uint8_t)(number)))
 
