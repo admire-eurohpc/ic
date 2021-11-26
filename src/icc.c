@@ -23,7 +23,7 @@
 
 
 /* RPC callbacks */
-static void test_cb(hg_handle_t h);
+static void test_cb(hg_handle_t h, margo_instance_id mid);
 
 
 struct icc_context {
@@ -283,7 +283,7 @@ icc_rpc_send(struct icc_context *icc, enum icc_rpc_code rpc_code, void *data, in
 
 /* RPC callbacks */
 static void
-test_cb(hg_handle_t h)
+test_cb(hg_handle_t h, margo_instance_id mid)
 {
   hg_return_t hret;
   test_in_t in;
@@ -291,26 +291,16 @@ test_cb(hg_handle_t h)
 
   out.rc = ICC_SUCCESS;
 
-  margo_instance_id mid = margo_hg_handle_get_instance(h);
-  if (!mid)
+  hret = margo_get_input(h, &in);
+  if (hret != HG_SUCCESS) {
     out.rc = ICC_FAILURE;
-  else {
-    hret = margo_get_input(h, &in);
-    if (hret != HG_SUCCESS) {
-      out.rc = ICC_FAILURE;
-      margo_error(mid, "Could not get RPC input: %s", HG_Error_to_string(hret));
-    } else {
-      margo_info(mid, "Got \"test\" RPC with argument %u\n", in.number);
-    }
+    margo_error(mid, "Could not get RPC input: %s", HG_Error_to_string(hret));
+  } else {
+    margo_info(mid, "Got \"test\" RPC with argument %u\n", in.number);
   }
 
   hret = margo_respond(h, &out);
   if (hret != HG_SUCCESS) {
     margo_error(mid, "Could not respond to HPC");
-  }
-
-  hret = margo_destroy(h);
-  if (hret != HG_SUCCESS) {
-    margo_error(mid, "Could not destroy Margo RPC handle: %s", HG_Error_to_string(hret));
   }
 }

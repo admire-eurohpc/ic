@@ -65,7 +65,7 @@ icc_addr_file()
     } else {                                                            \
       ids[idx] = MARGO_REGISTER_PROVIDER(mid, "rpc_"#idx, in, out, cb, MARGO_PROVIDER_ID_DEFAULT, ABT_POOL_NULL); \
       struct rpc_data *d = calloc(1, sizeof(*d));                       \
-      d->cb = cbs[idx];                                                 \
+      d->callback = cbs[idx];                                                 \
       d->rpc_ids = ids;                                                 \
       margo_register_data(mid, ids[idx], d, NULL);                      \
     }                                                                   \
@@ -79,11 +79,19 @@ cb(hg_handle_t h)
 {
   /* XX factorize all callbacks here? */
   margo_instance_id mid = margo_hg_handle_get_instance(h);
-  const struct hg_info* info = margo_get_info(h);
+  if (!mid)
+    return;
 
-  struct rpc_data *data = margo_registered_data(mid, info->id);
-  icc_callback_t realcb = data->cb;
-  realcb(h);
+  const struct hg_info *info = margo_get_info(h);
+  const struct rpc_data *data = margo_registered_data(mid, info->id);
+
+  /* real callbcak associated with the RPC */
+  data->callback(h, mid);
+
+  hg_return_t hret = margo_destroy(h);
+  if (hret != HG_SUCCESS) {
+    margo_error(mid, "Could not destroy Margo RPC handle: %s", HG_Error_to_string(hret));
+  }
 }
 DECLARE_MARGO_RPC_HANDLER(cb);
 

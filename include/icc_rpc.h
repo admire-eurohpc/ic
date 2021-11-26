@@ -64,12 +64,19 @@ enum icc_rpc_internal_code {
  */
 #define REGISTER_PREP(ids,callbacks,idx,cb) ids[idx] = 1; callbacks[idx]=cb;
 
-typedef void (*icc_callback_t)(hg_handle_t h);
+/**
+ * Internal callback type. This is the expected signature of the
+ * functions used in the custom registration process in the icc_rpc
+ * module.
+ */
+typedef void (*icc_callback_t)(hg_handle_t h, margo_instance_id mid);
+
 
 struct rpc_data {
   hg_id_t        *rpc_ids;
-  icc_callback_t cb;
+  icc_callback_t callback;
 };
+
 
 /**
  * Register RPCs to Margo instance MID. If the id in IDS is 0, the
