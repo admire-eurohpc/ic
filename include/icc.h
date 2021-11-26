@@ -14,7 +14,6 @@ struct icc_context;
 #define ICC_FAILURE -1
 
 
-
 /* Log levels lifted from Margo */
 enum icc_log_level {
     ICC_LOG_EXTERNAL,
@@ -61,9 +60,6 @@ struct icc_rpc_test_in {
   uint8_t number;
 };
 
-
-
-
 /* Structs for RPC communications between Root Controller and other components*/
 struct icc_rpc_malleability_manager_in{
     uint8_t number;
@@ -92,9 +88,6 @@ struct icc_rpc_adhoc_manager_out{
 struct icc_rpc_monitoring_manager_out{
     uint8_t number;
 };
-/* End of root controller rpc structs*/
-
-
 
 struct icc_rpc_jobmon_submit_in {
   uint32_t slurm_jobid;

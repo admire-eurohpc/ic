@@ -103,9 +103,9 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
 
   if (bidir) {
     REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TARGET_ADDR_SEND, NULL);
-    REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TEST, test_cb); /* XX double registration */
+    /* note this overwrites the previous registration without callback */
+    REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TEST, test_cb);
   }
-
 
   rc = register_rpcs(icc->mid, rpc_callbacks, rpc_hg_ids);
   if (rc) {
