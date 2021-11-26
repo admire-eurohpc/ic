@@ -65,9 +65,9 @@ icc_addr_file()
     } else {                                                            \
       ids[idx] = MARGO_REGISTER_PROVIDER(mid, "rpc_"#idx, in, out, cb, MARGO_PROVIDER_ID_DEFAULT, ABT_POOL_NULL); \
       struct rpc_data *d = calloc(1, sizeof(*d));                       \
-      d->callback = cbs[idx];                                                 \
+      d->callback = cbs[idx];                                           \
       d->rpc_ids = ids;                                                 \
-      margo_register_data(mid, ids[idx], d, NULL);                      \
+      margo_register_data(mid, ids[idx], d, free);                      \
     }                                                                   \
   }
 

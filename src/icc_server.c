@@ -1,5 +1,5 @@
 #include <errno.h>
-#include <inttypes.h>         /* PRIdxx */
+#include <inttypes.h>           /* PRIdxx */
 #include <stdio.h>
 #include <margo.h>
 
