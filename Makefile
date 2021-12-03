@@ -22,11 +22,12 @@ icc_server_bin := icc_server
 icc_client_bin := icc_client
 libadhoccli_so := libadhoccli.so
 libjobmon_so := libjobmon.so
+testapp_bin := testapp
 
-sources := icc_server.c icc_client.c icc_rpc.c icdb.c icc.c adhoccli.c jobmon.c
+sources := icc_server.c icc_client.c icc_rpc.c icdb.c icc.c adhoccli.c jobmon.c testapp.c
 
 # keep libicc in front
-binaries := $(libicc_so) $(icc_server_bin) $(icc_client_bin) $(libadhoccli_so) $(libjobmon_so)
+binaries := $(libicc_so) $(icc_server_bin) $(icc_client_bin) $(libadhoccli_so) $(libjobmon_so) $(testapp_bin)
 
 objects := $(sources:.c=.o)
 depends := $(sources:.c=.d)
@@ -54,6 +55,7 @@ install: all
 	$(INSTALL) -m 755 $(icc_client_bin) $(INSTALL_PATH_BIN)
 	$(INSTALL) -m 755 scripts/icc_server.sh $(INSTALL_PATH_BIN)/icc_server.sh
 	$(INSTALL) -m 755 scripts/icc_client.sh $(INSTALL_PATH_BIN)/icc_client.sh
+	$(INSTALL) -m 755 $(testapp_bin) $(INSTALL_PATH_BIN)
 
 uninstall:
 	$(RM) $(INSTALL_PATH_LIB)/$(libicc_soname) $(INSTALL_PATH_LIB)/$(libicc_minorname)
@@ -61,6 +63,7 @@ uninstall:
 	$(RM) $(INSTALL_PATH_BIN)/$(icc_client_bin)
 	$(RM) $(INSTALL_PATH_BIN)/icc_server.sh
 	$(RM) $(INSTALL_PATH_BIN)/icc_client.sh
+	$(RM) $(INSTALL_PATH_BIN)/$(testapp_bin)
 
 
 # forces the creation of object files
@@ -82,6 +85,9 @@ $(icc_client_bin): LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined
 $(icc_client_bin): LDLIBS += -L. -licc -pthread
 
 $(libjobmon_so) $(libadhoccli_so): LDLIBS += -L. -licc -lslurm
+
+$(testapp_bin): CFLAGS += `$(PKG_CONFIG) --cflags mpi`
+$(testapp_bin): LDLIBS += `$(PKG_CONFIG) --libs mpi`
 
 lib%.so: CFLAGS += -fpic
 lib%.so: LDFLAGS += -shared
