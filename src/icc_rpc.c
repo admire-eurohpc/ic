@@ -117,6 +117,7 @@ register_rpcs(margo_instance_id mid, icc_callback_t callbacks[ICC_RPC_COUNT], hg
 
   /* App Manager RPC*/
   ICC_REGISTER_RPC(mid, ids, callbacks, APP_RPC_TEST, app_in_t, rpc_out_t);
+  ICC_REGISTER_RPC(mid, ids, callbacks, APP_RPC_RESPONSE, target_addr_in_t, rpc_out_t);
 
   /* job monitoring RPCs */
   ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_JOBMON_SUBMIT, jobmon_submit_in_t, rpc_out_t);

@@ -53,6 +53,7 @@ icc_addr_file(void);
 enum icc_rpc_internal_code {
   ICC_RPC_INTERN_ERROR = 0,
   ICC_RPC_TARGET_ADDR_SEND,
+  APP_RPC_RESPONSE,
   ICC_RPC_PING,
   ICC_RPC_INTERN_COUNT = ICC_RPC_PRIVATE
 };

@@ -39,7 +39,7 @@ main(int argc, char **argv) {
   while ((ch = getopt_long(argc, argv, "b", longopts, NULL)) != -1)
     switch (ch) {
       case 'b':
-        bidir = 1;
+        bidir = 2;
         break;
       case 0:
         continue;

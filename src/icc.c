@@ -23,7 +23,7 @@
 
 
 /* RPC callbacks */
-//static void test_cb(hg_handle_t h, margo_instance_id mid);
+static void test_cb(hg_handle_t h, margo_instance_id mid);
 static void appman_cb(hg_handle_t h, margo_instance_id mid);
 
 
@@ -103,8 +103,14 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
   REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_ADHOC_NODES, NULL);
   /* ... prep registration of other RPCs here */
 
-  if (bidir) {
+  if (bidir == 1) {
     REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TARGET_ADDR_SEND, NULL);
+    /* note this overwrites the previous registration without callback */
+    REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TEST, test_cb);
+  }
+  else if (bidir == 2){
+    /*Test for APP MANAGER*/
+    REGISTER_PREP(rpc_hg_ids, rpc_callbacks, APP_RPC_RESPONSE, NULL);
     /* note this overwrites the previous registration without callback */
     REGISTER_PREP(rpc_hg_ids, rpc_callbacks, APP_RPC_TEST, appman_cb);//test_cb);
   }
@@ -125,7 +131,7 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
   rpc_hg_ids[ICC_RPC_MONITOR_OUT] = MARGO_REGISTER(icc->mid, "icc_monitorMan_out", monitor_out_t, rpc_out_t, NULL);*/
 
   /* initialize RPC target */
-  if (bidir) {
+  if (bidir == 1) {
     char addr_str[ADDR_MAX_SIZE];
     hg_size_t addr_str_size = ADDR_MAX_SIZE;
     target_addr_in_t rpc_in;
@@ -141,6 +147,29 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
     rpc_in.provid = MARGO_PROVIDER_ID_DEFAULT;
     rc = rpc_send(icc->mid, icc->addr, icc->provider_id,
                   rpc_hg_ids[ICC_RPC_TARGET_ADDR_SEND], &rpc_in, &rpc_rc);
+
+    if (rc || rpc_rc) {
+      margo_error(icc->mid, "Could not send target address of the bidirectional client");
+      rc = ICC_FAILURE;
+      goto error;
+    }
+  }
+  else if (bidir == 2){
+    char addr_str[ADDR_MAX_SIZE];
+    hg_size_t addr_str_size = ADDR_MAX_SIZE;
+    target_addr_in_t rpc_in;
+    int rpc_rc;
+
+    if (get_hg_addr(icc->mid, addr_str, &addr_str_size)) {
+      margo_error(icc->mid, "Could not get Mercury self address");
+      rc = ICC_FAILURE;
+      goto error;
+    }
+
+    rpc_in.addr_str = addr_str;
+    rpc_in.provid = MARGO_PROVIDER_ID_DEFAULT;
+    rc = rpc_send(icc->mid, icc->addr, icc->provider_id,
+                  rpc_hg_ids[APP_RPC_RESPONSE], &rpc_in, &rpc_rc);
 
     if (rc || rpc_rc) {
       margo_error(icc->mid, "Could not send target address of the bidirectional client");
@@ -273,9 +302,8 @@ icc_rpc_send(struct icc_context *icc, enum icc_rpc_code rpc_code, void *data, in
 
 
 /* RPC callbacks */
-/*static void
-test_cb(hg_handle_t h, margo_instance_id mid)
-{
+static void
+test_cb(hg_handle_t h, margo_instance_id mid) {
   hg_return_t hret;
   test_in_t in;
   rpc_out_t out;
@@ -287,8 +315,7 @@ test_cb(hg_handle_t h, margo_instance_id mid)
     out.rc = ICC_FAILURE;
     margo_error(mid, "Could not get RPC input: %s", HG_Error_to_string(hret));
   } else {
-      margo_info(mid, "Got \"APP\" RPC with argument %u\n", in.number);
-    }
+    margo_info(mid, "Got \"ICC\" RPC with argument %u\n", in.number);
   }
 
   hret = margo_respond(h, &out);
@@ -296,7 +323,8 @@ test_cb(hg_handle_t h, margo_instance_id mid)
     margo_error(mid, "Could not respond to HPC");
   }
 }
-*/
+
+
 
 static void
 appman_cb(hg_handle_t h, margo_instance_id mid)

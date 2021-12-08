@@ -13,6 +13,7 @@
 
 /* internal RPCs callbacks */
 static void target_addr_send(hg_handle_t h, margo_instance_id mid);
+static void appman_response(hg_handle_t h, margo_instance_id mid);
 
 /* public RPCs callbacks */
 static void test_cb(hg_handle_t h, margo_instance_id mid);
@@ -141,6 +142,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   }
 
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_TARGET_ADDR_SEND, target_addr_send);
+  REGISTER_PREP(rpc_ids, callbacks, APP_RPC_RESPONSE, appman_response);
 
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_TEST, test_cb);
   REGISTER_PREP(rpc_ids, callbacks, APP_RPC_TEST, appman_cb);
@@ -212,8 +214,80 @@ target_addr_send(hg_handle_t h, margo_instance_id mid) {
     out.rc = ICC_FAILURE;
   }
 
+  const struct hg_info *info = margo_get_info(h);
+  struct rpc_data *data = margo_registered_data(mid, info->id);
+  hg_id_t *ids = data->rpc_ids;
+
+  test_in_t testin;
+  testin.number = 13;
+  int rc = rpc_send(mid, addr, in.provid, ids[ICC_RPC_TEST], &testin, &rpc_rc);
+  if (rc) {
+    margo_error(mid, "Could not send RPC %d", ICC_RPC_TEST);
+    out.rc = ICC_FAILURE;
+  }
+
+  hret = margo_respond(h, &out);
+  if (hret != HG_SUCCESS) {
+    margo_error(mid, "Could not respond to HPC");
+  }
+
+  hret = margo_destroy(h);
+  if (hret != HG_SUCCESS) {
+    margo_error(mid, "Could not destroy Margo RPC handle: %s", HG_Error_to_string(hret));
+  }
+}
+
+static void
+appman_cb(hg_handle_t h, margo_instance_id mid)
+{
+  hg_return_t hret;
+  app_in_t in;
+  rpc_out_t out;
+
+  out.rc = ICC_SUCCESS;
+
+  hret = margo_get_input(h, &in);
+  if (hret != HG_SUCCESS) {
+    out.rc = ICC_FAILURE;
+    margo_error(mid, "Could not get RPC input: %s", HG_Error_to_string(hret));
+  } else {
+    margo_info(mid, "Got \"APP\" RPC with argument %s\n", in.instruction);
+  }
+
+  hret = margo_respond(h, &out);
+  if (hret != HG_SUCCESS) {
+    margo_error(mid, "Could not respond to HPC");
+  }
+}
+
+static void
+appman_response(hg_handle_t h, margo_instance_id mid) {
+  hg_return_t hret;
+
+  target_addr_in_t in;
+  rpc_out_t out;
+
+  out.rc = ICC_SUCCESS;
+
+  hret = margo_get_input(h, &in);
+  if (hret != HG_SUCCESS) {
+    out.rc = ICC_FAILURE;
+    margo_error(mid, "Could not get RPC input");
+  }
+
+  margo_info(mid, "Got target initiation request with address: %s", in.addr_str);
+
+  hg_addr_t addr;
+  int rpc_rc;
+
+  hret = margo_addr_lookup(mid, in.addr_str, &addr);
+  if (hret != HG_SUCCESS) {
+    margo_error(mid, "Could not get Margo address: %s", HG_Error_to_string(hret));
+    out.rc = ICC_FAILURE;
+  }
+
   /* make an answer test RPC */
-  if(next_instruction != NULL) { 
+  if(next_instruction != NULL) {
     /*send malleability instructions*/
     const struct hg_info *info = margo_get_info(h);
     struct rpc_data *data = margo_registered_data(mid, info->id);
@@ -255,30 +329,6 @@ target_addr_send(hg_handle_t h, margo_instance_id mid) {
     }
   }
 }
-
-static void
-appman_cb(hg_handle_t h, margo_instance_id mid)
-{
-  hg_return_t hret;
-  app_in_t in;
-  rpc_out_t out;
-
-  out.rc = ICC_SUCCESS;
-
-  hret = margo_get_input(h, &in);
-  if (hret != HG_SUCCESS) {
-    out.rc = ICC_FAILURE;
-    margo_error(mid, "Could not get RPC input: %s", HG_Error_to_string(hret));
-  } else {
-    margo_info(mid, "Got \"APP\" RPC with argument %s\n", in.instruction);
-  }
-
-  hret = margo_respond(h, &out);
-  if (hret != HG_SUCCESS) {
-    margo_error(mid, "Could not respond to HPC");
-  }
-}
-
 
 static void
 test_cb(hg_handle_t h, margo_instance_id mid)
