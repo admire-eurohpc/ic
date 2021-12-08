@@ -213,7 +213,8 @@ target_addr_send(hg_handle_t h, margo_instance_id mid) {
   }
 
   /* make an answer test RPC */
-  if(next_instruction != NULL) { //send instructions
+  if(next_instruction != NULL) { 
+    /*send malleability instructions*/
     const struct hg_info *info = margo_get_info(h);
     struct rpc_data *data = margo_registered_data(mid, info->id);
     hg_id_t *ids = data->rpc_ids;
@@ -235,7 +236,7 @@ target_addr_send(hg_handle_t h, margo_instance_id mid) {
     }
   }
   else {
-    /*RPCs need an answer*/
+    /*Empty instructions because RPCs need an answer*/
     const struct hg_info *info = margo_get_info(h);
     struct rpc_data *data = margo_registered_data(mid, info->id);
     hg_id_t *ids = data->rpc_ids;
