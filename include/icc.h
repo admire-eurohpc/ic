@@ -28,8 +28,11 @@ enum icc_log_level {
 /**
  * ICC RPC codes.
  *
- * ICC_RPC_TEST: test the server by sending a number and having it
+ * ICC_RPC_TEST: Test the server by sending a number and having it
  * logged.
+ *
+ * ICC_RPC_MALLEABILITY_AVAIL: Notify the server of nodes availability
+ * for later malleability commands.
  *
  * ICC_RPC_ADHOC_NODES: Request ADHOC_NODES for the slurm job
  * identified by SLURM_JOBID that has been assigned SLURM_NNODES in
@@ -43,6 +46,7 @@ enum icc_rpc_code {
   ICC_RPC_PRIVATE = 128,
   ICC_RPC_TEST,
   APP_RPC_TEST,
+  ICC_RPC_MALLEABILITY_AVAIL,
   ICC_RPC_JOBMON_SUBMIT,
   ICC_RPC_JOBMON_EXIT,
   ICC_RPC_ADHOC_NODES,
@@ -55,6 +59,20 @@ struct icc_rpc_test_in {
 
 struct app_rpc_test_in {
   const char * instruction;
+
+};
+
+struct icc_rpc_malleability_avail_in {
+  char     *type;
+  char     *portname;
+  uint32_t slurm_jobid;
+  uint32_t nnodes;
+};
+
+
+/* Structs for RPC communications between Root Controller and other components*/
+struct icc_rpc_malleability_manager_in{
+    uint8_t number;
 };
 
 

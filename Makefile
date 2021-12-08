@@ -83,18 +83,16 @@ $(libicc_so): icc_rpc.o
 $(libicc_so): CFLAGS += `$(PKG_CONFIG) --cflags margo`
 $(libicc_so): LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined,-h$(libicc_minorname)
 
-$(icc_client_bin):
-$(icc_client_bin): LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined
-$(icc_client_bin): LDLIBS += -L. -licc -pthread
+$(icc_client_bin): LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined -L. -licc
 
-$(app_manager_bin):
+$(app_manager_bin): CFLAGS += `$(PKG_CONFIG) --cflags margo`
 $(app_manager_bin): LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined
 $(app_manager_bin): LDLIBS += -L. -licc -pthread
 
 $(libjobmon_so) $(libadhoccli_so): LDLIBS += -L. -licc -lslurm
 
 $(testapp_bin): CFLAGS += `$(PKG_CONFIG) --cflags mpi`
-$(testapp_bin): LDLIBS += `$(PKG_CONFIG) --libs mpi`
+$(testapp_bin): LDLIBS += `$(PKG_CONFIG) --libs mpi` `$(PKG_CONFIG) --libs margo` -L. -licc
 
 lib%.so: CFLAGS += -fpic
 lib%.so: LDFLAGS += -shared

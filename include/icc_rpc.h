@@ -170,25 +170,16 @@ MERCURY_GEN_PROC(rpc_out_t, ((int64_t)(rc)))
  * /!\ Copied in the icc.h public header file, keep in sync!
  */
 MERCURY_GEN_PROC(target_addr_in_t, ((hg_const_string_t)(addr_str))
-		                   ((uint16_t)(provid)))
+                                   ((uint16_t)(provid)))
 
 MERCURY_GEN_PROC(test_in_t, ((uint8_t)(number)))
 
 MERCURY_GEN_PROC(app_in_t, ((hg_const_string_t)(instruction)))
 
-MERCURY_GEN_PROC(malleabilityman_in_t, ((uint8_t)(number)))
-
-MERCURY_GEN_PROC(malleabilityman_out_t, ((uint8_t)(number)))
-
-MERCURY_GEN_PROC(slurmman_in_t, ((uint8_t)(number)))
-
-MERCURY_GEN_PROC(slurmman_out_t, ((uint8_t)(number)))
-
-MERCURY_GEN_PROC(iosched_out_t, ((uint8_t)(number)))
-
-MERCURY_GEN_PROC(adhocman_out_t, ((uint8_t)(number)))
-
-MERCURY_GEN_PROC(monitor_out_t, ((uint8_t)(number)))
+MERCURY_GEN_PROC(malleability_avail_in_t, ((hg_const_string_t)(type))
+                                          ((hg_const_string_t)(portname))
+                                          ((uint32_t)(slurm_jobid))
+                                          ((uint32_t)(nnodes)))
 
 MERCURY_GEN_PROC(adhoc_nodes_in_t,
                  ((uint32_t)(slurm_jobid))

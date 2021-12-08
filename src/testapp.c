@@ -4,15 +4,19 @@
  * Compute the sum of an array of random integer by distributing the
  * work amongst the MPI processes.
  *
+ * Malleability: dependence on SLURM_NNODES and SLURM_JOBID
+ * environment variables.
  */
+#include <assert.h>
 #include <errno.h>
 #include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>             /* getopt */
-
 #include <mpich/mpi.h>
+
+#include "icc.h"
 
 #define DEFAULTLEN 4096
 #define ROOTRANK 0
@@ -71,33 +75,50 @@ main(int argc, char **argv)
   char procname[MPI_MAX_PROCESSOR_NAME];
   int len;
   MPI_Get_processor_name(procname, &len);
-  /* printf("NODELIST: %s\n", getenv("SLURM_NODELIST")); */
-  /* printf("JOB_NODELIST: %s\n", getenv("SLURM_JOB_NODELIST")); */
-  /* /\* MPI_Comm_spawn *\/ */
+
+  struct icc_context *icc = NULL;
+  icc_init(ICC_LOG_INFO, 0, &icc);
+  assert(icc);
 
   int rc;
   char portname[MPI_MAX_PORT_NAME];
   MPI_Comm intracomm;
   MPI_Comm intercomm;
+
   if (standby) {
     if (rank == ROOTRANK) {
       MPI_Open_port(MPI_INFO_NULL, portname);
       printf("Opened port \"%s\"\n", portname);
-      rc = filewrite(PORTFILE, portname, strlen(portname));
-      if (rc)
-        MPI_Finalize();
+
+      /* will be 0 on error, in wich case we can just ignore it */
+      uint32_t nnodes = atoi(getenv("SLURM_NNODES"));
+      uint32_t jobid = atoi(getenv("SLURM_JOBID"));
+
+      int rpcrc;
+      struct icc_rpc_malleability_avail_in rpcin = {
+        .type="mpi",
+        .portname=portname,
+        .nnodes=nnodes,
+        .slurm_jobid=jobid
+      };
+      rc = icc_rpc_send(icc, ICC_RPC_MALLEABILITY_AVAIL, &rpcin, &rpcrc);
+      assert(rc == ICC_SUCCESS && !rpcrc);
     }
 
     /* will block until a client connects to the port */
     MPI_Comm_accept(portname, MPI_INFO_NULL, ROOTRANK, MPI_COMM_WORLD, &intercomm);
   } else if (!standby) {
-    /* XX connect if malleability, make RPC!
-     */
+
+    /* there’s one communicator available for expansion, 0 merged */
+    /* XX granularity is at the communicator level */
+    /* XX rpcrc is not enough, we’d like a return struct */
+    /* XX connect if malleability, make RPC! */
     if (rank == ROOTRANK) {
       rc = fileread(PORTFILE, portname, MPI_MAX_PORT_NAME);
       if (rc)
         exit(EXIT_FAILURE);
     }
+    /* XX timeout! in info? */
     MPI_Comm_connect(portname, MPI_INFO_NULL, 0, MPI_COMM_WORLD, &intercomm);
   }
 
@@ -108,17 +129,6 @@ main(int argc, char **argv)
   /* get post merge ranks */
   MPI_Comm_rank(intracomm, &rank);
   MPI_Comm_size(intracomm, &nprocs);
-
-  if (rank == ROOTRANK) {
-    int *univsize;
-    int flag = 0;
-    /* /!\ universe size is wrong with merged communicator */
-    MPI_Comm_get_attr(intracomm, MPI_UNIVERSE_SIZE, &univsize, &flag);
-    if (!flag)
-      printf("Attribute %s not supported\n", "MPI_UNIVERSE_SIZE");
-    else
-      printf("Universe size: %d, nprocs occupied %d\n", *univsize, nprocs);
-  }
 
   /* initialize random array with 0-255 value */
   int *data = malloc(length * sizeof(int));
@@ -155,6 +165,7 @@ main(int argc, char **argv)
     MPI_Close_port(portname);
   MPI_Comm_disconnect(&intracomm);
 
+  icc_fini(icc);
   MPI_Finalize();
 }
 

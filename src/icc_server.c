@@ -18,6 +18,7 @@ static void appman_response(hg_handle_t h, margo_instance_id mid);
 /* public RPCs callbacks */
 static void test_cb(hg_handle_t h, margo_instance_id mid);
 static void appman_cb(hg_handle_t h, margo_instance_id mid);
+static void malleability_avail_cb(hg_handle_t h, margo_instance_id mid);
 static void jobmon_submit_cb(hg_handle_t h, margo_instance_id mid);
 static void jobmon_exit_cb(hg_handle_t h, margo_instance_id mid);
 static void adhoc_nodes_cb(hg_handle_t h, margo_instance_id mid);
@@ -146,6 +147,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
 
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_TEST, test_cb);
   REGISTER_PREP(rpc_ids, callbacks, APP_RPC_TEST, appman_cb);
+  REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_MALLEABILITY_AVAIL, malleability_avail_cb);
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_JOBMON_SUBMIT, jobmon_submit_cb);
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_JOBMON_EXIT, jobmon_exit_cb);
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_ADHOC_NODES, adhoc_nodes_cb);
@@ -355,6 +357,40 @@ test_cb(hg_handle_t h, margo_instance_id mid)
 
 
 static void
+malleability_avail_cb(hg_handle_t h, margo_instance_id mid)
+{
+  hg_return_t hret;
+  malleability_avail_in_t in;
+  rpc_out_t out;
+
+  out.rc = ICC_SUCCESS;
+
+  hret = margo_get_input(h, &in);
+  if (hret != HG_SUCCESS) {
+    out.rc = ICC_FAILURE;
+    margo_error(mid, "Could not get RPC input: %s", HG_Error_to_string(hret));
+    return;
+  }
+
+  /* store nodes available for malleability in db */
+  int dbrc;
+  /* icdb_command(icdb, "INCR malleability_avail:%"PRIu32, in.slurm_jobid); */
+  dbrc = icdb_command(icdb, "HMSET malleability_avail:%"PRIu32" type %s portname %s nnodes %"PRIu32,
+		      in.slurm_jobid, in.type, in.portname, in.nnodes);
+
+  if (dbrc != ICDB_SUCCESS) {
+    margo_error(mid, "Could not write to IC database: %s", icdb_errstr(icdb));
+    out.rc = ICC_FAILURE;
+  }
+
+  hret = margo_respond(h, &out);
+  if (hret != HG_SUCCESS) {
+    margo_error(mid, "Could not respond to HPC");
+  }
+}
+
+
+static void
 jobmon_submit_cb(hg_handle_t h, margo_instance_id mid)
 {
   hg_return_t hret;
@@ -370,10 +406,10 @@ jobmon_submit_cb(hg_handle_t h, margo_instance_id mid)
     margo_error(mid, "Could not get RPC input");
   }
 
-  margo_info(mid, "Slurm Job %"PRId32".%"PRId32" started on %"PRId32" node%s",
+  margo_info(mid, "Slurm Job %"PRIu32".%"PRIu32" started on %"PRIu32" node%s",
              in.slurm_jobid, in.slurm_jobstepid, in.slurm_nnodes, in.slurm_nnodes > 1 ? "s" : "");
 
-  int icdb_rc = icdb_command(icdb, "SET nnodes:%"PRId32".%"PRId32" %"PRId32,
+  int icdb_rc = icdb_command(icdb, "SET nnodes:%"PRIu32".%"PRIu32" %"PRIu32,
                              in.slurm_jobid, in.slurm_jobstepid, in.slurm_nnodes);
   if (icdb_rc != ICDB_SUCCESS) {
     margo_error(mid, "Could not write to IC database: %s", icdb_errstr(icdb));
@@ -402,7 +438,7 @@ jobmon_exit_cb(hg_handle_t h, margo_instance_id mid)
     margo_error(mid, "Could not get RPC input");
   }
 
-  margo_info(mid, "Slurm Job %"PRId32".%"PRId32" exited", in.slurm_jobid, in.slurm_jobstepid);
+  margo_info(mid, "Slurm Job %"PRIu32".%"PRIu32" exited", in.slurm_jobid, in.slurm_jobstepid);
 
   hret = margo_respond(h, &out);
   if (hret != HG_SUCCESS) {
@@ -427,7 +463,7 @@ adhoc_nodes_cb(hg_handle_t h, margo_instance_id mid)
     margo_error(mid, "Could not get RPC input");
   }
 
-  margo_info(mid, "IC got adhoc_nodes request from job %"PRId32": %"PRId32" nodes (%"PRId32" nodes assigned by Slurm)",
+  margo_info(mid, "IC got adhoc_nodes request from job %"PRIu32": %"PRIu32" nodes (%"PRIu32" nodes assigned by Slurm)",
              in.slurm_jobid, in.adhoc_nnodes, in.slurm_nnodes);
 
   hret = margo_respond(h, &out);
