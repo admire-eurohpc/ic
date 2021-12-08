@@ -2,8 +2,12 @@
 #include <inttypes.h>           /* PRIdxx */
 #include <stdio.h>
 #include <margo.h>
+#include <unistd.h>
+#include <assert.h>
+#include <pthread.h>
 
 #include "icc_rpc.h"
+#include "icc.h"
 #include "icdb.h"
 
 
@@ -12,12 +16,68 @@ static void target_addr_send(hg_handle_t h, margo_instance_id mid);
 
 /* public RPCs callbacks */
 static void test_cb(hg_handle_t h, margo_instance_id mid);
+static void appman_cb(hg_handle_t h, margo_instance_id mid);
 static void jobmon_submit_cb(hg_handle_t h, margo_instance_id mid);
 static void jobmon_exit_cb(hg_handle_t h, margo_instance_id mid);
 static void adhoc_nodes_cb(hg_handle_t h, margo_instance_id mid);
 
 /* XX bad global variable? */
 static struct icdb_context *icdb = NULL;
+
+
+/*Vector of malleability instructions*/
+char *instr_vec[6];
+
+/*Next malleability instruction. SHARED between MM_th and IC*/
+char * next_instruction = NULL;
+
+/*Thread that executes the Malleability Manager function*/
+void
+malleability_manager_th(void){
+  /*Create vector*/
+  for(int i = 0; i < 5; i++){
+    switch(i) {
+      case 0:
+        instr_vec[i] = (char *) malloc(strlen("nping –udp -p 7670 -c 1 compute-12-2 –data-string \"6:compute-12-2:2\"") + 1);
+        strcpy(instr_vec[i], "nping –udp -p 7670 -c 1 compute-12-2 –data-string \"6:compute-12-2:2\"");
+        break;
+      case 1:
+        instr_vec[i] = (char *) malloc(strlen("nping –udp -p 7670 -c 1 compute-12-2 –data-string \"6:compute-12-3:4\"") + 1);
+        strcpy(instr_vec[i], "nping –udp -p 7670 -c 1 compute-12-2 –data-string \"6:compute-12-3:4\"");
+        break;
+      case 2:
+        instr_vec[i] = (char *) malloc(strlen("nping –udp -p 7670 -c 1 compute-12-2 –data-string \"6:compute-12-3:-4\"") + 1);
+        strcpy(instr_vec[i], "nping –udp -p 7670 -c 1 compute-12-2 –data-string \"6:compute-12-3:-4\"");
+        break;
+      case 3:
+        instr_vec[i] = (char *) malloc(strlen("nping –udp -p 7670 -c 1 compute-12-2 –data-string \"6:compute-12-2:-2\"") + 1);
+        strcpy(instr_vec[i], "nping –udp -p 7670 -c 1 compute-12-2 –data-string \"6:compute-12-2:-2\"");
+        break;
+      case 4:
+        instr_vec[i] = (char *) malloc(strlen("nping –udp -p 7670 -c 1 compute-12-2 –data-string \"5\"") + 1);
+        strcpy(instr_vec[i], "nping –udp -p 7670 -c 1 compute-12-2 –data-string \"5\"");
+        break;
+      case 5:
+        /*Exclusive use for answering empty RPCs*/
+        instr_vec[i] = (char *) malloc(strlen("") + 1);
+        strcpy(instr_vec[i], "");
+        break;
+    }
+  }
+
+  /*Each N-secs, Malleability manager send instructions*/
+  int instr_index = 0;
+  while(1){
+    sleep(10);
+    if (next_instruction == NULL){
+      printf("[MM_TH] Instruction added\n");
+      next_instruction = instr_vec[instr_index];
+      instr_index++;
+      if(instr_index % 5 == 0) instr_index = 0;
+    }
+  }
+}
+
 
 
 int
@@ -83,6 +143,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_TARGET_ADDR_SEND, target_addr_send);
 
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_TEST, test_cb);
+  REGISTER_PREP(rpc_ids, callbacks, APP_RPC_TEST, appman_cb);
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_JOBMON_SUBMIT, jobmon_submit_cb);
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_JOBMON_EXIT, jobmon_exit_cb);
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_ADHOC_NODES, adhoc_nodes_cb);
@@ -107,7 +168,14 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
     return ICC_FAILURE;
   }
 
+  /*Thread components*/
+  pthread_t mm_th;
+  pthread_create(&mm_th, NULL, (void*)malleability_manager_th, NULL);
+
   margo_wait_for_finalize(mid);
+
+  /*Join threads*/
+  pthread_join(mm_th, NULL);
 
   /* close connection to DB */
   icdb_fini(&icdb);
@@ -119,8 +187,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
 
 /* RPC callbacks */
 static void
-target_addr_send(hg_handle_t h, margo_instance_id mid)
-{
+target_addr_send(hg_handle_t h, margo_instance_id mid) {
   hg_return_t hret;
 
   target_addr_in_t in;
@@ -146,16 +213,63 @@ target_addr_send(hg_handle_t h, margo_instance_id mid)
   }
 
   /* make an answer test RPC */
-  const struct hg_info *info = margo_get_info(h);
-  struct rpc_data *data = margo_registered_data(mid, info->id);
-  hg_id_t *ids = data->rpc_ids;
+  if(next_instruction != NULL) { //send instructions
+    const struct hg_info *info = margo_get_info(h);
+    struct rpc_data *data = margo_registered_data(mid, info->id);
+    hg_id_t *ids = data->rpc_ids;
 
-  test_in_t testin;
-  testin.number = 13;
-  int rc = rpc_send(mid, addr, in.provid, ids[ICC_RPC_TEST], &testin, &rpc_rc);
-  if (rc) {
-    margo_error(mid, "Could not send RPC %d", ICC_RPC_TEST);
+    app_in_t testin;
+    testin.instruction = next_instruction;
+    int rc = rpc_send(mid, addr, in.provid, ids[APP_RPC_TEST], &testin, &rpc_rc);
+    if (rc) {
+      margo_error(mid, "Could not send RPC %d", ICC_RPC_TEST);
+      out.rc = ICC_FAILURE;
+    }
+
+    /*Reset next_instr*/
+    next_instruction = NULL;
+
+    hret = margo_respond(h, &out);
+    if (hret != HG_SUCCESS) {
+      margo_error(mid, "Could not respond to HPC");
+    }
+  }
+  else {
+    /*RPCs need an answer*/
+    const struct hg_info *info = margo_get_info(h);
+    struct rpc_data *data = margo_registered_data(mid, info->id);
+    hg_id_t *ids = data->rpc_ids;
+
+    app_in_t testin;
+    testin.instruction = instr_vec[5];
+    int rc = rpc_send(mid, addr, in.provid, ids[APP_RPC_TEST], &testin, &rpc_rc);
+    if (rc) {
+      margo_error(mid, "Could not send RPC %d", ICC_RPC_TEST);
+      out.rc = ICC_FAILURE;
+    }
+
+    hret = margo_respond(h, &out);
+    if (hret != HG_SUCCESS) {
+      margo_error(mid, "Could not respond to HPC");
+    }
+  }
+}
+
+static void
+appman_cb(hg_handle_t h, margo_instance_id mid)
+{
+  hg_return_t hret;
+  app_in_t in;
+  rpc_out_t out;
+
+  out.rc = ICC_SUCCESS;
+
+  hret = margo_get_input(h, &in);
+  if (hret != HG_SUCCESS) {
     out.rc = ICC_FAILURE;
+    margo_error(mid, "Could not get RPC input: %s", HG_Error_to_string(hret));
+  } else {
+    margo_info(mid, "Got \"APP\" RPC with argument %s\n", in.instruction);
   }
 
   hret = margo_respond(h, &out);
@@ -179,7 +293,7 @@ test_cb(hg_handle_t h, margo_instance_id mid)
     out.rc = ICC_FAILURE;
     margo_error(mid, "Could not get RPC input: %s", HG_Error_to_string(hret));
   } else {
-    margo_info(mid, "Got \"test\" RPC with argument %u\n", in.number);
+    margo_info(mid, "Got \"IC\" RPC with argument %u\n", in.number);
   }
 
   hret = margo_respond(h, &out);

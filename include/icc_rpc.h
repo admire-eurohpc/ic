@@ -173,6 +173,8 @@ MERCURY_GEN_PROC(target_addr_in_t, ((hg_const_string_t)(addr_str))
 
 MERCURY_GEN_PROC(test_in_t, ((uint8_t)(number)))
 
+MERCURY_GEN_PROC(app_in_t, ((hg_const_string_t)(instruction)))
+
 MERCURY_GEN_PROC(malleabilityman_in_t, ((uint8_t)(number)))
 
 MERCURY_GEN_PROC(malleabilityman_out_t, ((uint8_t)(number)))

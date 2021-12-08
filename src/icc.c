@@ -23,7 +23,8 @@
 
 
 /* RPC callbacks */
-static void test_cb(hg_handle_t h, margo_instance_id mid);
+//static void test_cb(hg_handle_t h, margo_instance_id mid);
+static void appman_cb(hg_handle_t h, margo_instance_id mid);
 
 
 struct icc_context {
@@ -96,6 +97,7 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
   /* register client RPCs (i.e cb is NULL)
      XX could be a for loop */
   REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TEST, NULL);
+  REGISTER_PREP(rpc_hg_ids, rpc_callbacks, APP_RPC_TEST, NULL);
   REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_JOBMON_SUBMIT, NULL);
   REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_JOBMON_EXIT, NULL);
   REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_ADHOC_NODES, NULL);
@@ -104,7 +106,7 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
   if (bidir) {
     REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TARGET_ADDR_SEND, NULL);
     /* note this overwrites the previous registration without callback */
-    REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TEST, test_cb);
+    REGISTER_PREP(rpc_hg_ids, rpc_callbacks, APP_RPC_TEST, appman_cb);//test_cb);
   }
 
   rc = register_rpcs(icc->mid, rpc_callbacks, rpc_hg_ids);
@@ -114,13 +116,13 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
     goto error;
   }
 
-  rpc_hg_ids[ICC_RPC_MALLEABILITY_IN] = MARGO_REGISTER(icc->mid, "icc_malleabMan_in", malleabilityman_in_t, rpc_out_t, NULL);
+  /*rpc_hg_ids[ICC_RPC_MALLEABILITY_IN] = MARGO_REGISTER(icc->mid, "icc_malleabMan_in", malleabilityman_in_t, rpc_out_t, NULL);
   rpc_hg_ids[ICC_RPC_MALLEABILITY_OUT] = MARGO_REGISTER(icc->mid, "icc_malleabMan_out", malleabilityman_out_t, rpc_out_t, NULL);
   rpc_hg_ids[ICC_RPC_SLURM_IN] = MARGO_REGISTER(icc->mid, "icc_slurmMan_in", slurmman_in_t, rpc_out_t, NULL);
   rpc_hg_ids[ICC_RPC_SLURM_OUT] = MARGO_REGISTER(icc->mid, "icc_slurmMan_out", slurmman_out_t, rpc_out_t, NULL);
   rpc_hg_ids[ICC_RPC_IOSCHED_OUT] = MARGO_REGISTER(icc->mid, "icc_iosched_out", iosched_out_t, rpc_out_t, NULL);
   rpc_hg_ids[ICC_RPC_ADHOC_OUT] = MARGO_REGISTER(icc->mid, "icc_adhocMan_out", adhocman_out_t, rpc_out_t, NULL);
-  rpc_hg_ids[ICC_RPC_MONITOR_OUT] = MARGO_REGISTER(icc->mid, "icc_monitorMan_out", monitor_out_t, rpc_out_t, NULL);
+  rpc_hg_ids[ICC_RPC_MONITOR_OUT] = MARGO_REGISTER(icc->mid, "icc_monitorMan_out", monitor_out_t, rpc_out_t, NULL);*/
 
   /* initialize RPC target */
   if (bidir) {
@@ -209,18 +211,7 @@ icc_init_opt(enum icc_log_level log_level, struct icc_context **icc_context, int
   icc->provider_id = MARGO_PROVIDER_ID_DEFAULT;
 
   /* RPCs */
-  rpc_hg_ids[ICC_RPC_TEST] = MARGO_REGISTER(icc->mid, "icc_test", test_in_t, rpc_out_t, NULL);
-  rpc_hg_ids[ICC_RPC_MALLEABILITY_IN] = MARGO_REGISTER(icc->mid, "icc_malleabMan_in", malleabilityman_in_t, rpc_out_t, NULL);
-  rpc_hg_ids[ICC_RPC_MALLEABILITY_OUT] = MARGO_REGISTER(icc->mid, "icc_malleabMan_out", malleabilityman_out_t, rpc_out_t, NULL);
-  rpc_hg_ids[ICC_RPC_SLURM_IN] = MARGO_REGISTER(icc->mid, "icc_slurmMan_in", slurmman_in_t, rpc_out_t, NULL);
-  rpc_hg_ids[ICC_RPC_SLURM_OUT] = MARGO_REGISTER(icc->mid, "icc_slurmMan_out", slurmman_out_t, rpc_out_t, NULL);
-  rpc_hg_ids[ICC_RPC_IOSCHED_OUT] = MARGO_REGISTER(icc->mid, "icc_iosched_out", iosched_out_t, rpc_out_t, NULL);
-  rpc_hg_ids[ICC_RPC_ADHOC_OUT] = MARGO_REGISTER(icc->mid, "icc_adhocMan_out", adhocman_out_t, rpc_out_t, NULL);
-  rpc_hg_ids[ICC_RPC_MONITOR_OUT] = MARGO_REGISTER(icc->mid, "icc_monitorMan_out", monitor_out_t, rpc_out_t, NULL);
-  rpc_hg_ids[ICC_RPC_JOBMON_SUBMIT] = MARGO_REGISTER(icc->mid, "icc_jobmon_submit", jobmon_submit_in_t, rpc_out_t, NULL);
-  rpc_hg_ids[ICC_RPC_JOBMON_EXIT] = MARGO_REGISTER(icc->mid, "icc_jobmon_exit", jobmon_exit_in_t, rpc_out_t, NULL);
-  rpc_hg_ids[ICC_RPC_ADHOC_NODES] = MARGO_REGISTER(icc->mid, "icc_adhoc_nodes", adhoc_nodes_in_t, rpc_out_t, NULL);
-
+  rpc_hg_ids[ICC_RPC_TEST] = MARGO_REGISTER(icc->mid, "app_test", test_in_t, rpc_out_t, NULL);
 
 
   /* register other RPCs here */
@@ -282,7 +273,7 @@ icc_rpc_send(struct icc_context *icc, enum icc_rpc_code rpc_code, void *data, in
 
 
 /* RPC callbacks */
-static void
+/*static void
 test_cb(hg_handle_t h, margo_instance_id mid)
 {
   hg_return_t hret;
@@ -296,7 +287,33 @@ test_cb(hg_handle_t h, margo_instance_id mid)
     out.rc = ICC_FAILURE;
     margo_error(mid, "Could not get RPC input: %s", HG_Error_to_string(hret));
   } else {
-    margo_info(mid, "Got \"test\" RPC with argument %u\n", in.number);
+      margo_info(mid, "Got \"APP\" RPC with argument %u\n", in.number);
+    }
+  }
+
+  hret = margo_respond(h, &out);
+  if (hret != HG_SUCCESS) {
+    margo_error(mid, "Could not respond to HPC");
+  }
+}
+*/
+
+static void
+appman_cb(hg_handle_t h, margo_instance_id mid)
+{
+  hg_return_t hret;
+  app_in_t in;
+  rpc_out_t out;
+
+  out.rc = ICC_SUCCESS;
+
+  hret = margo_get_input(h, &in);
+  if (hret != HG_SUCCESS) {
+    out.rc = ICC_FAILURE;
+    margo_error(mid, "Could not get RPC input: %s", HG_Error_to_string(hret));
+  } else {
+    if(in.instruction != NULL)
+      margo_info(mid, "Got \"APP\" RPC with argument %s\n", in.instruction);
   }
 
   hret = margo_respond(h, &out);

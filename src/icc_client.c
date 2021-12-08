@@ -39,12 +39,12 @@ main(int argc, char **argv)
   argv += optind;
 
   int rc;
+  int rpc_retcode;
 
   struct icc_context *icc;
   icc_init(ICC_LOG_INFO, bidir, &icc);
   assert(icc != NULL);
 
-  int rpc_retcode;
   struct icc_rpc_test_in rpc_in = { .number=32 };
 
   rc = icc_rpc_send(icc, ICC_RPC_TEST, &rpc_in, &rpc_retcode);

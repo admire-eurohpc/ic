@@ -20,13 +20,14 @@ libicc_minorname := $(libicc_soname).$(ICC_MINOR).$(ICC_PATCH)
 
 icc_server_bin := icc_server
 icc_client_bin := icc_client
+app_manager_bin := app_manager
 libadhoccli_so := libadhoccli.so
 libjobmon_so := libjobmon.so
 
-sources := icc_server.c icc_client.c icc_rpc.c icdb.c icc.c adhoccli.c jobmon.c
+sources := icc_server.c icc_client.c icc_rpc.c icdb.c icc.c adhoccli.c jobmon.c app_manager.c
 
 # keep libicc in front
-binaries := $(libicc_so) $(icc_server_bin) $(icc_client_bin) $(libadhoccli_so) $(libjobmon_so)
+binaries := $(libicc_so) $(icc_server_bin) $(icc_client_bin) $(libadhoccli_so) $(libjobmon_so) $(app_manager_bin)
 
 objects := $(sources:.c=.o)
 depends := $(sources:.c=.d)
@@ -52,6 +53,7 @@ install: all
 	cd $(INSTALL_PATH_LIB) && ln -sf $(libicc_minorname) $(libicc_soname)
 	$(INSTALL) -m 755 $(icc_server_bin) $(INSTALL_PATH_BIN)
 	$(INSTALL) -m 755 $(icc_client_bin) $(INSTALL_PATH_BIN)
+	$(INSTALL) -m 755 $(app_manager_bin) $(INSTALL_PATH_BIN)
 	$(INSTALL) -m 755 scripts/icc_server.sh $(INSTALL_PATH_BIN)/icc_server.sh
 	$(INSTALL) -m 755 scripts/icc_client.sh $(INSTALL_PATH_BIN)/icc_client.sh
 
@@ -59,6 +61,7 @@ uninstall:
 	$(RM) $(INSTALL_PATH_LIB)/$(libicc_soname) $(INSTALL_PATH_LIB)/$(libicc_minorname)
 	$(RM) $(INSTALL_PATH_BIN)/$(icc_server_bin)
 	$(RM) $(INSTALL_PATH_BIN)/$(icc_client_bin)
+	$(RM) $(INSTALL_PATH_BIN)/$(app_manager_bin)
 	$(RM) $(INSTALL_PATH_BIN)/icc_server.sh
 	$(RM) $(INSTALL_PATH_BIN)/icc_client.sh
 
@@ -71,7 +74,7 @@ icdb.o: CFLAGS += `$(PKG_CONFIG) --cflags hiredis`
 
 $(icc_server_bin): icc_rpc.o icdb.o
 $(icc_server_bin): CFLAGS += `$(PKG_CONFIG) --cflags margo`
-$(icc_server_bin): LDLIBS += `$(PKG_CONFIG) --libs margo` `$(PKG_CONFIG) --libs hiredis` -Wl,--no-undefined
+$(icc_server_bin): LDLIBS += `$(PKG_CONFIG) --libs margo` `$(PKG_CONFIG) --libs hiredis` -pthread -Wl,--no-undefined
 
 $(libicc_so): icc_rpc.o
 $(libicc_so): CFLAGS += `$(PKG_CONFIG) --cflags margo`
@@ -80,6 +83,10 @@ $(libicc_so): LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined,-h$(libi
 $(icc_client_bin):
 $(icc_client_bin): LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined
 $(icc_client_bin): LDLIBS += -L. -licc -pthread
+
+$(app_manager_bin):
+$(app_manager_bin): LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined
+$(app_manager_bin): LDLIBS += -L. -licc -pthread
 
 $(libjobmon_so) $(libadhoccli_so): LDLIBS += -L. -licc -lslurm
 
