@@ -77,7 +77,7 @@ icdb.o: CFLAGS += `$(PKG_CONFIG) --cflags hiredis`
 
 $(icc_server_bin): icc_rpc.o icdb.o
 $(icc_server_bin): CFLAGS += `$(PKG_CONFIG) --cflags margo`
-$(icc_server_bin): LDLIBS += `$(PKG_CONFIG) --libs margo` `$(PKG_CONFIG) --libs hiredis` -pthread -Wl,--no-undefined
+$(icc_server_bin): LDLIBS += `$(PKG_CONFIG) --libs margo hiredis` -pthread -Wl,--no-undefined
 
 $(libicc_so): icc_rpc.o
 $(libicc_so): CFLAGS += `$(PKG_CONFIG) --cflags margo`
@@ -92,7 +92,7 @@ $(app_manager_bin): LDLIBS += -L. -licc -pthread
 $(libjobmon_so) $(libadhoccli_so): LDLIBS += -L. -licc -lslurm
 
 $(testapp_bin): CFLAGS += `$(PKG_CONFIG) --cflags mpi`
-$(testapp_bin): LDLIBS += `$(PKG_CONFIG) --libs mpi` `$(PKG_CONFIG) --libs margo` -L. -licc
+$(testapp_bin): LDLIBS += `$(PKG_CONFIG) --libs mpi margo` -L. -licc
 
 lib%.so: CFLAGS += -fpic
 lib%.so: LDFLAGS += -shared

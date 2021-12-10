@@ -39,7 +39,7 @@ int
 main(int argc, char **argv)
 {
   static int standby = 0;
-  static int length = DEFAULTLEN;
+  static unsigned long length = DEFAULTLEN;
   static struct option longopts[] = {
     { "length",  required_argument, NULL,      'l'},
     { "standby", no_argument,       &standby,   1 },
@@ -90,18 +90,23 @@ main(int argc, char **argv)
       MPI_Open_port(MPI_INFO_NULL, portname);
       printf("Opened port \"%s\"\n", portname);
 
-      /* will be 0 on error, in wich case we can just ignore it */
-      uint32_t nnodes = atoi(getenv("SLURM_NNODES"));
-      uint32_t jobid = atoi(getenv("SLURM_JOBID"));
-
       int rpcrc;
-      struct icc_rpc_malleability_avail_in rpcin = {
-        .type="mpi",
-        .portname=portname,
-        .nnodes=nnodes,
-        .slurm_jobid=jobid
-      };
-      rc = icc_rpc_send(icc, ICC_RPC_MALLEABILITY_AVAIL, &rpcin, &rpcrc);
+      uint32_t jobid, nnodes;
+      char *slurm_jobid = getenv("SLURM_JOBID");
+      char *slurm_nnodes = getenv("SLURM_NNODES");
+
+      char *end;
+      errno = 0;
+      jobid = strtoul(slurm_jobid, &end, 0);
+      if (errno != 0 || end == slurm_jobid || *end != '\0')
+        jobid = 0;
+
+      errno = 0;
+      nnodes = strtoul(slurm_nnodes, &end, 0);
+      if (errno != 0 || end == slurm_nnodes || *end != '\0')
+        nnodes = 0;
+
+      rc = icc_rpc_malleability_avail(icc, "mpi", portname, jobid, nnodes, &rpcrc);
       assert(rc == ICC_SUCCESS && !rpcrc);
     }
 

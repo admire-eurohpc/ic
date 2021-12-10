@@ -45,9 +45,11 @@ main(int argc, char **argv)
   icc_init(ICC_LOG_INFO, bidir, &icc);
   assert(icc != NULL);
 
-  struct icc_rpc_test_in rpc_in = { .number=32 };
+  /* struct icc_rpc_test_in rpc_in = { .number=32, .jobid=0 }; */
+  /* rc = icc_rpc_send(icc, ICC_RPC_TEST, &rpc_in, &rpc_retcode); */
 
-  rc = icc_rpc_send(icc, ICC_RPC_TEST, &rpc_in, &rpc_retcode);
+  rc = icc_rpc_test(icc, 32, &rpc_retcode);
+
   if (rc == ICC_SUCCESS)
     printf("RPC successful: retcode=%d\n", rpc_retcode);
   else

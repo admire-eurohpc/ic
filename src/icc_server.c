@@ -13,11 +13,9 @@
 
 /* internal RPCs callbacks */
 static void target_addr_send(hg_handle_t h, margo_instance_id mid);
-static void appman_response(hg_handle_t h, margo_instance_id mid);
 
 /* public RPCs callbacks */
 static void test_cb(hg_handle_t h, margo_instance_id mid);
-static void appman_cb(hg_handle_t h, margo_instance_id mid);
 static void malleability_avail_cb(hg_handle_t h, margo_instance_id mid);
 static void jobmon_submit_cb(hg_handle_t h, margo_instance_id mid);
 static void jobmon_exit_cb(hg_handle_t h, margo_instance_id mid);
@@ -143,10 +141,8 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   }
 
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_TARGET_ADDR_SEND, target_addr_send);
-  REGISTER_PREP(rpc_ids, callbacks, APP_RPC_RESPONSE, appman_response);
 
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_TEST, test_cb);
-  REGISTER_PREP(rpc_ids, callbacks, APP_RPC_TEST, appman_cb);
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_MALLEABILITY_AVAIL, malleability_avail_cb);
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_JOBMON_SUBMIT, jobmon_submit_cb);
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_JOBMON_EXIT, jobmon_exit_cb);
@@ -206,6 +202,13 @@ target_addr_send(hg_handle_t h, margo_instance_id mid) {
   }
 
   margo_info(mid, "Got target initiation request with address: %s", in.addr_str);
+  int dbrc;
+  dbrc = icdb_command(icdb, "HMSET jobid:%"PRIu32" type %s addr %s", in.jobid, in.type, in.addr_str);
+
+  if (dbrc != ICDB_SUCCESS) {
+    margo_error(mid, "Could not write to IC database: %s", icdb_errstr(icdb));
+    out.rc = ICC_FAILURE;
+  }
 
   hg_addr_t addr;
   int rpc_rc;
@@ -239,98 +242,75 @@ target_addr_send(hg_handle_t h, margo_instance_id mid) {
   }
 }
 
-static void
-appman_cb(hg_handle_t h, margo_instance_id mid)
-{
-  hg_return_t hret;
-  app_in_t in;
-  rpc_out_t out;
+/* static void */
+/* appman_response(hg_handle_t h, margo_instance_id mid) { */
+/*   hg_return_t hret; */
 
-  out.rc = ICC_SUCCESS;
+/*   target_addr_in_t in; */
+/*   rpc_out_t out; */
 
-  hret = margo_get_input(h, &in);
-  if (hret != HG_SUCCESS) {
-    out.rc = ICC_FAILURE;
-    margo_error(mid, "Could not get RPC input: %s", HG_Error_to_string(hret));
-  } else {
-    margo_info(mid, "Got \"APP\" RPC with argument %s\n", in.instruction);
-  }
+/*   out.rc = ICC_SUCCESS; */
 
-  hret = margo_respond(h, &out);
-  if (hret != HG_SUCCESS) {
-    margo_error(mid, "Could not respond to HPC");
-  }
-}
+/*   hret = margo_get_input(h, &in); */
+/*   if (hret != HG_SUCCESS) { */
+/*     out.rc = ICC_FAILURE; */
+/*     margo_error(mid, "Could not get RPC input"); */
+/*   } */
 
-static void
-appman_response(hg_handle_t h, margo_instance_id mid) {
-  hg_return_t hret;
+/*   margo_info(mid, "Got target initiation request with address: %s", in.addr_str); */
 
-  target_addr_in_t in;
-  rpc_out_t out;
+/*   hg_addr_t addr; */
+/*   int rpc_rc; */
 
-  out.rc = ICC_SUCCESS;
+/*   hret = margo_addr_lookup(mid, in.addr_str, &addr); */
+/*   if (hret != HG_SUCCESS) { */
+/*     margo_error(mid, "Could not get Margo address: %s", HG_Error_to_string(hret)); */
+/*     out.rc = ICC_FAILURE; */
+/*   } */
 
-  hret = margo_get_input(h, &in);
-  if (hret != HG_SUCCESS) {
-    out.rc = ICC_FAILURE;
-    margo_error(mid, "Could not get RPC input");
-  }
+/*   /\* make an answer test RPC *\/ */
+/*   if(next_instruction != NULL) { */
+/*     /\*send malleability instructions*\/ */
+/*     const struct hg_info *info = margo_get_info(h); */
+/*     struct rpc_data *data = margo_registered_data(mid, info->id); */
+/*     hg_id_t *ids = data->rpc_ids; */
 
-  margo_info(mid, "Got target initiation request with address: %s", in.addr_str);
+/*     app_in_t testin; */
+/*     testin.instruction = next_instruction; */
+/*     int rc = rpc_send(mid, addr, in.provid, ids[ICC_RPC_TEST], &testin, &rpc_rc); */
+/*     if (rc) { */
+/*       margo_error(mid, "Could not send RPC %d", ICC_RPC_TEST); */
+/*       out.rc = ICC_FAILURE; */
+/*     } */
 
-  hg_addr_t addr;
-  int rpc_rc;
+/*     /\*Reset next_instr*\/ */
+/*     next_instruction = NULL; */
 
-  hret = margo_addr_lookup(mid, in.addr_str, &addr);
-  if (hret != HG_SUCCESS) {
-    margo_error(mid, "Could not get Margo address: %s", HG_Error_to_string(hret));
-    out.rc = ICC_FAILURE;
-  }
+/*     hret = margo_respond(h, &out); */
+/*     if (hret != HG_SUCCESS) { */
+/*       margo_error(mid, "Could not respond to HPC"); */
+/*     } */
+/*   } */
+/*   else { */
+/*     /\*Empty instructions because RPCs need an answer*\/ */
+/*     const struct hg_info *info = margo_get_info(h); */
+/*     struct rpc_data *data = margo_registered_data(mid, info->id); */
+/*     hg_id_t *ids = data->rpc_ids; */
 
-  /* make an answer test RPC */
-  if(next_instruction != NULL) {
-    /*send malleability instructions*/
-    const struct hg_info *info = margo_get_info(h);
-    struct rpc_data *data = margo_registered_data(mid, info->id);
-    hg_id_t *ids = data->rpc_ids;
+/*     app_in_t testin; */
+/*     testin.instruction = instr_vec[5]; */
+/*     int rc = rpc_send(mid, addr, in.provid, ids[APP_RPC_TEST], &testin, &rpc_rc); */
+/*     if (rc) { */
+/*       margo_error(mid, "Could not send RPC %d", ICC_RPC_TEST); */
+/*       out.rc = ICC_FAILURE; */
+/*     } */
 
-    app_in_t testin;
-    testin.instruction = next_instruction;
-    int rc = rpc_send(mid, addr, in.provid, ids[APP_RPC_TEST], &testin, &rpc_rc);
-    if (rc) {
-      margo_error(mid, "Could not send RPC %d", ICC_RPC_TEST);
-      out.rc = ICC_FAILURE;
-    }
-
-    /*Reset next_instr*/
-    next_instruction = NULL;
-
-    hret = margo_respond(h, &out);
-    if (hret != HG_SUCCESS) {
-      margo_error(mid, "Could not respond to HPC");
-    }
-  }
-  else {
-    /*Empty instructions because RPCs need an answer*/
-    const struct hg_info *info = margo_get_info(h);
-    struct rpc_data *data = margo_registered_data(mid, info->id);
-    hg_id_t *ids = data->rpc_ids;
-
-    app_in_t testin;
-    testin.instruction = instr_vec[5];
-    int rc = rpc_send(mid, addr, in.provid, ids[APP_RPC_TEST], &testin, &rpc_rc);
-    if (rc) {
-      margo_error(mid, "Could not send RPC %d", ICC_RPC_TEST);
-      out.rc = ICC_FAILURE;
-    }
-
-    hret = margo_respond(h, &out);
-    if (hret != HG_SUCCESS) {
-      margo_error(mid, "Could not respond to HPC");
-    }
-  }
-}
+/*     hret = margo_respond(h, &out); */
+/*     if (hret != HG_SUCCESS) { */
+/*       margo_error(mid, "Could not respond to HPC"); */
+/*     } */
+/*   } */
+/* } */
 
 static void
 test_cb(hg_handle_t h, margo_instance_id mid)
@@ -346,7 +326,7 @@ test_cb(hg_handle_t h, margo_instance_id mid)
     out.rc = ICC_FAILURE;
     margo_error(mid, "Could not get RPC input: %s", HG_Error_to_string(hret));
   } else {
-    margo_info(mid, "Got \"IC\" RPC with argument %u\n", in.number);
+    margo_info(mid, "Got \"TEST\" RPC with argument %u\n", in.number);
   }
 
   hret = margo_respond(h, &out);
@@ -374,9 +354,9 @@ malleability_avail_cb(hg_handle_t h, margo_instance_id mid)
 
   /* store nodes available for malleability in db */
   int dbrc;
-  /* icdb_command(icdb, "INCR malleability_avail:%"PRIu32, in.slurm_jobid); */
+  /* icdb_command(icdb, "INCR malleability_avail:%"PRIu32, in.jobid); */
   dbrc = icdb_command(icdb, "HMSET malleability_avail:%"PRIu32" type %s portname %s nnodes %"PRIu32,
-		      in.slurm_jobid, in.type, in.portname, in.nnodes);
+                      in.jobid, in.type, in.portname, in.nnodes);
 
   if (dbrc != ICDB_SUCCESS) {
     margo_error(mid, "Could not write to IC database: %s", icdb_errstr(icdb));
@@ -406,11 +386,11 @@ jobmon_submit_cb(hg_handle_t h, margo_instance_id mid)
     margo_error(mid, "Could not get RPC input");
   }
 
-  margo_info(mid, "Slurm Job %"PRIu32".%"PRIu32" started on %"PRIu32" node%s",
-             in.slurm_jobid, in.slurm_jobstepid, in.slurm_nnodes, in.slurm_nnodes > 1 ? "s" : "");
+  margo_info(mid, "Job %"PRIu32".%"PRIu32" started on %"PRIu32" node%s",
+             in.jobid, in.jobstepid, in.nnodes, in.nnodes > 1 ? "s" : "");
 
   int icdb_rc = icdb_command(icdb, "SET nnodes:%"PRIu32".%"PRIu32" %"PRIu32,
-                             in.slurm_jobid, in.slurm_jobstepid, in.slurm_nnodes);
+                             in.jobid, in.jobstepid, in.nnodes);
   if (icdb_rc != ICDB_SUCCESS) {
     margo_error(mid, "Could not write to IC database: %s", icdb_errstr(icdb));
   }
@@ -438,7 +418,7 @@ jobmon_exit_cb(hg_handle_t h, margo_instance_id mid)
     margo_error(mid, "Could not get RPC input");
   }
 
-  margo_info(mid, "Slurm Job %"PRIu32".%"PRIu32" exited", in.slurm_jobid, in.slurm_jobstepid);
+  margo_info(mid, "Slurm Job %"PRIu32".%"PRIu32" exited", in.jobid, in.jobstepid);
 
   hret = margo_respond(h, &out);
   if (hret != HG_SUCCESS) {
@@ -464,7 +444,7 @@ adhoc_nodes_cb(hg_handle_t h, margo_instance_id mid)
   }
 
   margo_info(mid, "IC got adhoc_nodes request from job %"PRIu32": %"PRIu32" nodes (%"PRIu32" nodes assigned by Slurm)",
-             in.slurm_jobid, in.adhoc_nnodes, in.slurm_nnodes);
+             in.jobid, in.nnodes, in.nnodes);
 
   hret = margo_respond(h, &out);
   if (hret != HG_SUCCESS) {

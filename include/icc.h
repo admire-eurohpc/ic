@@ -25,72 +25,9 @@ enum icc_log_level {
     ICC_LOG_CRITICAL
 };
 
-/**
- * ICC RPC codes.
- *
- * ICC_RPC_TEST: Test the server by sending a number and having it
- * logged.
- *
- * ICC_RPC_MALLEABILITY_AVAIL: Notify the server of nodes availability
- * for later malleability commands.
- *
- * ICC_RPC_ADHOC_NODES: Request ADHOC_NODES for the slurm job
- * identified by SLURM_JOBID that has been assigned SLURM_NNODES in
- * total.
- *
- * Fill RETCODE on completion.
- */
-enum icc_rpc_code {
-  ICC_RPC_ERROR = 0,
-  /* RPC code 1 to 127 reserved for internal use */
-  ICC_RPC_PRIVATE = 128,
-  ICC_RPC_TEST,
-  APP_RPC_TEST,
-  ICC_RPC_MALLEABILITY_AVAIL,
-  ICC_RPC_JOBMON_SUBMIT,
-  ICC_RPC_JOBMON_EXIT,
-  ICC_RPC_ADHOC_NODES,
-  ICC_RPC_COUNT
-};
-
-struct icc_rpc_test_in {
-  uint8_t number;
-};
-
 struct app_rpc_test_in {
   const char * instruction;
 
-};
-
-struct icc_rpc_malleability_avail_in {
-  char     *type;
-  char     *portname;
-  uint32_t slurm_jobid;
-  uint32_t nnodes;
-};
-
-
-/* Structs for RPC communications between Root Controller and other components*/
-struct icc_rpc_malleability_manager_in{
-    uint8_t number;
-};
-
-
-struct icc_rpc_jobmon_submit_in {
-  uint32_t slurm_jobid;
-  uint32_t slurm_jobstepid;
-  uint32_t slurm_nnodes;
-};
-
-struct icc_rpc_jobmon_exit_in {
-  uint32_t slurm_jobid;
-  uint32_t slurm_jobstepid;
-};
-
-struct icc_rpc_adhoc_nodes_in {
-  uint32_t slurm_jobid;
-  uint32_t slurm_nnodes;
-  uint32_t adhoc_nnodes;
 };
 
 
@@ -105,7 +42,6 @@ struct icc_rpc_adhoc_nodes_in {
  * Return ICC_SUCCESS or error code.
  */
 int icc_init(enum icc_log_level log_level, int bidirectional, struct icc_context **icc);
-int icc_init_opt(enum icc_log_level log_level, struct icc_context **icc, int server_id);
 
 
 /**
@@ -117,25 +53,56 @@ int icc_fini(struct icc_context *icc);
 
 
 /**
- * Generic RPC call to the Intelligent Controller.
- *
- * The RPC is identified by the ICC_CODE, see enum icc_rpc_code.
- *
- * DATA_IN is a pointer to a structure which depends on the RPC type
+ * RPC TEST: Test the server by sending a number and having it logged.
  *
  * RETCODE is filled with the RPC return status code on completion.
  *
  * Return ICC_SUCCESS or an error code.
  */
-int icc_rpc_send(struct icc_context *icc, enum icc_rpc_code icc_code, void *data_in, int *retcode);
+int icc_rpc_test(struct icc_context *icc, uint8_t number, int *retcode);
 
 
 /**
- * Register the RPC identified by ICC_RPC_CODE.
+ * RPC ADHOC_NODES: Request ADHOC_NODES nodes for the job identified by JOBID that has
+ * been assigned NNODES in total.
+ *
+ * RETCODE is filled with the RPC return status code on completion.
  *
  * Return ICC_SUCCESS or an error code.
  */
-int icc_rpc_register(struct icc_context *icc, enum icc_rpc_code icc_code);
+int icc_rpc_adhoc_nodes(struct icc_context *icc, uint32_t jobid, uint32_t nnodes, uint32_t adhoc_nnodes, int *retcode);
 
+
+/**
+ * RPC: Notify the IC that the job JOBID.JOBSTEPID has been submitted,
+ * requesting NNODES nodes.
+ *
+ * RETCODE is filled with the RPC return status code on completion.
+ *
+ * Return ICC_SUCCESS or an error code.
+ */
+int icc_rpc_jobmon_submit(struct icc_context *icc, uint32_t jobid, uint32_t jobstepid, uint32_t nnodes, int *retcode);
+
+
+/**
+ * RPC: Notify the IC that the job JOBID.JOBSTEPID has exited,
+ *
+ * RETCODE is filled with the RPC return status code on completion.
+ *
+ * Return ICC_SUCCESS or an error code.
+ */
+int icc_rpc_jobmon_exit(struct icc_context *icc, uint32_t jobid, uint32_t jobstepid, int *retcode);
+
+
+/**
+ * RPC MALLEABILITY_AVAIL: Notify the server of the availability of
+ * NNODES for later malleability commands to job JOBID, of type
+ * TYPE. The available processes can be contacted at PORTNAME.
+ *
+ * RETCODE is filled with the RPC return status code on completion.
+ *
+ * Return ICC_SUCCESS or an error code.
+ */
+int icc_rpc_malleability_avail(struct icc_context *icc, char *type, char *portname, uint32_t jobid, uint32_t nnodes, int *retcode);
 
 #endif

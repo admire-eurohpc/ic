@@ -115,11 +115,6 @@ register_rpcs(margo_instance_id mid, icc_callback_t callbacks[ICC_RPC_COUNT], hg
   /* test RPC */
   ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_TEST, test_in_t, rpc_out_t);
 
-
-  /* App Manager RPC*/
-  ICC_REGISTER_RPC(mid, ids, callbacks, APP_RPC_TEST, app_in_t, rpc_out_t);
-  ICC_REGISTER_RPC(mid, ids, callbacks, APP_RPC_RESPONSE, target_addr_in_t, rpc_out_t);
-
   /* availability for malleability RPC */
   ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_MALLEABILITY_AVAIL, malleability_avail_in_t, rpc_out_t);
 
@@ -147,7 +142,6 @@ rpc_send(margo_instance_id mid, hg_addr_t addr, uint16_t provid, hg_id_t rpc_id,
     return -1;
   }
 
-  /* XX cast public struct to HG struct, hackish and dangerous */
   hret = margo_provider_forward_timed(provid, handle, data, RPC_TIMEOUT_MS);
   if (hret != HG_SUCCESS) {
     margo_error(mid, "Could not forward Margo RPC: %s", HG_Error_to_string(hret));

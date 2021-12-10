@@ -17,6 +17,10 @@
 /* Margo provider != Hg network provider */
 #define MARGO_PROVIDER_ID_DEFAULT 12
 
+
+#define CHECK_ICC(icc)  if (!(icc)) return ICC_FAILURE;
+
+
 /**
  * Get the Mercury (Hg) address string from the Margo server instance
  * MID and write it to ADDR_STR.
@@ -36,102 +40,6 @@ get_hg_addr(margo_instance_id mid, char *addr_str, hg_size_t *addr_str_size);
  */
 char *
 icc_addr_file(void);
-
-
-/**
- * Internal RPC. This enum is for codes 1 to 127, reserved for
- * internal use, public RPCs go to icc.h.
- *
- * ICC_RPC_TARGET_ADDR_SEND: Send the Mercury target address of a
- * server. This RPC is meant to be called from a *client* that wants
- * to be able to receive RPCs and not just send them. The client needs
- * to be started in MARGO_SERVER_MODE to have an address.
- *
- * ICC_RPC_PING: Send an RPC with argument "ping", expect a "pong"
- * response.
- */
-enum icc_rpc_internal_code {
-  ICC_RPC_INTERN_ERROR = 0,
-  ICC_RPC_TARGET_ADDR_SEND,
-  APP_RPC_RESPONSE,
-  ICC_RPC_PING,
-  ICC_RPC_INTERN_COUNT = ICC_RPC_PRIVATE
-};
-
-
-/**
- * Shorthand to set the id and callbacks arrays before registering the
- * RPC.
- */
-#define REGISTER_PREP(ids,callbacks,idx,cb) ids[idx] = 1; callbacks[idx]=cb;
-
-/**
- * Internal callback type. This is the expected signature of the
- * functions used in the custom registration process in the icc_rpc
- * module.
- */
-typedef void (*icc_callback_t)(hg_handle_t h, margo_instance_id mid);
-
-
-struct rpc_data {
-  hg_id_t        *rpc_ids;
-  icc_callback_t callback;
-};
-
-
-/**
- * Register RPCs to Margo instance MID. If the id in IDS is 0, the
- * corresponding RPC will not be registered. If it is not 0, the
- * RPC will be registered with the callback given in CALLBACKS, or
- * with NULL if no callback is given.
- *
- * Once registered the Mercury id of the RPC will be placed in the IDS
- * array.
- *
- * Returns 0 if the registrations went fine, -1 otherwise.
- *
- * WARNING:
- * The function pointers in CALLBACKS will be passed to RPCs handler,
- * the caller must make sure that they don’t go out of scope before
- * margo_finalize is called (how would a function go out of scope
- * though?).
- */
-int
-register_rpcs(margo_instance_id mid, icc_callback_t callbacks[ICC_RPC_COUNT], hg_id_t ids[ICC_RPC_COUNT]);
-
-
-/**
- * Return a path to the file storing the ICC address. The caller is
- * responsible for freeing it.
- * @param Identifier for the component (margo_server) (described in root_connections.h)
- */
-static inline char *
-icc_addr_file_opt(int server_id) {
-  const char *runtimedir = getenv("ADMIRE_DIR");
-  if (!runtimedir)
-    runtimedir = getenv("HOME");
-  if (!runtimedir)
-    runtimedir = ".";
-
-  char *path = (char*)malloc(strlen(runtimedir) + strlen(ADDR_FILENAME) + 3);
-  if (path) {
-    sprintf(path, "%s/%s%d", runtimedir, ADDR_FILENAME, server_id);
-    printf("OPENING PATH: %s\n", path);
-  }
-  return path;
-}
-
-
-/**
- * Send RPC identifed by RPC_CODE from Margo instance MID to the Margo
- * provider identified by ADDR & PROVID with input struct DATA.
- *
- * Returns 0 or -1 in case of error. RETCODE is filled with the RPC
- * return code.
- */
-int
-rpc_send(margo_instance_id mid, hg_addr_t addr, uint16_t provid, hg_id_t rpc_id,
-         void *data, int *retcode);
 
 
 /**
@@ -161,38 +69,127 @@ icc_to_margo_log_level(enum icc_log_level icc_log_level)
 }
 
 
+/**
+ * Shorthand to set the id and callbacks arrays before registering the
+ * RPC.
+ */
+#define REGISTER_PREP(ids,callbacks,idx,cb) ids[idx] = 1; callbacks[idx]=cb;
+
+/**
+ * Internal callback type. This is the expected signature of the
+ * functions used in the custom registration process in the icc_rpc
+ * module.
+ */
+typedef void (*icc_callback_t)(hg_handle_t h, margo_instance_id mid);
+
+struct rpc_data {
+  hg_id_t        *rpc_ids;
+  icc_callback_t callback;
+};
+
+
+/**
+ * RPC codes. Codes 1 to 127 are reserved for
+ * internal use.
+ *
+ * ICC_RPC_TARGET_ADDR_SEND: Send the Mercury target address of a
+ * server. This RPC is meant to be called from a *client* that wants
+ * to be able to receive RPCs and not just send them. The client needs
+ * to be started in MARGO_SERVER_MODE to have an address.
+ *
+ * For the public RPCs, see documentation in header icc.h.
+ */
+enum icc_rpc_code {
+  ICC_RPC_ERROR = 0,
+
+  /* internal RPCs */
+  ICC_RPC_TARGET_ADDR_SEND,
+
+  /* public RPCs */
+  ICC_RPC_TEST = 128,
+  ICC_RPC_ADHOC_NODES,
+  ICC_RPC_JOBMON_SUBMIT,
+  ICC_RPC_JOBMON_EXIT,
+  ICC_RPC_MALLEABILITY_AVAIL,
+
+  ICC_RPC_COUNT
+};
+
+/**
+ * Mercury-generated structs. Each struct is associated with one of
+ * the RPC identified by an icc_rpc_code (check the name for
+ * correspondance).
+ */
+
 /* Generic output struct */
 MERCURY_GEN_PROC(rpc_out_t, ((int64_t)(rc)))
 
+MERCURY_GEN_PROC(target_addr_in_t,
+                 ((hg_uint32_t)(jobid))
+                 ((hg_const_string_t)(type))
+                 ((hg_const_string_t)(addr_str))
+                 ((hg_uint16_t)(provid)))
 
-/* Mercury-generated struct
- *
- * /!\ Copied in the icc.h public header file, keep in sync!
- */
-MERCURY_GEN_PROC(target_addr_in_t, ((hg_const_string_t)(addr_str))
-                                   ((uint16_t)(provid)))
+MERCURY_GEN_PROC(test_in_t,
+                 ((hg_const_string_t)(clid))
+                 ((hg_uint32_t)(jobid))
+                 ((uint8_t)(number)))
 
-MERCURY_GEN_PROC(test_in_t, ((uint8_t)(number)))
-
-MERCURY_GEN_PROC(app_in_t, ((hg_const_string_t)(instruction)))
-
-MERCURY_GEN_PROC(malleability_avail_in_t, ((hg_const_string_t)(type))
-                                          ((hg_const_string_t)(portname))
-                                          ((uint32_t)(slurm_jobid))
-                                          ((uint32_t)(nnodes)))
+MERCURY_GEN_PROC(malleability_avail_in_t,
+                 ((hg_const_string_t)(clid))
+                 ((uint32_t)(jobid))
+                 ((hg_const_string_t)(type))
+                 ((hg_const_string_t)(portname))
+                 ((uint32_t)(nnodes)))
 
 MERCURY_GEN_PROC(adhoc_nodes_in_t,
-                 ((uint32_t)(slurm_jobid))
-                 ((uint32_t)(slurm_nnodes))
+                 ((hg_const_string_t)(clid))
+                 ((uint32_t)(jobid))
+                 ((uint32_t)(nnodes))
                  ((uint32_t)(adhoc_nnodes)))
 
 MERCURY_GEN_PROC(jobmon_submit_in_t,
-                 ((uint32_t)(slurm_jobid))
-                 ((uint32_t)(slurm_jobstepid))
-                 ((uint32_t)(slurm_nnodes)))
+                 ((hg_const_string_t)(clid))
+                 ((uint32_t)(jobid))
+                 ((uint32_t)(jobstepid))
+                 ((uint32_t)(nnodes)))
 
 MERCURY_GEN_PROC(jobmon_exit_in_t,
-                 ((uint32_t)(slurm_jobid))
-                 ((uint32_t)(slurm_jobstepid)))
+                 ((hg_const_string_t)(clid))
+                 ((uint32_t)(jobid))
+                 ((uint32_t)(jobstepid)))
+
+
+/**
+ * Register RPCs to Margo instance MID. If the id in IDS is 0, the
+ * corresponding RPC will not be registered. If it is not 0, the
+ * RPC will be registered with the callback given in CALLBACKS, or
+ * with NULL if no callback is given.
+ *
+ * Once registered the Mercury id of the RPC will be placed in the IDS
+ * array.
+ *
+ * Returns 0 if the registrations went fine, -1 otherwise.
+ *
+ * WARNING:
+ * The function pointers in CALLBACKS will be passed to RPCs handler,
+ * the caller must make sure that they don’t go out of scope before
+ * margo_finalize is called (how would a function go out of scope
+ * though?).
+ */
+int
+register_rpcs(margo_instance_id mid, icc_callback_t callbacks[ICC_RPC_COUNT], hg_id_t ids[ICC_RPC_COUNT]);
+
+
+/**
+ * Send RPC identifed by RPC_CODE from Margo instance MID to the Margo
+ * provider identified by ADDR & PROVID with input struct DATA.
+ *
+ * Returns 0 or -1 in case of error. RETCODE is filled with the RPC
+ * return code.
+ */
+int
+rpc_send(margo_instance_id mid, hg_addr_t addr, uint16_t provid, hg_id_t rpc_id,
+         void *data, int *retcode);
 
 #endif

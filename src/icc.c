@@ -24,13 +24,12 @@
 
 /* RPC callbacks */
 static void test_cb(hg_handle_t h, margo_instance_id mid);
-static void appman_cb(hg_handle_t h, margo_instance_id mid);
-
 
 struct icc_context {
   margo_instance_id mid;
   hg_addr_t         addr;
   uint16_t          provider_id;
+  const char        clid[16];   /* client id */
 };
 
 
@@ -69,7 +68,7 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
 
   FILE *f = fopen(path, "r");
   if (!f) {
-    margo_error(icc->mid, "Error opening ICC address file \"%s\": %s", path ? path : "(NULL)", strerror(errno));
+    margo_error(icc->mid, "Error opening IC address file \"%s\": %s", path ? path : "(NULL)", strerror(errno));
     free(path);
     rc = ICC_FAILURE;
     goto error;
@@ -78,7 +77,7 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
 
   char addr_str[ADDR_MAX_SIZE];
   if (!fgets(addr_str, ADDR_MAX_SIZE, f)) {
-    margo_error(icc->mid, "Error reading from ICC address file: %s", strerror(errno));
+    margo_error(icc->mid, "Error reading from IC address file: %s", strerror(errno));
     fclose(f);
     rc = ICC_FAILURE;
     goto error;
@@ -87,7 +86,7 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
 
   hret = margo_addr_lookup(icc->mid, addr_str, &icc->addr);
   if (hret != HG_SUCCESS) {
-    margo_error(icc->mid, "Could not get Margo address from ICC address file: %s", HG_Error_to_string(hret));
+    margo_error(icc->mid, "Could not get Margo address from IC address file: %s", HG_Error_to_string(hret));
     rc = ICC_FAILURE;
     goto error;
   }
@@ -97,23 +96,16 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
   /* register client RPCs (i.e cb is NULL)
      XX could be a for loop */
   REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TEST, NULL);
-  REGISTER_PREP(rpc_hg_ids, rpc_callbacks, APP_RPC_TEST, NULL);
   REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_MALLEABILITY_AVAIL, NULL);
   REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_JOBMON_SUBMIT, NULL);
   REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_JOBMON_EXIT, NULL);
   REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_ADHOC_NODES, NULL);
   /* ... prep registration of other RPCs here */
 
-  if (bidir == 1) {
+  if (bidir) {
     REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TARGET_ADDR_SEND, NULL);
     /* note this overwrites the previous registration without callback */
     REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TEST, test_cb);
-  }
-  else if (bidir == 2){
-    /*Test for APP MANAGER*/
-    REGISTER_PREP(rpc_hg_ids, rpc_callbacks, APP_RPC_RESPONSE, NULL);
-    /* note this overwrites the previous registration without callback */
-    REGISTER_PREP(rpc_hg_ids, rpc_callbacks, APP_RPC_TEST, appman_cb);//test_cb);
   }
 
   rc = register_rpcs(icc->mid, rpc_callbacks, rpc_hg_ids);
@@ -136,33 +128,14 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
       goto error;
     }
 
+    char *jobid = getenv("SLURM_JOBID");
+
+    rpc_in.jobid = jobid ? atoi(jobid) : 0;
+    rpc_in.type = "app";
     rpc_in.addr_str = addr_str;
     rpc_in.provid = MARGO_PROVIDER_ID_DEFAULT;
     rc = rpc_send(icc->mid, icc->addr, icc->provider_id,
                   rpc_hg_ids[ICC_RPC_TARGET_ADDR_SEND], &rpc_in, &rpc_rc);
-
-    if (rc || rpc_rc) {
-      margo_error(icc->mid, "Could not send target address of the bidirectional client");
-      rc = ICC_FAILURE;
-      goto error;
-    }
-  }
-  else if (bidir == 2){
-    char addr_str[ADDR_MAX_SIZE];
-    hg_size_t addr_str_size = ADDR_MAX_SIZE;
-    target_addr_in_t rpc_in;
-    int rpc_rc;
-
-    if (get_hg_addr(icc->mid, addr_str, &addr_str_size)) {
-      margo_error(icc->mid, "Could not get Mercury self address");
-      rc = ICC_FAILURE;
-      goto error;
-    }
-
-    rpc_in.addr_str = addr_str;
-    rpc_in.provid = MARGO_PROVIDER_ID_DEFAULT;
-    rc = rpc_send(icc->mid, icc->addr, icc->provider_id,
-                  rpc_hg_ids[APP_RPC_RESPONSE], &rpc_in, &rpc_rc);
 
     if (rc || rpc_rc) {
       margo_error(icc->mid, "Could not send target address of the bidirectional client");
@@ -204,26 +177,93 @@ icc_fini(struct icc_context *icc)
 
 
 int
-icc_rpc_send(struct icc_context *icc, enum icc_rpc_code rpc_code, void *data, int *retcode) {
-  if (!icc)
-    return ICC_FAILURE;
+icc_rpc_test(struct icc_context *icc, uint8_t number, int *retcode)
+{
+  int rc;
+  test_in_t in;
 
-  if (!data) {
-    margo_error(icc->mid, "Null RPC data argument");
-    return ICC_FAILURE;
-  }
+  CHECK_ICC(icc);
 
-  if (rpc_code <= ICC_RPC_PRIVATE || rpc_code >= ICC_RPC_COUNT) {
-    margo_error(icc->mid, "Unknown ICC RPC code %d", rpc_code);
-    return ICC_FAILURE;
-  }
+  in.clid = icc->clid;
+  in.number = number;
 
-  int rc = rpc_send(icc->mid, icc->addr, icc->provider_id, rpc_hg_ids[rpc_code],
-                    data, retcode);
+  rc = rpc_send(icc->mid, icc->addr, icc->provider_id, rpc_hg_ids[ICC_RPC_TEST], &in, retcode);
 
-  if (rc)
-    return ICC_FAILURE;
-  return ICC_SUCCESS;
+  return rc ? ICC_FAILURE : ICC_SUCCESS;
+}
+
+int
+icc_rpc_adhoc_nodes(struct icc_context *icc, uint32_t jobid, uint32_t nnodes, uint32_t adhoc_nnodes, int *retcode)
+{
+  int rc;
+  adhoc_nodes_in_t in;
+
+  CHECK_ICC(icc);
+
+  in.clid = icc->clid;
+  in.jobid = jobid;
+  in.nnodes = nnodes;
+  in.adhoc_nnodes = adhoc_nnodes;
+
+  rc = rpc_send(icc->mid, icc->addr, icc->provider_id, rpc_hg_ids[ICC_RPC_ADHOC_NODES], &in, retcode);
+
+  return rc ? ICC_FAILURE : ICC_SUCCESS;
+}
+
+int
+icc_rpc_jobmon_submit(struct icc_context *icc, uint32_t jobid, uint32_t jobstepid, uint32_t nnodes, int *retcode)
+{
+  int rc;
+  jobmon_submit_in_t in;
+
+  CHECK_ICC(icc);
+
+  in.clid = icc->clid;
+  in.jobid = jobid;
+  in.jobstepid = jobstepid;
+  in.nnodes = nnodes;
+
+  rc = rpc_send(icc->mid, icc->addr, icc->provider_id, rpc_hg_ids[ICC_RPC_JOBMON_SUBMIT], &in, retcode);
+
+  return rc ? ICC_FAILURE : ICC_SUCCESS;
+}
+
+int
+icc_rpc_jobmon_exit(struct icc_context *icc, uint32_t jobid, uint32_t jobstepid, int *retcode)
+{
+  int rc;
+  jobmon_exit_in_t in;
+
+  CHECK_ICC(icc);
+
+  in.clid = icc->clid;
+  in.jobid = jobid;
+  in.jobstepid = jobstepid;
+
+  rc = rpc_send(icc->mid, icc->addr, icc->provider_id, rpc_hg_ids[ICC_RPC_JOBMON_EXIT], &in, retcode);
+
+  return rc ? ICC_FAILURE : ICC_SUCCESS;
+}
+
+
+
+int
+icc_rpc_malleability_avail(struct icc_context *icc, char *type, char *portname, uint32_t jobid, uint32_t nnodes, int *retcode)
+{
+  int rc;
+  malleability_avail_in_t in;
+
+  CHECK_ICC(icc);
+
+  in.clid = icc->clid;
+  in.type = type;
+  in.portname = portname;
+  in.jobid = jobid;
+  in.nnodes = nnodes;
+
+  rc = rpc_send(icc->mid, icc->addr, icc->provider_id, rpc_hg_ids[ICC_RPC_MALLEABILITY_AVAIL], &in, retcode);
+
+  return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
 
 
@@ -242,32 +282,6 @@ test_cb(hg_handle_t h, margo_instance_id mid) {
     margo_error(mid, "Could not get RPC input: %s", HG_Error_to_string(hret));
   } else {
     margo_info(mid, "Got \"ICC\" RPC with argument %u\n", in.number);
-  }
-
-  hret = margo_respond(h, &out);
-  if (hret != HG_SUCCESS) {
-    margo_error(mid, "Could not respond to HPC");
-  }
-}
-
-
-
-static void
-appman_cb(hg_handle_t h, margo_instance_id mid)
-{
-  hg_return_t hret;
-  app_in_t in;
-  rpc_out_t out;
-
-  out.rc = ICC_SUCCESS;
-
-  hret = margo_get_input(h, &in);
-  if (hret != HG_SUCCESS) {
-    out.rc = ICC_FAILURE;
-    margo_error(mid, "Could not get RPC input: %s", HG_Error_to_string(hret));
-  } else {
-    if(in.instruction != NULL)
-      margo_info(mid, "Got \"APP\" RPC with argument %s\n", in.instruction);
   }
 
   hret = margo_respond(h, &out);

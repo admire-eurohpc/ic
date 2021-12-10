@@ -71,13 +71,7 @@ slurm_spank_local_user_init(spank_t sp,
     return -1;
   }
 
-  struct icc_rpc_jobmon_submit_in in = {
-    .slurm_jobid=jmctx.jobid,
-    .slurm_jobstepid=jmctx.jobstepid,
-    .slurm_nnodes=jmctx.nnodes,
-  };
-
-  rc = icc_rpc_send(icc, ICC_RPC_JOBMON_SUBMIT, &in, &rpc_retcode);
+  rc = icc_rpc_jobmon_submit(icc, jmctx.jobid, jmctx.jobstepid, jmctx.nnodes, &rpc_retcode);
   if (rc == ICC_SUCCESS) {
     slurm_info("RPC jobmon_submit successful: retcode=%d", rpc_retcode);
   } else {
@@ -116,12 +110,7 @@ slurm_spank_exit(spank_t sp,
     return 0;
   }
 
-  struct icc_rpc_jobmon_exit_in in = {
-    .slurm_jobid=jmctx.jobid,
-    .slurm_jobstepid=jmctx.jobstepid,
-  };
-
-  rc = icc_rpc_send(icc, ICC_RPC_JOBMON_EXIT, &in, &rpc_retcode);
+  rc = icc_rpc_jobmon_exit(icc, jmctx.jobid, jmctx.jobstepid, &rpc_retcode);
   if (rc == ICC_SUCCESS) {
     slurm_info("RPC jobmon_exit successful: retcode=%d", rpc_retcode);
   } else {
