@@ -141,7 +141,7 @@ main(int argc, char **argv)
     exit(EXIT_FAILURE);
 
   if(rank == ROOTRANK) {
-    for (int i = 0; i < length; i++)
+    for (unsigned int i = 0; i < length; i++)
       data[i] = rand() / (RAND_MAX / 256);
   }
 

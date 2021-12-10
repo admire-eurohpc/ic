@@ -80,8 +80,8 @@ $(icc_server_bin): CFLAGS += `$(PKG_CONFIG) --cflags margo`
 $(icc_server_bin): LDLIBS += `$(PKG_CONFIG) --libs margo hiredis` -pthread -Wl,--no-undefined
 
 $(libicc_so): icc_rpc.o
-$(libicc_so): CFLAGS += `$(PKG_CONFIG) --cflags margo`
-$(libicc_so): LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined,-h$(libicc_minorname)
+$(libicc_so): CFLAGS += `$(PKG_CONFIG) --cflags margo uuid`
+$(libicc_so): LDLIBS += `$(PKG_CONFIG) --libs margo uuid` -Wl,--no-undefined,-h$(libicc_minorname)
 
 $(icc_client_bin): LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined -L. -licc
 

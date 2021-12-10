@@ -2,6 +2,7 @@
 #include <margo.h>
 #include <stdlib.h>             /* malloc */
 #include <string.h>
+#include <uuid.h>
 
 #include "icc_rpc.h"
 
@@ -29,7 +30,7 @@ struct icc_context {
   margo_instance_id mid;
   hg_addr_t         addr;
   uint16_t          provider_id;
-  const char        clid[16];   /* client id */
+  char              clid[UUID_STR_LEN]; /* client uuid */
 };
 
 
@@ -93,6 +94,10 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
 
   icc->provider_id = MARGO_PROVIDER_ID_DEFAULT;
 
+  uuid_t uuid;
+  uuid_generate(uuid);
+  uuid_unparse(uuid, icc->clid);
+
   /* register client RPCs (i.e cb is NULL)
      XX could be a for loop */
   REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TEST, NULL);
@@ -129,11 +134,12 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
     }
 
     char *jobid = getenv("SLURM_JOBID");
-
     rpc_in.jobid = jobid ? atoi(jobid) : 0;
     rpc_in.type = "app";
     rpc_in.addr_str = addr_str;
     rpc_in.provid = MARGO_PROVIDER_ID_DEFAULT;
+    rpc_in.clid = icc->clid;
+
     rc = rpc_send(icc->mid, icc->addr, icc->provider_id,
                   rpc_hg_ids[ICC_RPC_TARGET_ADDR_SEND], &rpc_in, &rpc_rc);
 

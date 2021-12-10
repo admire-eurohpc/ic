@@ -189,6 +189,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
 static void
 target_addr_send(hg_handle_t h, margo_instance_id mid) {
   hg_return_t hret;
+  int dbret;
 
   target_addr_in_t in;
   rpc_out_t out;
@@ -201,11 +202,10 @@ target_addr_send(hg_handle_t h, margo_instance_id mid) {
     margo_error(mid, "Could not get RPC input");
   }
 
-  margo_info(mid, "Got target initiation request with address: %s", in.addr_str);
-  int dbrc;
-  dbrc = icdb_command(icdb, "HMSET jobid:%"PRIu32" type %s addr %s", in.jobid, in.type, in.addr_str);
+  margo_info(mid, "Got target initiation request from client %s with address: %s", in.clid, in.addr_str);
 
-  if (dbrc != ICDB_SUCCESS) {
+  dbret = icdb_command(icdb, "HMSET clid:%s jobid %"PRIu32" type %s addr %s", in.clid, in.jobid, in.type, in.addr_str);
+  if (dbret != ICDB_SUCCESS) {
     margo_error(mid, "Could not write to IC database: %s", icdb_errstr(icdb));
     out.rc = ICC_FAILURE;
   }
@@ -326,7 +326,7 @@ test_cb(hg_handle_t h, margo_instance_id mid)
     out.rc = ICC_FAILURE;
     margo_error(mid, "Could not get RPC input: %s", HG_Error_to_string(hret));
   } else {
-    margo_info(mid, "Got \"TEST\" RPC with argument %u\n", in.number);
+    margo_info(mid, "Got \"TEST\" RPC from client %s with argument %u\n", in.clid, in.number);
   }
 
   hret = margo_respond(h, &out);

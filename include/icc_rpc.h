@@ -125,6 +125,7 @@ enum icc_rpc_code {
 MERCURY_GEN_PROC(rpc_out_t, ((int64_t)(rc)))
 
 MERCURY_GEN_PROC(target_addr_in_t,
+                 ((hg_const_string_t)(clid))
                  ((hg_uint32_t)(jobid))
                  ((hg_const_string_t)(type))
                  ((hg_const_string_t)(addr_str))
