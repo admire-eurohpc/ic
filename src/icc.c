@@ -76,8 +76,8 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
   }
   free(path);
 
-  char addr_str[ADDR_MAX_SIZE];
-  if (!fgets(addr_str, ADDR_MAX_SIZE, f)) {
+  char addr_str[ICC_ADDR_LEN];
+  if (!fgets(addr_str, ICC_ADDR_LEN, f)) {
     margo_error(icc->mid, "Error reading from IC address file: %s", strerror(errno));
     fclose(f);
     rc = ICC_FAILURE;
@@ -120,10 +120,10 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
     goto error;
   }
 
-  /* initialize RPC target */
+  /* send address to IC to be able to receive RPCs */
   if (bidir == 1) {
-    char addr_str[ADDR_MAX_SIZE];
-    hg_size_t addr_str_size = ADDR_MAX_SIZE;
+    char addr_str[ICC_ADDR_LEN];
+    hg_size_t addr_str_size = ICC_ADDR_LEN;
     target_addr_in_t rpc_in;
     int rpc_rc;
 

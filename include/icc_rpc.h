@@ -7,10 +7,11 @@
 #include <mercury_macros.h>
 #include <mercury_proc_string.h>
 
+#include "icc_priv.h"
 #include "icc.h"
 
-#define ADDR_FILENAME "icc.addr"
-#define ADDR_MAX_SIZE 128
+
+#define ICC_ADDR_FILENAME "icc.addr"
 #define HG_PROVIDER "ofi+tcp" /* /!\ Hg provider != Margo provider  */
 #define RPC_TIMEOUT_MS 2000
 
@@ -18,7 +19,7 @@
 #define MARGO_PROVIDER_ID_DEFAULT 12
 
 
-#define CHECK_ICC(icc)  if (!(icc)) return ICC_FAILURE;
+#define CHECK_ICC(icc)  if (!(icc)) { return ICC_FAILURE; }
 
 
 /**

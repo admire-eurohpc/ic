@@ -12,7 +12,7 @@
 
 
 /* internal RPCs callbacks */
-static void target_addr_send(hg_handle_t h, margo_instance_id mid);
+static void target_addr_send_cb(hg_handle_t h, margo_instance_id mid);
 
 /* public RPCs callbacks */
 static void test_cb(hg_handle_t h, margo_instance_id mid);
@@ -79,7 +79,6 @@ malleability_manager_th(void){
 }
 
 
-
 int
 main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
 {
@@ -92,8 +91,8 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   }
   margo_set_log_level(mid, MARGO_LOG_INFO);
 
-  char addr_str[ADDR_MAX_SIZE];
-  hg_size_t addr_str_size = ADDR_MAX_SIZE;
+  char addr_str[ICC_ADDR_LEN];
+  hg_size_t addr_str_size = ICC_ADDR_LEN;
   if (get_hg_addr(mid, addr_str, &addr_str_size)) {
     margo_error(mid, "Could not get Mercury address");
     margo_finalize(mid);
@@ -140,7 +139,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
     return ICC_FAILURE;
   }
 
-  REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_TARGET_ADDR_SEND, target_addr_send);
+  REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_TARGET_ADDR_SEND, target_addr_send_cb);
 
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_TEST, test_cb);
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_MALLEABILITY_AVAIL, malleability_avail_cb);
@@ -161,8 +160,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
     margo_error(mid, "Could not initialize IC database");
     margo_finalize(mid);
     return ICC_FAILURE;
-  }
-  else if (icdb_rc != ICDB_SUCCESS) {
+  } else if (icdb_rc != ICDB_SUCCESS) {
     margo_error(mid, "Could not initialize IC database: %s", icdb_errstr(icdb));
     margo_finalize(mid);
     return ICC_FAILURE;
@@ -187,7 +185,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
 
 /* RPC callbacks */
 static void
-target_addr_send(hg_handle_t h, margo_instance_id mid) {
+target_addr_send_cb(hg_handle_t h, margo_instance_id mid) {
   hg_return_t hret;
   int dbret;
 
@@ -204,9 +202,10 @@ target_addr_send(hg_handle_t h, margo_instance_id mid) {
 
   margo_info(mid, "Got target initiation request from client %s with address: %s", in.clid, in.addr_str);
 
-  dbret = icdb_command(icdb, "HMSET clid:%s jobid %"PRIu32" type %s addr %s", in.clid, in.jobid, in.type, in.addr_str);
+  dbret = icdb_setclient(icdb, in.clid, in.type, in.addr_str, in.provid, in.jobid);
+
   if (dbret != ICDB_SUCCESS) {
-    margo_error(mid, "Could not write to IC database: %s", icdb_errstr(icdb));
+    margo_error(mid, "Error writing to IC database: %s", icdb_errstr(icdb));
     out.rc = ICC_FAILURE;
   }
 
@@ -219,11 +218,13 @@ target_addr_send(hg_handle_t h, margo_instance_id mid) {
     out.rc = ICC_FAILURE;
   }
 
+  /* XX remove test rpc from here */
   const struct hg_info *info = margo_get_info(h);
   struct rpc_data *data = margo_registered_data(mid, info->id);
   hg_id_t *ids = data->rpc_ids;
 
   test_in_t testin;
+  testin.clid = "";
   testin.number = 13;
   int rc = rpc_send(mid, addr, in.provid, ids[ICC_RPC_TEST], &testin, &rpc_rc);
   if (rc) {

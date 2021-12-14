@@ -50,9 +50,9 @@ icc_addr_file()
   if (!runtimedir)
     runtimedir = ".";
 
-  char *path = (char *)malloc(strlen(runtimedir) + strlen(ADDR_FILENAME) + 2);
+  char *path = (char *)malloc(strlen(runtimedir) + strlen(ICC_ADDR_FILENAME) + 2);
   if (path) {
-    sprintf(path, "%s/%s", runtimedir, ADDR_FILENAME);
+    sprintf(path, "%s/%s", runtimedir, ICC_ADDR_FILENAME);
   }
   return path;
 }

@@ -41,7 +41,8 @@ process_opts(int val __attribute__((unused)), const char *optarg, int remote)
   /* if we're here => some adhoc options were passed to the Slurm CLI */
   adhoc_flag = 1;
 
-  adhoc_nnodes = strtol(optarg, NULL, 0);
+  /* XX check for overflow */
+  adhoc_nnodes = strtoul(optarg, NULL, 0);
   if (adhoc_nnodes == 0)
     return -1;
 

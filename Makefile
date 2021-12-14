@@ -73,10 +73,10 @@ uninstall:
 # necessary for automatic dependency handling
 $(objects): %.o: %.c
 
-icdb.o: CFLAGS += `$(PKG_CONFIG) --cflags hiredis`
+icdb.o: CFLAGS += `$(PKG_CONFIG) --cflags hiredis uuid`
 
 $(icc_server_bin): icc_rpc.o icdb.o
-$(icc_server_bin): CFLAGS += `$(PKG_CONFIG) --cflags margo`
+$(icc_server_bin): CFLAGS += `$(PKG_CONFIG) --cflags margo uuid`
 $(icc_server_bin): LDLIBS += `$(PKG_CONFIG) --libs margo hiredis` -pthread -Wl,--no-undefined
 
 $(libicc_so): icc_rpc.o
