@@ -43,13 +43,6 @@ char *icdb_errstr(struct icdb_context *icdb);
  */
 int icdb_command(struct icdb_context *icdb, const char *format, ...);
 
-
-/**
- * Add an IC client identified by CLID to the database.
- */
-int icdb_setclient(struct icdb_context *icdb, const char *clid,
-                   const char *type, const char *addr, uint16_t provid, uint32_t jobid);
-
 /**
  * IC client
  */
@@ -62,9 +55,20 @@ struct icdb_client {
 };
 
 /**
+ * Add an IC client identified by CLID to the database.
+ */
+int icdb_setclient(struct icdb_context *icdb, const char *clid,
+                   const char *type, const char *addr, uint16_t provid, uint32_t jobid);
+
+/**
  * Get the IC client CLID.
  */
 int icdb_getclient(struct icdb_context *icdb, const char *clid, struct icdb_client *client);
+
+/**
+ * Delete IC client CLID.
+ */
+int icdb_delclient(struct icdb_context *icdb, const char *clid);
 
 
 #endif

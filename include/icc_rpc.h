@@ -93,18 +93,20 @@ struct rpc_data {
  * RPC codes. Codes 1 to 127 are reserved for
  * internal use.
  *
- * ICC_RPC_TARGET_ADDR_SEND: Send the Mercury target address of a
- * server. This RPC is meant to be called from a *client* that wants
- * to be able to receive RPCs and not just send them. The client needs
- * to be started in MARGO_SERVER_MODE to have an address.
+ * ICC_RPC_TARGET_REGISTER: Register an IC "target". Once registered,
+ * and IC client can both send and receive RPC server. The client
+ * needs to be started in MARGO_SERVER_MODE to have an address.
  *
- * For the public RPCs, see documentation in header icc.h.
+ * ICC_RPC_TARGET_DEREGISTER: Deregister an IC "target".
+ *
+ * For the public RPCs, see the functions documentation in icc.h.
  */
 enum icc_rpc_code {
   ICC_RPC_ERROR = 0,
 
   /* internal RPCs */
-  ICC_RPC_TARGET_ADDR_SEND,
+  ICC_RPC_TARGET_REGISTER,
+  ICC_RPC_TARGET_DEREGISTER,
 
   /* public RPCs */
   ICC_RPC_TEST = 128,
@@ -125,12 +127,15 @@ enum icc_rpc_code {
 /* Generic output struct */
 MERCURY_GEN_PROC(rpc_out_t, ((int64_t)(rc)))
 
-MERCURY_GEN_PROC(target_addr_in_t,
+MERCURY_GEN_PROC(target_register_in_t,
                  ((hg_const_string_t)(clid))
                  ((hg_uint32_t)(jobid))
                  ((hg_const_string_t)(type))
                  ((hg_const_string_t)(addr_str))
                  ((hg_uint16_t)(provid)))
+
+MERCURY_GEN_PROC(target_deregister_in_t,
+                 ((hg_const_string_t)(clid)))
 
 MERCURY_GEN_PROC(test_in_t,
                  ((hg_const_string_t)(clid))

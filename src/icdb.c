@@ -200,6 +200,30 @@ icdb_getclient(struct icdb_context *icdb, const char *clid, struct icdb_client *
 }
 
 
+int
+icdb_delclient(struct icdb_context *icdb, const char *clid)
+{
+  CHECK_ICDB(icdb);
+
+  icdb->status = ICDB_SUCCESS;
+
+  if (!icdb->redisctx || !clid) {
+    ICDB_SET_STATUS(icdb, ICDB_EPARAM, "Missing parameter");
+    return icdb->status;
+  }
+
+  redisReply *rep;
+  rep = redisCommand(icdb->redisctx, "DEL client:%s", clid);
+
+  /* DEL returns the number of keys that were deleted */
+  if (rep->type != REDIS_REPLY_INTEGER || rep->integer != 1) {
+    ICDB_SET_STATUS(icdb, ICDB_EOTHER, "Wrong number of client deleted");
+  }
+
+  return icdb->status;
+}
+
+
 /* utils */
 static int
 _icdb_set_status(struct icdb_context *icdb, int status, const char *funcname, const char *format, ...)

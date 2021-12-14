@@ -12,7 +12,8 @@
 
 
 /* internal RPCs callbacks */
-static void target_addr_send_cb(hg_handle_t h, margo_instance_id mid);
+static void target_register_cb(hg_handle_t h, margo_instance_id mid);
+static void target_deregister_cb(hg_handle_t h, margo_instance_id mid);
 
 /* public RPCs callbacks */
 static void test_cb(hg_handle_t h, margo_instance_id mid);
@@ -139,7 +140,8 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
     return ICC_FAILURE;
   }
 
-  REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_TARGET_ADDR_SEND, target_addr_send_cb);
+  REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_TARGET_REGISTER, target_register_cb);
+  REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_TARGET_DEREGISTER, target_deregister_cb);
 
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_TEST, test_cb);
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_MALLEABILITY_AVAIL, malleability_avail_cb);
@@ -182,14 +184,14 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
 }
 
 
-
 /* RPC callbacks */
 static void
-target_addr_send_cb(hg_handle_t h, margo_instance_id mid) {
+target_register_cb(hg_handle_t h, margo_instance_id mid)
+{
   hg_return_t hret;
   int dbret;
 
-  target_addr_in_t in;
+  target_register_in_t in;
   rpc_out_t out;
 
   out.rc = ICC_SUCCESS;
@@ -200,7 +202,7 @@ target_addr_send_cb(hg_handle_t h, margo_instance_id mid) {
     margo_error(mid, "Could not get RPC input");
   }
 
-  margo_info(mid, "Got target initiation request from client %s with address: %s", in.clid, in.addr_str);
+  margo_info(mid, "Registering client %s", in.clid);
 
   dbret = icdb_setclient(icdb, in.clid, in.type, in.addr_str, in.provid, in.jobid);
 
@@ -209,32 +211,48 @@ target_addr_send_cb(hg_handle_t h, margo_instance_id mid) {
     out.rc = ICC_FAILURE;
   }
 
-  hg_addr_t addr;
-  int rpc_rc;
-
-  hret = margo_addr_lookup(mid, in.addr_str, &addr);
+  hret = margo_respond(h, &out);
   if (hret != HG_SUCCESS) {
-    margo_error(mid, "Could not get Margo address: %s", HG_Error_to_string(hret));
-    out.rc = ICC_FAILURE;
+    /* XX prefix log with __func__ */
+    margo_error(mid, "Could not respond to RPC");
   }
 
-  /* XX remove test rpc from here */
-  const struct hg_info *info = margo_get_info(h);
-  struct rpc_data *data = margo_registered_data(mid, info->id);
-  hg_id_t *ids = data->rpc_ids;
+  hret = margo_destroy(h);
+  if (hret != HG_SUCCESS) {
+    margo_error(mid, "Could not destroy Margo RPC handle: %s", HG_Error_to_string(hret));
+  }
+}
 
-  test_in_t testin;
-  testin.clid = "";
-  testin.number = 13;
-  int rc = rpc_send(mid, addr, in.provid, ids[ICC_RPC_TEST], &testin, &rpc_rc);
-  if (rc) {
-    margo_error(mid, "Could not send RPC %d", ICC_RPC_TEST);
+
+static void
+target_deregister_cb(hg_handle_t h, margo_instance_id mid)
+{
+  hg_return_t hret;
+  int dbret;
+
+  target_deregister_in_t in;
+  rpc_out_t out;
+
+  out.rc = ICC_SUCCESS;
+
+  hret = margo_get_input(h, &in);
+  if (hret != HG_SUCCESS) {
+    out.rc = ICC_FAILURE;
+    margo_error(mid, "Could not get RPC input");
+  }
+
+  margo_info(mid, "Deregistering client %s", in.clid);
+
+  dbret = icdb_delclient(icdb, in.clid);
+
+  if (dbret != ICDB_SUCCESS) {
+    margo_error(mid, "Error deleting client %s: %s", in.clid, icdb_errstr(icdb));
     out.rc = ICC_FAILURE;
   }
 
   hret = margo_respond(h, &out);
   if (hret != HG_SUCCESS) {
-    margo_error(mid, "Could not respond to HPC");
+    margo_error(mid, "Could not respond to RPC");
   }
 
   hret = margo_destroy(h);

@@ -20,6 +20,7 @@
  * do we need an include directory?
  * Factorize boilerplate out of callbacks
  * Mercury macros move to .c?
+ * client_(de)register -> target_register?
 */
 
 
@@ -108,7 +109,8 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
   /* ... prep registration of other RPCs here */
 
   if (bidir) {
-    REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TARGET_ADDR_SEND, NULL);
+    REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TARGET_REGISTER, NULL);
+    REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TARGET_DEREGISTER, NULL);
     /* note this overwrites the previous registration without callback */
     REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TEST, test_cb);
   }
@@ -124,7 +126,7 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
   if (bidir == 1) {
     char addr_str[ICC_ADDR_LEN];
     hg_size_t addr_str_size = ICC_ADDR_LEN;
-    target_addr_in_t rpc_in;
+    target_register_in_t rpc_in;
     int rpc_rc;
 
     if (get_hg_addr(icc->mid, addr_str, &addr_str_size)) {
@@ -141,10 +143,10 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
     rpc_in.clid = icc->clid;
 
     rc = rpc_send(icc->mid, icc->addr, icc->provider_id,
-                  rpc_hg_ids[ICC_RPC_TARGET_ADDR_SEND], &rpc_in, &rpc_rc);
+                  rpc_hg_ids[ICC_RPC_TARGET_REGISTER], &rpc_in, &rpc_rc);
 
     if (rc || rpc_rc) {
-      margo_error(icc->mid, "Could not send target address of the bidirectional client");
+      margo_error(icc->mid, "Could not register address of the bidirectional client to the IC");
       rc = ICC_FAILURE;
       goto error;
     }
@@ -166,10 +168,22 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
 int
 icc_fini(struct icc_context *icc)
 {
-  int rc = ICC_SUCCESS;
+  int rc, rpcrc;
+
+  rc = ICC_SUCCESS;
 
   if (!icc)
     return rc;
+
+  target_deregister_in_t in;
+  in.clid = icc->clid;
+
+  rc = rpc_send(icc->mid, icc->addr, icc->provider_id,
+		rpc_hg_ids[ICC_RPC_TARGET_DEREGISTER], &in, &rpcrc);
+
+  if (rc || rpcrc) {
+    margo_error(icc->mid, "Could not deregister target to IC");
+  }
 
   if (margo_addr_free(icc->mid, icc->addr) != HG_SUCCESS) {
     margo_error(icc->mid, "Could not free Margo address");
