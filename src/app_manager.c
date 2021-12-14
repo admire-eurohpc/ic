@@ -53,7 +53,7 @@ main(int argc, char **argv) {
   int rc;
 
   while(1) {
-    icc_init(ICC_LOG_INFO, bidir, &icc); //bidir = 1
+    icc_init(ICC_LOG_INFO, bidir, ICC_TYPE_UNDEFINED, &icc); //bidir = 1
     assert(icc != NULL);
 
     /* We send 32, but we expect the answer with the address*/

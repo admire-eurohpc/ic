@@ -77,7 +77,7 @@ main(int argc, char **argv)
   MPI_Get_processor_name(procname, &len);
 
   struct icc_context *icc = NULL;
-  icc_init(ICC_LOG_INFO, 0, &icc);
+  icc_init(ICC_LOG_INFO, 0, ICC_TYPE_MPI, &icc);
   assert(icc);
 
   int rc;

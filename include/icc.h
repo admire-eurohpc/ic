@@ -14,21 +14,46 @@ struct icc_context;
 #define ICC_FAILURE -1
 
 
-/* Log levels lifted from Margo */
+/* Log levels, lifted from Margo */
 enum icc_log_level {
-    ICC_LOG_EXTERNAL,
-    ICC_LOG_TRACE,
-    ICC_LOG_DEBUG,
-    ICC_LOG_INFO,
-    ICC_LOG_WARNING,
-    ICC_LOG_ERROR,
-    ICC_LOG_CRITICAL
+  ICC_LOG_EXTERNAL,
+  ICC_LOG_TRACE,
+  ICC_LOG_DEBUG,
+  ICC_LOG_INFO,
+  ICC_LOG_WARNING,
+  ICC_LOG_ERROR,
+  ICC_LOG_CRITICAL
 };
 
-struct app_rpc_test_in {
-  const char * instruction;
-
+/**
+ * Type of IC client.
+ */
+enum icc_client_type {
+  ICC_TYPE_UNDEFINED,
+  ICC_TYPE_MPI,
+  ICC_TYPE_FLEXMPI,
+  ICC_TYPE_ADHOCCLI,
+  ICC_TYPE_JOBMON,
+  ICC_TYPE_COUNT,
 };
+
+static inline const char *
+icc_client_type_str(enum icc_client_type type) {
+  switch (type) {
+  case ICC_TYPE_UNDEFINED:
+    return "undefined";
+  case ICC_TYPE_MPI:
+    return "mpi";
+  case ICC_TYPE_FLEXMPI:
+    return "flexmpi";
+  case ICC_TYPE_ADHOCCLI:
+   return "adhoccli";
+  case ICC_TYPE_JOBMON:
+   return "jobmon";
+  default:
+    return "error";
+  }
+}
 
 
 /**
@@ -41,7 +66,7 @@ struct app_rpc_test_in {
  *
  * Return ICC_SUCCESS or error code.
  */
-int icc_init(enum icc_log_level log_level, int bidirectional, struct icc_context **icc);
+int icc_init(enum icc_log_level log_level, int bidirectional, enum icc_client_type typeid, struct icc_context **icc);
 
 
 /**
@@ -50,6 +75,9 @@ int icc_init(enum icc_log_level log_level, int bidirectional, struct icc_context
  * Return ICC_SUCCESS or an error code.
  */
 int icc_fini(struct icc_context *icc);
+
+
+int icc_wait(struct icc_context *icc);
 
 
 /**

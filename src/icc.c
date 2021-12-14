@@ -41,7 +41,7 @@ static icc_callback_t rpc_callbacks[ICC_RPC_COUNT] = { NULL };
 
 /* public functions */
 int
-icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_context)
+icc_init(enum icc_log_level log_level, int bidir, enum icc_client_type typecode, struct icc_context **icc_context)
 {
   hg_return_t hret;
   int rc = ICC_SUCCESS;
@@ -137,10 +137,10 @@ icc_init(enum icc_log_level log_level, int bidir, struct icc_context **icc_conte
 
     char *jobid = getenv("SLURM_JOBID");
     rpc_in.jobid = jobid ? atoi(jobid) : 0;
-    rpc_in.type = "app";
     rpc_in.addr_str = addr_str;
     rpc_in.provid = MARGO_PROVIDER_ID_DEFAULT;
     rpc_in.clid = icc->clid;
+    rpc_in.type = icc_client_type_str(typecode);
 
     rc = rpc_send(icc->mid, icc->addr, icc->provider_id,
                   rpc_hg_ids[ICC_RPC_TARGET_REGISTER], &rpc_in, &rpc_rc);

@@ -167,9 +167,7 @@ icdb_getclient(struct icdb_context *icdb, const char *clid, struct icdb_client *
   }
 
   redisReply *rep;
-  redisContext *ctx = icdb->redisctx;
-
-  rep = redisCommand(ctx, "HGETALL client:%s", clid);
+  rep = redisCommand(icdb->redisctx, "HGETALL client:%s", clid);
 
   /* HGETALL returns all keys followed by their respective value */
   for (size_t i = 0; i < rep->elements; i++) {

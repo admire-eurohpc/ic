@@ -42,7 +42,7 @@ main(int argc, char **argv)
   int rpc_retcode;
 
   struct icc_context *icc;
-  icc_init(ICC_LOG_INFO, bidir, &icc);
+  icc_init(ICC_LOG_INFO, bidir, ICC_TYPE_UNDEFINED, &icc);
   assert(icc != NULL);
 
   /* struct icc_rpc_test_in rpc_in = { .number=32, .jobid=0 }; */
