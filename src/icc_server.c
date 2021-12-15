@@ -34,7 +34,7 @@ char * next_instruction = NULL;
 
 /*Thread that executes the Malleability Manager function*/
 void
-malleability_manager_th(void){
+malleability_manager_th(void *arg __attribute__((unused))){
   /*Create vector*/
   for(int i = 0; i < 5; i++){
     switch(i) {
@@ -84,10 +84,11 @@ int
 main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
 {
   margo_instance_id mid;
+  int rc;
 
-  mid = margo_init(HG_PROVIDER, MARGO_SERVER_MODE, 0, -1);
+  mid = margo_init(HG_PROTOCOL, MARGO_SERVER_MODE, 0, 2); /* use two extra ULTs */
   if (!mid) {
-    margo_error(mid, "Error initializing Margo instance with Mercury provider %s", HG_PROVIDER);
+    margo_error(mid, "Error initializing Margo instance with Mercury provider %s", HG_PROTOCOL);
     return ICC_FAILURE;
   }
   margo_set_log_level(mid, MARGO_LOG_INFO);
@@ -133,6 +134,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   icc_callback_t callbacks[ICC_RPC_COUNT] = { NULL }; /* callback table */
 
   hg_bool_t flag;
+  /* XX fix test */
   margo_provider_registered_name(mid, "icc_test", MARGO_PROVIDER_ID_DEFAULT, &rpc_ids[ICC_RPC_COUNT], &flag);
   if(flag == HG_TRUE) {
     margo_error(mid, "Provider %d already exists", MARGO_PROVIDER_ID_DEFAULT);
@@ -142,7 +144,6 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
 
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_TARGET_REGISTER, target_register_cb);
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_TARGET_DEREGISTER, target_deregister_cb);
-
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_TEST, test_cb);
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_MALLEABILITY_AVAIL, malleability_avail_cb);
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_JOBMON_SUBMIT, jobmon_submit_cb);
@@ -156,26 +157,29 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   }
 
   /* initialize connection to DB */
-  int icdb_rc;
-  icdb_rc = icdb_init(&icdb);
+  rc = icdb_init(&icdb);
   if (!icdb) {
     margo_error(mid, "Could not initialize IC database");
     margo_finalize(mid);
     return ICC_FAILURE;
-  } else if (icdb_rc != ICDB_SUCCESS) {
+  } else if (rc != ICDB_SUCCESS) {
     margo_error(mid, "Could not initialize IC database: %s", icdb_errstr(icdb));
     margo_finalize(mid);
     return ICC_FAILURE;
   }
 
-  /*Thread components*/
-  pthread_t mm_th;
-  pthread_create(&mm_th, NULL, (void*)malleability_manager_th, NULL);
+  /* XX TEMP */
+  /* run a separate "malleability" thread taken from the pool of Margo ULTs */
+  ABT_pool pool;
+  margo_get_handler_pool(mid, &pool);
+  rc = ABT_thread_create(pool, malleability_manager_th, NULL, ABT_THREAD_ATTR_NULL, NULL);
+  if (rc != 0) {
+    margo_error(mid, "Could not create malleability ULT (ret = %d)", rc);
+    margo_finalize(mid);
+    return ICC_FAILURE;
+  }
 
   margo_wait_for_finalize(mid);
-
-  /*Join threads*/
-  pthread_join(mm_th, NULL);
 
   /* close connection to DB */
   icdb_fini(&icdb);

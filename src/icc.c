@@ -52,7 +52,7 @@ icc_init(enum icc_log_level log_level, int bidir, enum icc_client_type typecode,
   if (!icc)
     return -errno;
 
-  icc->mid = margo_init(HG_PROVIDER,
+  icc->mid = margo_init(HG_PROTOCOL,
                         bidir ? MARGO_SERVER_MODE : MARGO_CLIENT_MODE, 0, -1);
   if (!icc->mid) {
     rc = ICC_FAILURE;

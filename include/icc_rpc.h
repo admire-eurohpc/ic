@@ -12,7 +12,7 @@
 
 
 #define ICC_ADDR_FILENAME "icc.addr"
-#define HG_PROVIDER "ofi+tcp" /* /!\ Hg provider != Margo provider  */
+#define HG_PROTOCOL "ofi+tcp"
 #define RPC_TIMEOUT_MS 2000
 
 /* Margo provider != Hg network provider */
