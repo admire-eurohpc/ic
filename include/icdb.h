@@ -5,13 +5,14 @@
 #include "icc_priv.h"           /* ICC_XX_LEN */
 
 
-#define ICDB_FAILURE -1
-#define ICDB_SUCCESS 0
-
-#define ICDB_EDB       4        /* DB error */
-#define ICDB_ENOMEM    5        /* out of memory */
-#define ICDB_EPARAM    6        /* wrong parameter */
-#define ICDB_EOTHER    2        /* misc errors */
+#define ICDB_SUCCESS  0
+#define ICDB_FAILURE  1         /* generic error */
+#define ICDB_EPROTO   2         /* db protocol error */
+#define ICDB_E2BIG    3         /* buffer too small */
+#define ICDB_EPARAM   4         /* wrong parameter */
+#define ICDB_EBADRESP 5         /* bad DB response */
+#define ICDB_ENOMEM   6         /* out of memory */
+#define ICDB_NORESULT 7         /* no result to query */
 
 #define ICDB_ERRSTR_LEN 256
 
@@ -54,6 +55,19 @@ struct icdb_client {
   uint32_t jobid;
 };
 
+inline void
+icdb_initclient(struct icdb_client *client) {
+  if (!client)
+    return;
+
+  client->clid[0] = '\0';
+  client->type[0] = '\0';
+  client->addr[0] = '\0';
+  client->provid = 0;
+  client->jobid = 0;
+}
+
+
 /**
  * Add an IC client identified by CLID to the database.
  */
@@ -62,8 +76,32 @@ int icdb_setclient(struct icdb_context *icdb, const char *clid,
 
 /**
  * Get the IC client CLID.
+ *
+ * Returns ICDB_SUCCESS or and error code in case of error. In
+ * particular, ICDB_NORESULT is returned if there is no client with
+ * this ID.
  */
 int icdb_getclient(struct icdb_context *icdb, const char *clid, struct icdb_client *client);
+
+
+/**
+ * Get no more than COUNT IC clients into the array CLIENTS of size
+ * SIZE. Filter by TYPE or JOBID. If TYPE is NULL or JOBID is 0, the
+ * corresponding filter is not applied.
+ *
+ * The number of clients found is returned in COUNT. ICDB_E2BIG is
+ * returned if CLIENTS is too small to store them all. In this case,
+ * the caller has to resize the array accordingly. Note that because
+ * the filtering XX
+ *
+ * This is a cursor based iterator: call with CURSOR = 0 the first
+ * time, then pass the cursor back to the next calls, until it comes
+ * back 0, at which point all clients have been returned from
+ * database.
+ */
+int icdb_getclients(struct icdb_context *icdb, const char *type, uint32_t jobid,
+                    struct icdb_client clients[], size_t size, unsigned long long *count);
+
 
 /**
  * Delete IC client CLID.
