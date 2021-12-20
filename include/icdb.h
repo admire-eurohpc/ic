@@ -23,6 +23,8 @@ struct icdb_context;
 /**
  * Initialize connection the IC database.
  * Returns ICDB_SUCCESS or an error code.
+ *
+ * Warning: An icdb context is NOT thread-safe.
  */
 int icdb_init(struct icdb_context **icdb);
 

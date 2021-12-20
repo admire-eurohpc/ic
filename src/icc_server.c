@@ -22,8 +22,10 @@ static void jobmon_submit_cb(hg_handle_t h, margo_instance_id mid);
 static void jobmon_exit_cb(hg_handle_t h, margo_instance_id mid);
 static void adhoc_nodes_cb(hg_handle_t h, margo_instance_id mid);
 
+#define NTHREADS 2
+
 /* XX bad global variable? */
-static struct icdb_context *icdb = NULL;
+static struct icdb_context *icdbs[NTHREADS] = { NULL };
 
 /* XX temp malleability manager stub */
 #define NCLIENTS     4
@@ -42,7 +44,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   margo_instance_id mid;
   int rc;
 
-  mid = margo_init(HG_PROTOCOL, MARGO_SERVER_MODE, 0, 2); /* use two extra ULTs */
+  mid = margo_init(HG_PROTOCOL, MARGO_SERVER_MODE, 0, NTHREADS); /* use for extra ULTs for cb */
   if (!mid) {
     margo_error(mid, "Error initializing Margo instance with Mercury provider %s", HG_PROTOCOL);
     return ICC_FAILURE;
@@ -112,16 +114,20 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
     return ICC_FAILURE;
   }
 
-  /* initialize connection to DB */
-  rc = icdb_init(&icdb);
-  if (!icdb) {
-    margo_error(mid, "Could not initialize IC database");
-    margo_finalize(mid);
-    return ICC_FAILURE;
-  } else if (rc != ICDB_SUCCESS) {
-    margo_error(mid, "Could not initialize IC database: %s", icdb_errstr(icdb));
-    margo_finalize(mid);
-    return ICC_FAILURE;
+  /* initialize connection to DB. Because the icdb_context is not
+     thread safe, create one per OS threads (Argobots "execution
+     stream") */
+  for (size_t i = 0; i < NTHREADS; i++) {
+    rc = icdb_init(&icdbs[i]);
+    if (!icdbs[i]) {
+      margo_error(mid, "Could not initialize IC database");
+      margo_finalize(mid);
+      return ICC_FAILURE;
+    } else if (rc != ICDB_SUCCESS) {
+      margo_error(mid, "Could not initialize IC database: %s", icdb_errstr(icdbs[i]));
+      margo_finalize(mid);
+      return ICC_FAILURE;
+    }
   }
 
   /* XX TEMP */
@@ -141,8 +147,10 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
 
   margo_wait_for_finalize(mid);
 
-  /* close connection to DB */
-  icdb_fini(&icdb);
+  /* close connections to DB */
+  for (size_t i = 0; i < NTHREADS; i++) {
+    icdb_fini(&icdbs[i]);
+  }
 
   return ICC_SUCCESS;
 }
@@ -153,38 +161,42 @@ static void
 target_register_cb(hg_handle_t h, margo_instance_id mid)
 {
   hg_return_t hret;
-  int dbret;
-
+  int ret;
+  int xrank;                    /* execution stream id */
   target_register_in_t in;
   rpc_out_t out;
 
   out.rc = ICC_SUCCESS;
 
+  ret = ABT_self_get_xstream_rank(&xrank);
+  if (ret != ABT_SUCCESS) {
+    out.rc = ICC_FAILURE;
+    margo_error(mid, "Could not get Argobots ES rank");
+    goto respond;
+  }
+
   hret = margo_get_input(h, &in);
   if (hret != HG_SUCCESS) {
     out.rc = ICC_FAILURE;
     margo_error(mid, "Could not get RPC input");
+    goto respond;
   }
 
   margo_info(mid, "Registering client %s", in.clid);
 
-  dbret = icdb_setclient(icdb, in.clid, in.type, in.addr_str, in.provid, in.jobid);
-  if (dbret != ICDB_SUCCESS) {
-    if (icdb) {
-      margo_error(mid, "Error writing to IC database: %s", icdb_errstr(icdb));
+  ret = icdb_setclient(icdbs[xrank], in.clid, in.type, in.addr_str, in.provid, in.jobid);
+  if (ret != ICDB_SUCCESS) {
+    if (icdbs[xrank]) {
+      margo_error(mid, "Error writing to IC database: %s", icdb_errstr(icdbs[xrank]));
     }
     out.rc = ICC_FAILURE;
   }
 
+ respond:
   hret = margo_respond(h, &out);
   if (hret != HG_SUCCESS) {
     /* XX prefix log with __func__ */
     margo_error(mid, "Could not respond to RPC");
-  }
-
-  hret = margo_destroy(h);
-  if (hret != HG_SUCCESS) {
-    margo_error(mid, "Could not destroy Margo RPC handle: %s", HG_Error_to_string(hret));
   }
 }
 
@@ -193,7 +205,8 @@ static void
 target_deregister_cb(hg_handle_t h, margo_instance_id mid)
 {
   hg_return_t hret;
-  int dbret;
+  int ret;
+  int xrank;
 
   target_deregister_in_t in;
   rpc_out_t out;
@@ -204,25 +217,28 @@ target_deregister_cb(hg_handle_t h, margo_instance_id mid)
   if (hret != HG_SUCCESS) {
     out.rc = ICC_FAILURE;
     margo_error(mid, "Could not get RPC input");
+    goto respond;
+  }
+
+  ret = ABT_self_get_xstream_rank(&xrank);
+  if (ret != ABT_SUCCESS) {
+    out.rc = ICC_FAILURE;
+    margo_error(mid, "Could not get Argobots ES rank");
+    goto respond;
   }
 
   margo_info(mid, "Deregistering client %s", in.clid);
 
-  dbret = icdb_delclient(icdb, in.clid);
-
-  if (dbret != ICDB_SUCCESS) {
-    margo_error(mid, "Error deleting client %s: %s", in.clid, icdb_errstr(icdb));
+  ret = icdb_delclient(icdbs[xrank], in.clid);
+  if (ret != ICDB_SUCCESS) {
+    margo_error(mid, "Error deleting client %s: %s", in.clid, icdb_errstr(icdbs[xrank]));
     out.rc = ICC_FAILURE;
   }
 
+ respond:
   hret = margo_respond(h, &out);
   if (hret != HG_SUCCESS) {
     margo_error(mid, "Could not respond to RPC");
-  }
-
-  hret = margo_destroy(h);
-  if (hret != HG_SUCCESS) {
-    margo_error(mid, "Could not destroy Margo RPC handle: %s", HG_Error_to_string(hret));
   }
 }
 
@@ -326,6 +342,8 @@ malleability_avail_cb(hg_handle_t h, margo_instance_id mid)
   hg_return_t hret;
   malleability_avail_in_t in;
   rpc_out_t out;
+  int ret;
+  int xrank;
 
   out.rc = ICC_SUCCESS;
 
@@ -333,20 +351,25 @@ malleability_avail_cb(hg_handle_t h, margo_instance_id mid)
   if (hret != HG_SUCCESS) {
     out.rc = ICC_FAILURE;
     margo_error(mid, "Could not get RPC input: %s", HG_Error_to_string(hret));
-    return;
+    goto respond;
+  }
+
+  ret = ABT_self_get_xstream_rank(&xrank);
+  if (ret != ABT_SUCCESS) {
+    out.rc = ICC_FAILURE;
+    margo_error(mid, "Could not get Argobots ES rank");
+    goto respond;
   }
 
   /* store nodes available for malleability in db */
-  int dbrc;
-  /* icdb_command(icdb, "INCR malleability_avail:%"PRIu32, in.jobid); */
-  dbrc = icdb_command(icdb, "HMSET malleability_avail:%"PRIu32" type %s portname %s nnodes %"PRIu32,
+  ret = icdb_command(icdbs[xrank], "HMSET malleability_avail:%"PRIu32" type %s portname %s nnodes %"PRIu32,
                       in.jobid, in.type, in.portname, in.nnodes);
-
-  if (dbrc != ICDB_SUCCESS) {
-    margo_error(mid, "Could not write to IC database: %s", icdb_errstr(icdb));
+  if (ret != ICDB_SUCCESS) {
+    margo_error(mid, "Could not write to IC database: %s", icdb_errstr(icdbs[xrank]));
     out.rc = ICC_FAILURE;
   }
 
+ respond:
   hret = margo_respond(h, &out);
   if (hret != HG_SUCCESS) {
     margo_error(mid, "Could not respond to HPC");
@@ -358,6 +381,8 @@ static void
 jobmon_submit_cb(hg_handle_t h, margo_instance_id mid)
 {
   hg_return_t hret;
+  int ret;
+  int xrank;
 
   jobmon_submit_in_t in;
   rpc_out_t out;
@@ -368,17 +393,27 @@ jobmon_submit_cb(hg_handle_t h, margo_instance_id mid)
   if (hret != HG_SUCCESS) {
     out.rc = ICC_FAILURE;
     margo_error(mid, "Could not get RPC input");
+    goto respond;
+  }
+
+  ret = ABT_self_get_xstream_rank(&xrank);
+  if (ret != ABT_SUCCESS) {
+    out.rc = ICC_FAILURE;
+    margo_error(mid, "Could not get Argobots ES rank");
+    goto respond;
   }
 
   margo_info(mid, "Job %"PRIu32".%"PRIu32" started on %"PRIu32" node%s",
              in.jobid, in.jobstepid, in.nnodes, in.nnodes > 1 ? "s" : "");
 
-  int icdb_rc = icdb_command(icdb, "SET nnodes:%"PRIu32".%"PRIu32" %"PRIu32,
-                             in.jobid, in.jobstepid, in.nnodes);
-  if (icdb_rc != ICDB_SUCCESS) {
-    margo_error(mid, "Could not write to IC database: %s", icdb_errstr(icdb));
+  ret = icdb_command(icdbs[xrank], "SET nnodes:%"PRIu32".%"PRIu32" %"PRIu32,
+                     in.jobid, in.jobstepid, in.nnodes);
+  if (ret != ICDB_SUCCESS) {
+    out.rc = ICC_FAILURE;
+    margo_error(mid, "Could not write to IC database: %s", icdb_errstr(icdbs[xrank]));
   }
 
+ respond:
   hret = margo_respond(h, &out);
   if (hret != HG_SUCCESS) {
     margo_error(mid, "Could not respond to HPC");
@@ -445,6 +480,7 @@ void
 malleability_manager_th(void *arg)
 {
   int rc;
+  int xrank;
   void *tmp;
   margo_instance_id mid;
   hg_id_t *ids;
@@ -455,6 +491,14 @@ malleability_manager_th(void *arg)
 
   mid = ((struct malleability_manager_arg *)arg)->mid;
   ids = ((struct malleability_manager_arg *)arg)->rpc_ids;
+  (void) ids;
+
+
+  rc = ABT_self_get_xstream_rank(&xrank);
+  if (rc != ABT_SUCCESS) {
+    margo_error(mid, "Could not get Argobots ES rank");
+    return;
+  }
 
   clients = NULL;
   size = NCLIENTS;
@@ -466,7 +510,7 @@ malleability_manager_th(void *arg)
       rc = ICC_FAILURE;
     } else {
       clients = tmp;
-      rc = icdb_getclients(icdb, NULL, 0, clients, size, &nclients);
+      rc = icdb_getclients(icdbs[xrank], NULL, 0, clients, size, &nclients);
       size *= 2;
     }
   } while (rc == ICDB_E2BIG && size < NCLIENTS_MAX);
@@ -475,7 +519,7 @@ malleability_manager_th(void *arg)
     margo_error(mid, "Failed malloc");
     return;
   } else if (rc != ICDB_SUCCESS) {
-    margo_error(mid, "IC database error: %s", icdb_errstr(icdb));
+    margo_error(mid, "IC database error: %s", icdb_errstr(icdbs[xrank]));
     return;
   } else {
     for (unsigned i = 0; i < nclients; i++) {

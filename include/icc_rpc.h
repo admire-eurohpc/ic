@@ -10,7 +10,6 @@
 #include "icc_priv.h"
 #include "icc.h"
 
-
 #define ICC_ADDR_FILENAME "icc.addr"
 #define HG_PROTOCOL "ofi+tcp"
 #define RPC_TIMEOUT_MS 2000
@@ -82,11 +81,6 @@ icc_to_margo_log_level(enum icc_log_level icc_log_level)
  * module.
  */
 typedef void (*icc_callback_t)(hg_handle_t h, margo_instance_id mid);
-
-struct rpc_data {
-  hg_id_t        *rpc_ids;
-  icc_callback_t callback;
-};
 
 
 /**

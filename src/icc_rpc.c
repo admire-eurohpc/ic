@@ -59,7 +59,7 @@ icc_addr_file()
 
 
 /* Internal RPCs machinery */
-#define ICC_REGISTER_RPC(mid, ids, cbs, idx, in, out) if (ids[idx]) {   \
+#define ICC_REGISTER_RPC(mid,ids,cbs,idx,in,out)  if (ids[idx]) {       \
     if (cbs[idx] == NULL) {                                             \
       ids[idx] = MARGO_REGISTER(mid, "rpc_"#idx, in, out, NULL);        \
     } else {                                                            \
@@ -70,6 +70,12 @@ icc_addr_file()
       margo_register_data(mid, ids[idx], d, free);                      \
     }                                                                   \
   }
+
+struct rpc_data {
+  hg_id_t             *rpc_ids;
+  struct icdb_context *icdbs;
+  icc_callback_t      callback;
+};
 
 static void cb(hg_handle_t);
 DEFINE_MARGO_RPC_HANDLER(cb);
@@ -85,7 +91,7 @@ cb(hg_handle_t h)
   const struct hg_info *info = margo_get_info(h);
   const struct rpc_data *data = margo_registered_data(mid, info->id);
 
-  /* real callbcak associated with the RPC */
+  /* real callback associated with the RPC */
   data->callback(h, mid);
 
   hg_return_t hret = margo_destroy(h);
