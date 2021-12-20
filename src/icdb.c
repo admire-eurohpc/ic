@@ -3,13 +3,14 @@
 #include <inttypes.h>           /* PRIuXX */
 #include <stdlib.h>             /* malloc */
 #include <string.h>             /* strncpy */
+#include <uuid.h>               /* UUID_STR_LEN */
 #include <hiredis.h>
 #include "icdb.h"
 
 /** XX TODO
  *
  * Return generic failure or specific code?
- * icdb context is not thread safe!!
+ * Transaction around creation/deletion of clients
  */
 
 #define ICDB_SET_STATUS(icdb,rc,...)  _icdb_set_status(icdb, rc, __FILE__, __LINE__, __func__, __VA_ARGS__)
@@ -46,10 +47,6 @@
 #define ICDB_GET_UINT16(icdb,rep,dest,name) ICDB_GET_UINT(icdb,rep,dest,name,UINT16_MAX)
 #define ICDB_GET_UINT32(icdb,rep,dest,name) ICDB_GET_UINT(icdb,rep,dest,name,UINT32_MAX)
 #define ICDB_GET_UINT64(icdb,rep,dest,name) ICDB_GET_UINT(icdb,rep,dest,name,UINT64_MAX)
-
-
-#define ICDB_CLIENT_PREFIX  "client:"
-#define ICDB_KEY_TO_CLID(k) (k + strlen(ICDB_CLIENT_PREFIX))
 
 #define CHECK_ICDB(icdb)  if (!(icdb) || !(icdb)->redisctx) {           \
     if ((icdb)) {                                                       \
@@ -217,7 +214,7 @@ icdb_getclient(struct icdb_context *icdb, const char *clid, struct icdb_client *
   icdb->status = ICDB_SUCCESS;
 
   redisReply *rep;
-  rep = redisCommand(icdb->redisctx, "HGETALL "ICDB_CLIENT_PREFIX"%s", clid);
+  rep = redisCommand(icdb->redisctx, "HGETALL client:%s", clid);
 
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
 
@@ -347,7 +344,7 @@ icdb_setclient(struct icdb_context *icdb, const char *clid,
 
   /* XX add transaction around 1) and 2) */
   /* 1) write client to hashmap */
-  rep = redisCommand(ctx, "HSET "ICDB_CLIENT_PREFIX"%s clid %s type %s addr %s provid %"PRIu32" jobid %"PRIu32,
+  rep = redisCommand(ctx, "HSET client:%s clid %s type %s addr %s provid %"PRIu32" jobid %"PRIu32,
                      clid, clid, type, addr, provid, jobid);
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
 
@@ -376,7 +373,7 @@ icdb_delclient(struct icdb_context *icdb, const char *clid)
   redisReply *rep;
   /* Remove client and client index  */
   /* XX transaction? + separate check */
-  rep = redisCommand(icdb->redisctx, "DEL "ICDB_CLIENT_PREFIX"%s", clid);
+  rep = redisCommand(icdb->redisctx, "DEL client:%s", clid);
   rep = redisCommand(icdb->redisctx, "SREM index:clients %s", clid);
 
   /* DEL returns the number of keys that were deleted */
