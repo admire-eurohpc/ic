@@ -374,7 +374,10 @@ icdb_delclient(struct icdb_context *icdb, const char *clid)
   icdb->status = ICDB_SUCCESS;
 
   redisReply *rep;
+  /* Remove client and client index  */
+  /* XX transaction? + separate check */
   rep = redisCommand(icdb->redisctx, "DEL "ICDB_CLIENT_PREFIX"%s", clid);
+  rep = redisCommand(icdb->redisctx, "SREM index:clients %s", clid);
 
   /* DEL returns the number of keys that were deleted */
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
