@@ -439,12 +439,13 @@ adhoc_nodes_cb(hg_handle_t h, margo_instance_id mid)
 
 /* Malleability manager stub */
 char *instr_vec[6];             /* vector of malleability instructions */
-char * next_instruction = NULL; /* next malleability instruction.
+char *next_instruction = NULL;  /* next malleability instruction.
                                    SHARED between MM_th and IC */
 void
 malleability_manager_th(void *arg)
 {
   int rc;
+  void *tmp;
   margo_instance_id mid;
   hg_id_t *ids;
 
@@ -459,27 +460,30 @@ malleability_manager_th(void *arg)
   size = NCLIENTS;
 
   do {
-    /* XX multiplication could overflow */
-    clients = realloc(clients, sizeof(*clients) * size);
-    if (!clients) {
-      margo_error(mid, "Out of memory");
+    /* XX multiplication could overflow, use reallocarray? */
+    tmp = realloc(clients, sizeof(*clients) * size);
+    if (!tmp) {
+      rc = ICC_FAILURE;
+    } else {
+      clients = tmp;
+      rc = icdb_getclients(icdb, NULL, 0, clients, size, &nclients);
+      size *= 2;
     }
+  } while (rc == ICDB_E2BIG && size < NCLIENTS_MAX);
 
-    rc = icdb_getclients(icdb, NULL, 0, clients, size, &nclients);
-
-    size *= 2;
-
-  } while (rc == ICDB_E2BIG);
-
-  if (rc != ICDB_SUCCESS) {
+  if (tmp == NULL) {
+    margo_error(mid, "Failed malloc");
+    return;
+  } else if (rc != ICDB_SUCCESS) {
     margo_error(mid, "IC database error: %s", icdb_errstr(icdb));
-    /* out.rc = ICC_FAILURE; */
+    return;
   } else {
     for (unsigned i = 0; i < nclients; i++) {
       margo_info(mid, "READ client %s (%s, jobid %"PRIu32")", clients[i].clid, clients[i].type, clients[i].jobid);
     }
   }
 
+  free(clients);
 
   /* provid = fromdb; */
   /* addr = fromdb; */
