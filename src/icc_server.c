@@ -22,7 +22,7 @@ static void jobmon_submit_cb(hg_handle_t h, margo_instance_id mid);
 static void jobmon_exit_cb(hg_handle_t h, margo_instance_id mid);
 static void adhoc_nodes_cb(hg_handle_t h, margo_instance_id mid);
 
-#define NTHREADS 2
+#define NTHREADS 3
 
 /* XX bad global variable? */
 static struct icdb_context *icdbs[NTHREADS] = { NULL };
@@ -44,7 +44,9 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   margo_instance_id mid;
   int rc;
 
-  mid = margo_init(HG_PROTOCOL, MARGO_SERVER_MODE, 0, NTHREADS); /* use for extra ULTs for cb */
+  assert(NTHREADS > 0);
+  /* use one ULT for main + network, NTHREADS - 1 ULTs for callbacks */
+  mid = margo_init(HG_PROTOCOL, MARGO_SERVER_MODE, 0, NTHREADS - 1);
   if (!mid) {
     margo_error(mid, "Error initializing Margo instance with Mercury provider %s", HG_PROTOCOL);
     return ICC_FAILURE;
