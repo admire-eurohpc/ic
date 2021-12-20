@@ -76,9 +76,13 @@ int icc_init(enum icc_log_level log_level, int bidirectional, enum icc_client_ty
  */
 int icc_fini(struct icc_context *icc);
 
-
-int icc_wait(struct icc_context *icc);
-
+/**
+ * Suspend the ICC client for TIMEOUT_MS. Call this instead of
+ * sleep(3) to avoid blocking a Margo ULT.
+ *
+ * Return ICC_SUCCESS or an error code.
+ */
+int icc_sleep(struct icc_context *icc, double timeout_ms);
 
 /**
  * RPC TEST: Test the server by sending a number and having it logged.

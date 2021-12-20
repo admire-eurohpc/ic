@@ -45,12 +45,12 @@ From the Mercury checkout, run:
 mkdir build
 cd build
 cmake .. -DBUILD_SHARED_LIBS:BOOL=ON \
-	 -DMERCURY_USE_BOOST_PP:BOOL=ON \
-	 -DNA_USE_OFI:BOOL=ON \
-	 -DCMAKE_INSTALL_PREFIX:PATH=/usr/local \
-	 -DOFI_LIBRARY:FILEPATH=/usr/local/lib/libfabric.so \
-	 -DOFI_INCLUDE_DIR:PATH=/usr/local/include \
-	 -Dpkgcfg_lib_PC_OFI_fabric:FILEPATH=/usr/local/lib/libfabric.so
+         -DMERCURY_USE_BOOST_PP:BOOL=ON \
+         -DNA_USE_OFI:BOOL=ON \
+         -DCMAKE_INSTALL_PREFIX:PATH=/usr/local \
+         -DOFI_LIBRARY:FILEPATH=/usr/local/lib/libfabric.so \
+         -DOFI_INCLUDE_DIR:PATH=/usr/local/include \
+         -Dpkgcfg_lib_PC_OFI_fabric:FILEPATH=/usr/local/lib/libfabric.so
 make
 make install
 ```
@@ -78,8 +78,8 @@ From the json-c directory, run:
 ```
 mkdir build && cd build
 cmake .. -DCMAKE_INSTALL_PREFIX:PATH=/usr/local \
-	 -DCMAKE_INSTALL_LIBDIR:PATH=lib \
-	 -DINSTALL_PKGCONFIG_DIR:PATH=lib/pkgconfig
+         -DCMAKE_INSTALL_LIBDIR:PATH=lib \
+         -DINSTALL_PKGCONFIG_DIR:PATH=lib/pkgconfig
 make
 make install
 ```
@@ -121,7 +121,7 @@ From there, the Redis server can be run through the binary
 `redis-server`.
 
 ### Hiredis
-Hiredis is the official C client library for Redis. 
+Hiredis is the official C client library for Redis.
 
 The latest release can be downloaded from:
 https://github.com/redis/hiredis/archive/refs/tags/v1.0.2.tar.gz
@@ -197,3 +197,25 @@ and once the server is running:
 /projets/admire/local/bin/icc_client.sh
 ```
 
+
+## Developers
+### Using libicc
+### How to add a public RPC to libicc
+1. Define a new RPC code in `icc_rpc_code`.
+2. Define the Mercury structures associated with it (note that
+   all structure must have a client id `clid` member).
+3. Update function `register_rpcs` to include this RPC.
+4. Define a callback in the target module (i.e the receiver of the
+   RPC). Associate the callback using the REGISTER_PREP macro. In the
+   origin module (i.e the sender), the same macro is used, but with
+   NULL in lieu of a callback.
+
+### Database
+The choice has been made to use Redis, a non-relational database. What
+follows is an effort to document the “schema” accessible to the intelligent controller
+
+- IC clients (e.g connecting application) have their information
+  stored in `client:<clid>`, where `clid` is an uuid string uniquely
+  identifying the client.
+- There is a corresponding index `index:clients`, containing the
+  `clid` of all registered clients.

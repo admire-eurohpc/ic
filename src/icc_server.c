@@ -102,13 +102,18 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
     return ICC_FAILURE;
   }
 
+  /* RPCs to receive */
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_TARGET_REGISTER, target_register_cb);
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_TARGET_DEREGISTER, target_deregister_cb);
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_TEST, test_cb);
-  REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_MALLEABILITY_AVAIL, malleability_avail_cb);
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_JOBMON_SUBMIT, jobmon_submit_cb);
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_JOBMON_EXIT, jobmon_exit_cb);
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_ADHOC_NODES, adhoc_nodes_cb);
+  REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_MALLEABILITY_AVAIL, malleability_avail_cb);
+
+  /* RPCs to send */
+  REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_MALLEABILITY_SEND, NULL);
+
 
   if (register_rpcs(mid, callbacks, rpc_ids)) {
     margo_error(mid, "Could not register RPCs");
@@ -139,8 +144,8 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
 
   struct malleability_manager_arg arg = { .mid = mid, .rpc_ids = rpc_ids};
 
+  /* XX return code from ULT? */
   rc = ABT_thread_create(pool, malleability_manager_th, &arg, ABT_THREAD_ATTR_NULL, NULL);
-
   if (rc != 0) {
     margo_error(mid, "Could not create malleability ULT (ret = %d)", rc);
     margo_finalize(mid);
@@ -481,65 +486,79 @@ char *next_instruction = NULL;  /* next malleability instruction.
 void
 malleability_manager_th(void *arg)
 {
-  int rc;
+  int ret;
+  int rpcret;
+  hg_return_t hret;
   int xrank;
   void *tmp;
   margo_instance_id mid;
-  hg_id_t *ids;
+  hg_id_t *rpcids;
 
   size_t size;
   unsigned long long nclients;
   struct icdb_client *clients;
 
   mid = ((struct malleability_manager_arg *)arg)->mid;
-  ids = ((struct malleability_manager_arg *)arg)->rpc_ids;
-  (void) ids;
+  rpcids = ((struct malleability_manager_arg *)arg)->rpc_ids;
 
-
-  rc = ABT_self_get_xstream_rank(&xrank);
-  if (rc != ABT_SUCCESS) {
+  ret = ABT_self_get_xstream_rank(&xrank);
+  if (ret != ABT_SUCCESS) {
     margo_error(mid, "Could not get Argobots ES rank");
     return;
   }
 
-  clients = NULL;
   size = NCLIENTS;
-
-  do {
-    /* XX multiplication could overflow, use reallocarray? */
-    tmp = realloc(clients, sizeof(*clients) * size);
-    if (!tmp) {
-      rc = ICC_FAILURE;
-    } else {
-      clients = tmp;
-      rc = icdb_getclients(icdbs[xrank], NULL, 0, clients, size, &nclients);
-      size *= 2;
-    }
-  } while (rc == ICDB_E2BIG && size < NCLIENTS_MAX);
-
-  if (tmp == NULL) {
+  /* XX multiplication could overflow, use reallocarray? */
+  clients = malloc(sizeof(*clients) * size);
+  if (!clients) {
     margo_error(mid, "Failed malloc");
     return;
-  } else if (rc != ICDB_SUCCESS) {
-    margo_error(mid, "IC database error: %s", icdb_errstr(icdbs[xrank]));
-    return;
-  } else {
+  }
+
+  while(1) {
+    do {
+      ret = icdb_getclients(icdbs[xrank], NULL, 0, clients, size, &nclients);
+
+      /* clients array is too small, expand */
+      if (ret == ICDB_E2BIG && size < NCLIENTS_MAX) {
+        size *= 2;
+        tmp = realloc(clients, sizeof(*clients) * size);
+        if (!tmp) {
+          margo_error(mid, "Failed malloc");
+          ret = ICC_FAILURE;
+          return;
+        }
+        clients = tmp;
+        continue;
+      }
+      else if (ret != ICDB_SUCCESS) {
+        margo_error(mid, "IC database error: %s", icdb_errstr(icdbs[xrank]));
+        free(clients);
+        return;
+      }
+      break;
+    } while (1);
+
+    hg_addr_t addr;
+    malleability_send_in_t in = { 0 } ;
+
     for (unsigned i = 0; i < nclients; i++) {
-      margo_info(mid, "READ client %s (%s, jobid %"PRIu32")", clients[i].clid, clients[i].type, clients[i].jobid);
+      hret = margo_addr_lookup(mid, clients[i].addr, &addr);
+      if (hret != HG_SUCCESS) {
+        margo_error(mid, "Could not get Margo address: %s", HG_Error_to_string(hret));
+      }
+
+      ret = rpc_send(mid, addr, clients[i].provid, rpcids[ICC_RPC_MALLEABILITY_SEND], &in, &rpcret);
+      if (ret) {
+        margo_error(mid, "Could not send RPC %d", ICC_RPC_MALLEABILITY_SEND);
+      }
     }
+    /* sleep and retry contacting clients every 5s */
+    margo_thread_sleep(mid, 5000);
   }
 
   free(clients);
-
-  /* provid = fromdb; */
-  /* addr = fromdb; */
-  /* rc = rpc_send(mid, addr, provid, rpc_ids[ICC_RPC_MALLEABILITY_ORDER], &in, &rpcrc); */
-
-  /* /\* if (rc) { *\/ */
-  /*   margo_error(mid, "Could not send RPC %d", ICC_RPC_TEST); */
-  /*   out.rc = ICC_FAILURE; */
-  /* } */
-
+  return;
 
   /*Create vector*/
   for(int i = 0; i < 5; i++){

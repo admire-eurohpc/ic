@@ -108,6 +108,7 @@ enum icc_rpc_code {
   ICC_RPC_JOBMON_SUBMIT,
   ICC_RPC_JOBMON_EXIT,
   ICC_RPC_MALLEABILITY_AVAIL,
+  ICC_RPC_MALLEABILITY_SEND,
 
   ICC_RPC_COUNT
 };
@@ -136,13 +137,6 @@ MERCURY_GEN_PROC(test_in_t,
                  ((hg_uint32_t)(jobid))
                  ((uint8_t)(number)))
 
-MERCURY_GEN_PROC(malleability_avail_in_t,
-                 ((hg_const_string_t)(clid))
-                 ((uint32_t)(jobid))
-                 ((hg_const_string_t)(type))
-                 ((hg_const_string_t)(portname))
-                 ((uint32_t)(nnodes)))
-
 MERCURY_GEN_PROC(adhoc_nodes_in_t,
                  ((hg_const_string_t)(clid))
                  ((uint32_t)(jobid))
@@ -159,6 +153,16 @@ MERCURY_GEN_PROC(jobmon_exit_in_t,
                  ((hg_const_string_t)(clid))
                  ((uint32_t)(jobid))
                  ((uint32_t)(jobstepid)))
+
+MERCURY_GEN_PROC(malleability_avail_in_t,
+                 ((hg_const_string_t)(clid))
+                 ((uint32_t)(jobid))
+                 ((hg_const_string_t)(type))
+                 ((hg_const_string_t)(portname))
+                 ((uint32_t)(nnodes)))
+
+MERCURY_GEN_PROC(malleability_send_in_t,
+                 ((uint32_t)(number)))
 
 
 /**

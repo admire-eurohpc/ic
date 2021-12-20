@@ -51,9 +51,11 @@ main(int argc, char **argv)
   rc = icc_rpc_test(icc, 32, &rpc_retcode);
 
   if (rc == ICC_SUCCESS)
-    printf("RPC successful: retcode=%d\n", rpc_retcode);
+    printf("icc_client: RPC \"TEST\" successful: retcode=%d\n", rpc_retcode);
   else
     fprintf(stderr, "Error sending RPC to IC (retcode=%d)\n", rc);
+
+  icc_sleep(icc, 5000);
 
   rc = icc_fini(icc);
   assert(rc == 0);

@@ -1,3 +1,4 @@
+#include "assert.h"
 #include "icc_rpc.h"
 #include "icc.h"
 
@@ -122,9 +123,6 @@ register_rpcs(margo_instance_id mid, icc_callback_t callbacks[ICC_RPC_COUNT], hg
   /* test RPC */
   ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_TEST, test_in_t, rpc_out_t);
 
-  /* availability for malleability RPC */
-  ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_MALLEABILITY_AVAIL, malleability_avail_in_t, rpc_out_t);
-
   /* job monitoring RPCs */
   ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_JOBMON_SUBMIT, jobmon_submit_in_t, rpc_out_t);
   ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_JOBMON_EXIT, jobmon_exit_in_t, rpc_out_t);
@@ -132,27 +130,37 @@ register_rpcs(margo_instance_id mid, icc_callback_t callbacks[ICC_RPC_COUNT], hg
   /* ad-hoc storage RPCs */
   ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_ADHOC_NODES, adhoc_nodes_in_t, rpc_out_t);
 
+  /* malleability */
+  ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_MALLEABILITY_AVAIL, malleability_avail_in_t, rpc_out_t);
+  ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_MALLEABILITY_SEND, malleability_send_in_t, rpc_out_t);
+
   return 0;
 }
 
 
 int
-rpc_send(margo_instance_id mid, hg_addr_t addr, uint16_t provid, hg_id_t rpc_id,
-         void *data, int *retcode)
+rpc_send(margo_instance_id mid, hg_addr_t addr, uint16_t provid, hg_id_t rpcid,
+         void *in, int *retcode)
 {
+  assert(addr);
+  assert(rpcid);
+
   hg_return_t hret;
   hg_handle_t handle;
 
-  hret = margo_create(mid, addr, rpc_id, &handle);
+  hret = margo_create(mid, addr, rpcid, &handle);
   if (hret != HG_SUCCESS) {
     margo_error(mid, "Could not create Margo RPC: %s", HG_Error_to_string(hret));
     return -1;
   }
 
-  hret = margo_provider_forward_timed(provid, handle, data, RPC_TIMEOUT_MS);
+  hret = margo_provider_forward_timed(provid, handle, in, RPC_TIMEOUT_MS);
   if (hret != HG_SUCCESS) {
     margo_error(mid, "Could not forward Margo RPC: %s", HG_Error_to_string(hret));
-    margo_destroy(handle);      /* XX check error */
+
+    if (hret != HG_NOENTRY) {
+      hret = margo_destroy(handle);
+    }
     return -1;
   }
 

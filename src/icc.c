@@ -53,8 +53,9 @@ icc_init(enum icc_log_level log_level, int bidir, enum icc_client_type typecode,
   if (!icc)
     return -errno;
 
+  /* use an extra thread for background RPC callbacks */
   icc->mid = margo_init(HG_PROTOCOL,
-                        bidir ? MARGO_SERVER_MODE : MARGO_CLIENT_MODE, 0, -1);
+                        bidir ? MARGO_SERVER_MODE : MARGO_CLIENT_MODE, 0, 1);
   if (!icc->mid) {
     rc = ICC_FAILURE;
     goto error;
@@ -114,7 +115,7 @@ icc_init(enum icc_log_level log_level, int bidir, enum icc_client_type typecode,
     REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TARGET_DEREGISTER, NULL);
     /* note this overwrites the previous registration without callback */
     REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TEST, test_cb);
-    REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_MALLEABILITY_ORDER, malleability_cb);
+    REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_MALLEABILITY_SEND, malleability_cb);
   }
 
   rc = register_rpcs(icc->mid, rpc_callbacks, rpc_hg_ids);
@@ -167,10 +168,10 @@ icc_init(enum icc_log_level log_level, int bidir, enum icc_client_type typecode,
 }
 
 int
-icc_wait(struct icc_context *icc)
+icc_sleep(struct icc_context *icc, double timeout_ms)
 {
   CHECK_ICC(icc);
-  margo_wait_for_finalize(icc->mid);
+  margo_thread_sleep(icc->mid, timeout_ms);
   return ICC_SUCCESS;
 }
 
