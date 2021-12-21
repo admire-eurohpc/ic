@@ -55,7 +55,7 @@ main(int argc, char **argv)
   else
     fprintf(stderr, "Error sending RPC to IC (retcode=%d)\n", rc);
 
-  icc_sleep(icc, 5000);
+  icc_sleep(icc, 30000);
 
   rc = icc_fini(icc);
   assert(rc == 0);

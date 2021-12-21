@@ -132,7 +132,7 @@ register_rpcs(margo_instance_id mid, icc_callback_t callbacks[ICC_RPC_COUNT], hg
 
   /* malleability */
   ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_MALLEABILITY_AVAIL, malleability_avail_in_t, rpc_out_t);
-  ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_MALLEABILITY_SEND, malleability_send_in_t, rpc_out_t);
+  ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_FLEXMPI_MALLEABILITY, flexmpi_malleability_in_t, rpc_out_t);
 
   return 0;
 }

@@ -108,7 +108,7 @@ enum icc_rpc_code {
   ICC_RPC_JOBMON_SUBMIT,
   ICC_RPC_JOBMON_EXIT,
   ICC_RPC_MALLEABILITY_AVAIL,
-  ICC_RPC_MALLEABILITY_SEND,
+  ICC_RPC_FLEXMPI_MALLEABILITY,
 
   ICC_RPC_COUNT
 };
@@ -161,8 +161,8 @@ MERCURY_GEN_PROC(malleability_avail_in_t,
                  ((hg_const_string_t)(portname))
                  ((uint32_t)(nnodes)))
 
-MERCURY_GEN_PROC(malleability_send_in_t,
-                 ((uint32_t)(number)))
+MERCURY_GEN_PROC(flexmpi_malleability_in_t,
+                 ((hg_const_string_t)(command)))
 
 
 /**

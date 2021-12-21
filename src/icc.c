@@ -5,6 +5,7 @@
 #include <uuid.h>
 
 #include "icc_rpc.h"
+#include "flexmpi.h"
 
 
 /* TODO
@@ -26,7 +27,6 @@
 
 /* RPC callbacks */
 static void test_cb(hg_handle_t h, margo_instance_id mid);
-static void malleability_cb(hg_handle_t h, margo_instance_id mid);
 
 struct icc_context {
   margo_instance_id mid;
@@ -115,7 +115,7 @@ icc_init(enum icc_log_level log_level, int bidir, enum icc_client_type typecode,
     REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TARGET_DEREGISTER, NULL);
     /* note this overwrites the previous registration without callback */
     REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TEST, test_cb);
-    REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_MALLEABILITY_SEND, malleability_cb);
+    REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_FLEXMPI_MALLEABILITY, flexmpi_malleability_cb);
   }
 
   rc = register_rpcs(icc->mid, rpc_callbacks, rpc_hg_ids);
@@ -312,28 +312,6 @@ test_cb(hg_handle_t h, margo_instance_id mid) {
     margo_error(mid, "Could not get RPC input: %s", HG_Error_to_string(hret));
   } else {
     margo_info(mid, "Got \"ICC\" RPC with argument %u\n", in.number);
-  }
-
-  hret = margo_respond(h, &out);
-  if (hret != HG_SUCCESS) {
-    margo_error(mid, "Could not respond to HPC");
-  }
-}
-
-static void
-malleability_cb(hg_handle_t h, margo_instance_id mid) {
-  hg_return_t hret;
-  malleability_send_in_t in;
-  rpc_out_t out;
-
-  out.rc = ICC_SUCCESS;
-
-  hret = margo_get_input(h, &in);
-  if (hret != HG_SUCCESS) {
-    out.rc = ICC_FAILURE;
-    margo_error(mid, "Could not get RPC input: %s", HG_Error_to_string(hret));
-  } else {
-    margo_info(mid, "Got \"MALLEABILITY\" RPC with argument %u\n", in.number);
   }
 
   hret = margo_respond(h, &out);

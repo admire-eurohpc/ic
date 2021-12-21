@@ -11,6 +11,7 @@
  *
  * Return generic failure or specific code?
  * Transaction around creation/deletion of clients
+ * Implement type & jobid filters
  */
 
 #define ICDB_SET_STATUS(icdb,rc,...)  _icdb_set_status(icdb, rc, __FILE__, __LINE__, __func__, __VA_ARGS__)
@@ -265,6 +266,7 @@ icdb_getclients(struct icdb_context *icdb, const char *type, uint32_t jobid,
 
   *count = 0;
 
+  /* XX filter! use SINTER for multiple filters */
   if (type && jobid) {
     ;
   } else if (type) {

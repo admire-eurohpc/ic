@@ -23,6 +23,7 @@ static void jobmon_exit_cb(hg_handle_t h, margo_instance_id mid);
 static void adhoc_nodes_cb(hg_handle_t h, margo_instance_id mid);
 
 #define NTHREADS 3
+#define TIMEOUT_MS 5000
 
 /* XX bad global variable? */
 static struct icdb_context *icdbs[NTHREADS] = { NULL };
@@ -112,7 +113,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_MALLEABILITY_AVAIL, malleability_avail_cb);
 
   /* RPCs to send */
-  REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_MALLEABILITY_SEND, NULL);
+  REGISTER_PREP(rpc_ids, callbacks, ICC_RPC_FLEXMPI_MALLEABILITY, NULL);
 
 
   if (register_rpcs(mid, callbacks, rpc_ids)) {
@@ -142,7 +143,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   ABT_pool pool;
   margo_get_handler_pool(mid, &pool);
 
-  struct malleability_manager_arg arg = { .mid = mid, .rpc_ids = rpc_ids};
+  struct malleability_manager_arg arg = { .mid = mid, .rpc_ids = rpc_ids };
 
   /* XX return code from ULT? */
   rc = ABT_thread_create(pool, malleability_manager_th, &arg, ABT_THREAD_ATTR_NULL, NULL);
@@ -486,17 +487,13 @@ char *next_instruction = NULL;  /* next malleability instruction.
 void
 malleability_manager_th(void *arg)
 {
-  int ret;
-  int rpcret;
   hg_return_t hret;
+  hg_addr_t addr;
+  hg_id_t *rpcids;
+  margo_instance_id mid;
+  int ret, rpcret;
   int xrank;
   void *tmp;
-  margo_instance_id mid;
-  hg_id_t *rpcids;
-
-  size_t size;
-  unsigned long long nclients;
-  struct icdb_client *clients;
 
   mid = ((struct malleability_manager_arg *)arg)->mid;
   rpcids = ((struct malleability_manager_arg *)arg)->rpc_ids;
@@ -507,6 +504,10 @@ malleability_manager_th(void *arg)
     return;
   }
 
+  size_t size;
+  unsigned long long nclients;
+  struct icdb_client *clients;
+
   size = NCLIENTS;
   /* XX multiplication could overflow, use reallocarray? */
   clients = malloc(sizeof(*clients) * size);
@@ -514,6 +515,16 @@ malleability_manager_th(void *arg)
     margo_error(mid, "Failed malloc");
     return;
   }
+
+  /* XX hardcoded malleability commands */
+  size_t cmidx = 0;
+  char *commands[] = {
+    "6:compute-12-2:2",
+    "6:compute-12-3:4",
+    "6:compute-12-3:-4",
+    "6:compute-12-2:-2",
+    "5"
+  };
 
   while(1) {
     do {
@@ -539,67 +550,28 @@ malleability_manager_th(void *arg)
       break;
     } while (1);
 
-    hg_addr_t addr;
-    malleability_send_in_t in = { 0 } ;
+
+    flexmpi_malleability_in_t in;
 
     for (unsigned i = 0; i < nclients; i++) {
       hret = margo_addr_lookup(mid, clients[i].addr, &addr);
       if (hret != HG_SUCCESS) {
-        margo_error(mid, "Could not get Margo address: %s", HG_Error_to_string(hret));
+        margo_error(mid, "Error getting Margo address: %s", HG_Error_to_string(hret));
       }
 
-      ret = rpc_send(mid, addr, clients[i].provid, rpcids[ICC_RPC_MALLEABILITY_SEND], &in, &rpcret);
+      in.command = commands[cmidx];
+
+      ret = rpc_send(mid, addr, clients[i].provid, rpcids[ICC_RPC_FLEXMPI_MALLEABILITY], &in, &rpcret);
       if (ret) {
-        margo_error(mid, "Could not send RPC %d", ICC_RPC_MALLEABILITY_SEND);
+        margo_error(mid, "Error sending RPC %d", ICC_RPC_FLEXMPI_MALLEABILITY);
+      } else if (rpcret) {
+        margo_error(mid, "RPC %d returned with error %d", rpcret);
       }
     }
-    /* sleep and retry contacting clients every 5s */
-    margo_thread_sleep(mid, 5000);
+    cmidx = (cmidx + 1) % 5 ;            /* send next command */
+    margo_thread_sleep(mid, TIMEOUT_MS); /* sleep and retry clients query */
   }
 
   free(clients);
   return;
-
-  /*Create vector*/
-  for(int i = 0; i < 5; i++){
-    switch(i) {
-      case 0:
-        instr_vec[i] = (char *) malloc(strlen("nping –udp -p 7670 -c 1 compute-12-2 –data-string \"6:compute-12-2:2\"") + 1);
-        strcpy(instr_vec[i], "nping –udp -p 7670 -c 1 compute-12-2 –data-string \"6:compute-12-2:2\"");
-        break;
-      case 1:
-        instr_vec[i] = (char *) malloc(strlen("nping –udp -p 7670 -c 1 compute-12-2 –data-string \"6:compute-12-3:4\"") + 1);
-        strcpy(instr_vec[i], "nping –udp -p 7670 -c 1 compute-12-2 –data-string \"6:compute-12-3:4\"");
-        break;
-      case 2:
-        instr_vec[i] = (char *) malloc(strlen("nping –udp -p 7670 -c 1 compute-12-2 –data-string \"6:compute-12-3:-4\"") + 1);
-        strcpy(instr_vec[i], "nping –udp -p 7670 -c 1 compute-12-2 –data-string \"6:compute-12-3:-4\"");
-        break;
-      case 3:
-        instr_vec[i] = (char *) malloc(strlen("nping –udp -p 7670 -c 1 compute-12-2 –data-string \"6:compute-12-2:-2\"") + 1);
-        strcpy(instr_vec[i], "nping –udp -p 7670 -c 1 compute-12-2 –data-string \"6:compute-12-2:-2\"");
-        break;
-      case 4:
-        instr_vec[i] = (char *) malloc(strlen("nping –udp -p 7670 -c 1 compute-12-2 –data-string \"5\"") + 1);
-        strcpy(instr_vec[i], "nping –udp -p 7670 -c 1 compute-12-2 –data-string \"5\"");
-        break;
-      case 5:
-        /*Exclusive use for answering empty RPCs*/
-        instr_vec[i] = (char *) malloc(strlen("") + 1);
-        strcpy(instr_vec[i], "");
-        break;
-    }
-  }
-
-  /*Each N-secs, Malleability manager send instructions*/
-  int instr_index = 0;
-  while(1){
-    sleep(10);
-    if (next_instruction == NULL){
-      printf("[MM_TH] Instruction added\n");
-      next_instruction = instr_vec[instr_index];
-      instr_index++;
-      if(instr_index % 5 == 0) instr_index = 0;
-    }
-  }
 }
