@@ -2,6 +2,9 @@
 #include "icc_rpc.h"
 #include "icc.h"
 
+#define ICC_ADDR_FILENAME  "icc.addr"
+#define RPC_TIMEOUT_MS 2000
+
 
 int
 get_hg_addr(margo_instance_id mid, char *addr_str, hg_size_t *addr_str_size)
@@ -64,7 +67,7 @@ icc_addr_file()
     if (cbs[idx] == NULL) {                                             \
       ids[idx] = MARGO_REGISTER(mid, "rpc_"#idx, in, out, NULL);        \
     } else {                                                            \
-      ids[idx] = MARGO_REGISTER_PROVIDER(mid, "rpc_"#idx, in, out, cb, MARGO_PROVIDER_ID_DEFAULT, ABT_POOL_NULL); \
+      ids[idx] = MARGO_REGISTER_PROVIDER(mid, "rpc_"#idx, in, out, cb, MARGO_PROVIDER_DEFAULT, ABT_POOL_NULL); \
       struct rpc_data *d = calloc(1, sizeof(*d));                       \
       d->callback = cbs[idx];                                           \
       d->rpc_ids = ids;                                                 \
@@ -74,7 +77,6 @@ icc_addr_file()
 
 struct rpc_data {
   hg_id_t             *rpc_ids;
-  struct icdb_context *icdbs;
   icc_callback_t      callback;
 };
 
@@ -84,10 +86,8 @@ DEFINE_MARGO_RPC_HANDLER(cb);
 static void
 cb(hg_handle_t h)
 {
-  /* XX factorize all callbacks here? */
   margo_instance_id mid = margo_hg_handle_get_instance(h);
-  if (!mid)
-    return;
+  assert(mid);
 
   const struct hg_info *info = margo_get_info(h);
   const struct rpc_data *data = margo_registered_data(mid, info->id);
@@ -110,11 +110,9 @@ register_rpcs(margo_instance_id mid, icc_callback_t callbacks[ICC_RPC_COUNT], hg
      callback == NULL => register RPC as client
      callback != NULL => register RPC with given callback
   */
-
-  if (!callbacks || ! ids) {
-    margo_error(mid, "Invalid callbacks or Mercury ids table");
-    return -1;
-  }
+  assert(mid);
+  assert(callbacks != NULL);
+  assert(ids != NULL);
 
   /* internal RPCs */
   ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_TARGET_REGISTER, target_register_in_t, rpc_out_t);

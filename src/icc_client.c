@@ -45,9 +45,6 @@ main(int argc, char **argv)
   icc_init(ICC_LOG_INFO, bidir, ICC_TYPE_UNDEFINED, &icc);
   assert(icc != NULL);
 
-  /* struct icc_rpc_test_in rpc_in = { .number=32, .jobid=0 }; */
-  /* rc = icc_rpc_send(icc, ICC_RPC_TEST, &rpc_in, &rpc_retcode); */
-
   rc = icc_rpc_test(icc, 32, &rpc_retcode);
 
   if (rc == ICC_SUCCESS)
@@ -55,7 +52,8 @@ main(int argc, char **argv)
   else
     fprintf(stderr, "Error sending RPC to IC (retcode=%d)\n", rc);
 
-  icc_sleep(icc, 30000);
+  if (bidir)
+    icc_sleep(icc, 30000);
 
   rc = icc_fini(icc);
   assert(rc == 0);

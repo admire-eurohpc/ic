@@ -8,6 +8,9 @@
 #include "flexmpi.h"
 
 
+#define CHECK_ICC(icc)  if (!(icc)) { return ICC_FAILURE; }
+
+
 /* TODO
  * factorize with goto?
  * hg_error_to_string everywhere

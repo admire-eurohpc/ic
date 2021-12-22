@@ -10,15 +10,12 @@
 #include "icc_priv.h"
 #include "icc.h"
 
-#define ICC_ADDR_FILENAME "icc.addr"
-#define HG_PROTOCOL "ofi+tcp"
-#define RPC_TIMEOUT_MS 2000
+#define HG_PROTOCOL "ofi+tcp"	  /* Mercury protocol */
+#define MARGO_PROVIDER_DEFAULT 0  /* for using multiple Argobots
+				     pools, unused for now */
 
-/* Margo provider != Hg network provider */
-#define MARGO_PROVIDER_ID_DEFAULT 12
-
-
-#define CHECK_ICC(icc)  if (!(icc)) { return ICC_FAILURE; }
+#define RPC_OK  0
+#define RPC_ERR -1
 
 
 /**
