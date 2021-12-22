@@ -30,6 +30,7 @@ static void test_cb(hg_handle_t h, margo_instance_id mid);
 
 struct icc_context {
   margo_instance_id mid;
+  uint8_t           bidirectional;
   hg_addr_t         addr;
   uint16_t          provider_id;
   char              clid[UUID_STR_LEN]; /* client uuid */
@@ -72,7 +73,7 @@ icc_init(enum icc_log_level log_level, int bidir, enum icc_client_type typecode,
 
   FILE *f = fopen(path, "r");
   if (!f) {
-    margo_error(icc->mid, "Error opening IC address file \"%s\": %s", path ? path : "(NULL)", strerror(errno));
+    margo_error(icc->mid, "Could not open IC address file \"%s\": %s", path ? path : "(NULL)", strerror(errno));
     free(path);
     rc = ICC_FAILURE;
     goto error;
@@ -81,7 +82,7 @@ icc_init(enum icc_log_level log_level, int bidir, enum icc_client_type typecode,
 
   char addr_str[ICC_ADDR_LEN];
   if (!fgets(addr_str, ICC_ADDR_LEN, f)) {
-    margo_error(icc->mid, "Error reading from IC address file: %s", strerror(errno));
+    margo_error(icc->mid, "Could not read from IC address file: %s", strerror(errno));
     fclose(f);
     rc = ICC_FAILURE;
     goto error;
@@ -94,8 +95,6 @@ icc_init(enum icc_log_level log_level, int bidir, enum icc_client_type typecode,
     rc = ICC_FAILURE;
     goto error;
   }
-
-  icc->provider_id = MARGO_PROVIDER_ID_DEFAULT;
 
   uuid_t uuid;
   uuid_generate(uuid);
@@ -132,6 +131,9 @@ icc_init(enum icc_log_level log_level, int bidir, enum icc_client_type typecode,
     target_register_in_t rpc_in;
     int rpc_rc;
 
+    icc->bidirectional = 1;
+    icc->provider_id = MARGO_PROVIDER_DEFAULT;
+
     if (get_hg_addr(icc->mid, addr_str, &addr_str_size)) {
       margo_error(icc->mid, "Could not get Mercury self address");
       rc = ICC_FAILURE;
@@ -141,7 +143,7 @@ icc_init(enum icc_log_level log_level, int bidir, enum icc_client_type typecode,
     char *jobid = getenv("SLURM_JOBID");
     rpc_in.jobid = jobid ? atoi(jobid) : 0;
     rpc_in.addr_str = addr_str;
-    rpc_in.provid = MARGO_PROVIDER_ID_DEFAULT;
+    rpc_in.provid = icc->provider_id;
     rpc_in.clid = icc->clid;
     rpc_in.type = icc_client_type_str(typecode);
 
@@ -185,19 +187,22 @@ icc_fini(struct icc_context *icc)
   if (!icc)
     return rc;
 
-  target_deregister_in_t in;
-  in.clid = icc->clid;
 
-  rc = rpc_send(icc->mid, icc->addr, icc->provider_id,
-		rpc_hg_ids[ICC_RPC_TARGET_DEREGISTER], &in, &rpcrc);
+  if (icc->bidirectional) {
+    target_deregister_in_t in;
+    in.clid = icc->clid;
 
-  if (rc || rpcrc) {
-    margo_error(icc->mid, "Could not deregister target to IC");
-  }
+    rc = rpc_send(icc->mid, icc->addr, icc->provider_id,
+                  rpc_hg_ids[ICC_RPC_TARGET_DEREGISTER], &in, &rpcrc);
 
-  if (margo_addr_free(icc->mid, icc->addr) != HG_SUCCESS) {
-    margo_error(icc->mid, "Could not free Margo address");
-    rc = ICC_FAILURE;
+    if (rc || rpcrc) {
+      margo_error(icc->mid, "Could not deregister target to IC");
+    }
+
+    if (margo_addr_free(icc->mid, icc->addr) != HG_SUCCESS) {
+      margo_error(icc->mid, "Could not free Margo address");
+      rc = ICC_FAILURE;
+    }
   }
 
   margo_finalize(icc->mid);
