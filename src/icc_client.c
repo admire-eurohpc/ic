@@ -42,7 +42,8 @@ main(int argc, char **argv)
   int rpc_retcode;
 
   struct icc_context *icc;
-  icc_init(ICC_LOG_INFO, bidir, ICC_TYPE_UNDEFINED, &icc);
+  /* XX add a type option, get rid of bidir */
+  icc_init(ICC_LOG_INFO, bidir, ICC_TYPE_FLEXMPI, &icc);
   assert(icc != NULL);
 
   rc = icc_rpc_test(icc, 32, &rpc_retcode);

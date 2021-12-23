@@ -17,6 +17,8 @@
 #define RPC_OK  0
 #define RPC_ERR -1
 
+#define RPC_E2BIG 2
+
 
 /**
  * Get the Mercury (Hg) address string from the Margo server instance

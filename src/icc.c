@@ -1,8 +1,9 @@
 #include <errno.h>
-#include <margo.h>
+#include <netdb.h>              /* addrinfo */
 #include <stdlib.h>             /* malloc */
 #include <string.h>
 #include <uuid.h>
+#include <margo.h>
 
 #include "icc_rpc.h"
 #include "flexmpi.h"
@@ -12,7 +13,6 @@
 
 
 /* TODO
- * factorize with goto?
  * hg_error_to_string everywhere
  * Margo logging inside lib?
  * icc_status RPC (~test?)
@@ -25,6 +25,7 @@
  * Factorize boilerplate out of callbacks
  * Mercury macros move to .c?
  * ICC_TYPE_LEN check
+ * RPC_CODE to string for logs (rpc.c)
 */
 
 
@@ -117,7 +118,16 @@ icc_init(enum icc_log_level log_level, int bidir, enum icc_client_type typecode,
     REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TARGET_DEREGISTER, NULL);
     /* note this overwrites the previous registration without callback */
     REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TEST, test_cb);
+  }
+
+  if (typecode == ICC_TYPE_FLEXMPI) {
     REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_FLEXMPI_MALLEABILITY, flexmpi_malleability_cb);
+    int sfd = flexmpi_socket(icc->mid, "localhost", "7670");
+    if (sfd == -1) {
+      margo_error(icc->mid, "Could not initialize FlexMPI socket");
+      rc = ICC_FAILURE;
+      goto error;
+    }
   }
 
   rc = register_rpcs(icc->mid, rpc_callbacks, rpc_hg_ids);

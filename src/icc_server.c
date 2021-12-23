@@ -500,7 +500,7 @@ malleability_manager_th(void *arg)
       if (ret) {
         LOG_ERROR(mid, "Could not send RPC %d", ICC_RPC_FLEXMPI_MALLEABILITY);
       } else if (rpcret) {
-        LOG_ERROR(mid, "RPC %d returned with error %d", rpcret);
+        LOG_ERROR(mid, "RPC %d returned with code %d", ICC_RPC_FLEXMPI_MALLEABILITY, rpcret);
       }
     }
     cmidx = (cmidx + 1) % 5 ;            /* send next command */
