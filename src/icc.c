@@ -5,7 +5,7 @@
 #include <uuid.h>
 #include <margo.h>
 
-#include "icc_rpc.h"
+#include "rpc.h"
 #include "flexmpi.h"
 
 

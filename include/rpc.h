@@ -1,5 +1,5 @@
-#ifndef _ADMIRE_ICC_RPC_H
-#define _ADMIRE_ICC_RPC_H
+#ifndef _ADMIRE_IC_RPC_H
+#define _ADMIRE_IC_RPC_H
 
 #include <stdlib.h>            /* getenv   */
 #include <margo.h>

@@ -1,7 +1,7 @@
 #ifndef _ADMIRE_ICC_H
 #define _ADMIRE_ICC_H
 
-#include <stdint.h>             /* uintXX_t */
+#include <stdint.h>             /* uintxx_t */
 
 #define ICC_MAJOR 1
 #define ICC_MINOR 0

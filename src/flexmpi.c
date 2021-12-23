@@ -5,7 +5,7 @@
 #include <margo.h>
 
 #include "flexmpi.h"
-#include "icc_rpc.h"
+#include "rpc.h"
 
 static ABT_mutex_memory mutexmem = ABT_MUTEX_INITIALIZER;
 

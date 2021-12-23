@@ -1,6 +1,7 @@
-#include "assert.h"
-#include "icc_rpc.h"
+#include <assert.h>
+
 #include "icc.h"
+#include "rpc.h"
 
 #define ICC_ADDR_FILENAME  "icc.addr"
 #define RPC_TIMEOUT_MS 2000

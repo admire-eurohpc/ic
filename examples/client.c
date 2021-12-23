@@ -50,7 +50,6 @@ main(int argc, char **argv)
   int rpcret;
 
   struct icc_context *icc;
-  /* XX add a type option, get rid of bidir */
   icc_init(ICC_LOG_INFO, typeid, &icc);
   assert(icc != NULL);
 

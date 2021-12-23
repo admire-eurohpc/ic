@@ -26,7 +26,7 @@ libadhoccli_so := libadhoccli.so
 libjobmon_so := libjobmon.so
 testapp_bin := testapp
 
-sources := icc_server.c icc_rpc.c icdb.c icc.c adhoccli.c jobmon.c flexmpi.c app_manager.c testapp.c client.c
+sources := icc_server.c rpc.c icdb.c icc.c adhoccli.c jobmon.c flexmpi.c app_manager.c testapp.c client.c
 
 # keep libicc in front
 binaries := $(libicc_so) $(icc_server_bin) $(client_bin) $(libadhoccli_so) $(libjobmon_so) $(app_manager_bin) $(testapp_bin)
@@ -76,11 +76,11 @@ $(objects): %.o: %.c
 
 icdb.o: CFLAGS += `$(PKG_CONFIG) --cflags hiredis uuid`
 
-$(icc_server_bin): icc_rpc.o icdb.o
+$(icc_server_bin): rpc.o icdb.o
 $(icc_server_bin): CFLAGS += `$(PKG_CONFIG) --cflags margo uuid`
 $(icc_server_bin): LDLIBS += `$(PKG_CONFIG) --libs margo hiredis` -pthread -Wl,--no-undefined
 
-$(libicc_so): icc_rpc.o flexmpi.o
+$(libicc_so): rpc.o flexmpi.o
 $(libicc_so): CFLAGS += `$(PKG_CONFIG) --cflags margo uuid`
 $(libicc_so): LDLIBS += `$(PKG_CONFIG) --libs margo uuid` -Wl,--no-undefined,-h$(libicc_minorname)
 

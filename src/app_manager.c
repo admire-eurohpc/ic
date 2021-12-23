@@ -14,7 +14,7 @@
 #include <pthread.h>
 
 #include "icc.h"
-#include "icc_rpc.h"
+#include "rpc.h"
 
 struct icc_context *icc;
 

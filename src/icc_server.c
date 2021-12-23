@@ -7,7 +7,7 @@
 #include <assert.h>
 #include <pthread.h>
 
-#include "icc_rpc.h"
+#include "rpc.h"
 #include "icc.h"
 #include "icdb.h"
 
