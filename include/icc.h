@@ -26,7 +26,8 @@ enum icc_log_level {
 };
 
 /**
- * Type of IC client.
+ * Type of IC client. One of those must be passed to the icc_init
+ * function.
  */
 enum icc_client_type {
   ICC_TYPE_UNDEFINED,
@@ -37,36 +38,15 @@ enum icc_client_type {
   ICC_TYPE_COUNT,
 };
 
-static inline const char *
-icc_client_type_str(enum icc_client_type type) {
-  switch (type) {
-  case ICC_TYPE_UNDEFINED:
-    return "undefined";
-  case ICC_TYPE_MPI:
-    return "mpi";
-  case ICC_TYPE_FLEXMPI:
-    return "flexmpi";
-  case ICC_TYPE_ADHOCCLI:
-   return "adhoccli";
-  case ICC_TYPE_JOBMON:
-   return "jobmon";
-  default:
-    return "error";
-  }
-}
 
 
 /**
  * Initialize an ICC client instance and returns the associated
  * context in ICC_CONTEXT.
  *
- * If argument BIDIRECTIONAL is non-zero, arrange that this ICC client
- * can receive RPCs from the intelligent controller, not just send
- * them.
- *
  * Return ICC_SUCCESS or error code.
  */
-int icc_init(enum icc_log_level log_level, int bidirectional, enum icc_client_type typeid, struct icc_context **icc);
+int icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_context **icc);
 
 
 /**
@@ -93,7 +73,7 @@ int icc_sleep(struct icc_context *icc, double timeout_ms);
  *
  * Return ICC_SUCCESS or an error code.
  */
-int icc_rpc_test(struct icc_context *icc, uint8_t number, int *retcode);
+int icc_rpc_test(struct icc_context *icc, uint8_t number, enum icc_client_type type, int *retcode);
 
 
 /**

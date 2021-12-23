@@ -29,6 +29,13 @@
 */
 
 
+/* utils */
+
+/**
+ * Convert an ICC client type code to a string.
+ */
+static const char *_icc_type_str(enum icc_client_type type);
+
 /* RPC callbacks */
 static void test_cb(hg_handle_t h, margo_instance_id mid);
 
@@ -47,9 +54,10 @@ static icc_callback_t rpc_callbacks[ICC_RPC_COUNT] = { NULL };
 
 /* public functions */
 int
-icc_init(enum icc_log_level log_level, int bidir, enum icc_client_type typecode, struct icc_context **icc_context)
+icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_context **icc_context)
 {
   hg_return_t hret;
+  int bidir;
   int rc = ICC_SUCCESS;
 
   *icc_context = NULL;
@@ -57,6 +65,11 @@ icc_init(enum icc_log_level log_level, int bidir, enum icc_client_type typecode,
   struct icc_context *icc = calloc(1, sizeof(struct icc_context));
   if (!icc)
     return -errno;
+
+  bidir = 0;
+  /*  FlexMPI apps must be able to both receive AND send RPCs to the IC */
+  if (typeid == ICC_TYPE_FLEXMPI)
+    bidir = 1;
 
   /* use an extra thread for background RPC callbacks */
   icc->mid = margo_init(HG_PROTOCOL,
@@ -120,7 +133,7 @@ icc_init(enum icc_log_level log_level, int bidir, enum icc_client_type typecode,
     REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TEST, test_cb);
   }
 
-  if (typecode == ICC_TYPE_FLEXMPI) {
+  if (typeid == ICC_TYPE_FLEXMPI) {
     REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_FLEXMPI_MALLEABILITY, flexmpi_malleability_cb);
     int sfd = flexmpi_socket(icc->mid, "localhost", "7670");
     if (sfd == -1) {
@@ -158,7 +171,7 @@ icc_init(enum icc_log_level log_level, int bidir, enum icc_client_type typecode,
     rpc_in.addr_str = addr_str;
     rpc_in.provid = icc->provider_id;
     rpc_in.clid = icc->clid;
-    rpc_in.type = icc_client_type_str(typecode);
+    rpc_in.type = _icc_type_str(typeid);
 
     rc = rpc_send(icc->mid, icc->addr, icc->provider_id,
                   rpc_hg_ids[ICC_RPC_TARGET_REGISTER], &rpc_in, &rpc_rc);
@@ -225,15 +238,16 @@ icc_fini(struct icc_context *icc)
 
 
 int
-icc_rpc_test(struct icc_context *icc, uint8_t number, int *retcode)
+icc_rpc_test(struct icc_context *icc, uint8_t number, enum icc_client_type type, int *retcode)
 {
   int rc;
-  test_in_t in;
+  test_in_t in = { 0 };
 
   CHECK_ICC(icc);
 
   in.clid = icc->clid;
   in.number = number;
+  in.type = _icc_type_str(type);
 
   rc = rpc_send(icc->mid, icc->addr, icc->provider_id, rpc_hg_ids[ICC_RPC_TEST], &in, retcode);
 
@@ -312,6 +326,26 @@ icc_rpc_malleability_avail(struct icc_context *icc, char *type, char *portname, 
   rc = rpc_send(icc->mid, icc->addr, icc->provider_id, rpc_hg_ids[ICC_RPC_MALLEABILITY_AVAIL], &in, retcode);
 
   return rc ? ICC_FAILURE : ICC_SUCCESS;
+}
+
+
+static inline const char *
+_icc_type_str(enum icc_client_type type)
+{
+  switch (type) {
+  case ICC_TYPE_UNDEFINED:
+    return "undefined";
+  case ICC_TYPE_MPI:
+    return "mpi";
+  case ICC_TYPE_FLEXMPI:
+    return "flexmpi";
+  case ICC_TYPE_ADHOCCLI:
+   return "adhoccli";
+  case ICC_TYPE_JOBMON:
+   return "jobmon";
+  default:
+    return "error";
+  }
 }
 
 

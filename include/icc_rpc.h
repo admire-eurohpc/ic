@@ -123,8 +123,8 @@ MERCURY_GEN_PROC(rpc_out_t, ((int64_t)(rc)))
 
 MERCURY_GEN_PROC(target_register_in_t,
                  ((hg_const_string_t)(clid))
-                 ((hg_uint32_t)(jobid))
                  ((hg_const_string_t)(type))
+                 ((hg_uint32_t)(jobid))
                  ((hg_const_string_t)(addr_str))
                  ((hg_uint16_t)(provid)))
 
@@ -133,6 +133,7 @@ MERCURY_GEN_PROC(target_deregister_in_t,
 
 MERCURY_GEN_PROC(test_in_t,
                  ((hg_const_string_t)(clid))
+                 ((hg_const_string_t)(type))
                  ((hg_uint32_t)(jobid))
                  ((uint8_t)(number)))
 

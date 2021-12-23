@@ -82,7 +82,7 @@ slurm_spank_local_user_init(spank_t sp, int ac __attribute__((unused)),
   int rpc_retcode;
   int rc;
 
-  rc = icc_init(ICC_LOG_INFO, 0, ICC_TYPE_ADHOCCLI, &icc);
+  rc = icc_init(ICC_LOG_INFO, ICC_TYPE_ADHOCCLI, &icc);
   if (rc != ICC_SUCCESS) {
     slurm_error("ADMIRE: Could not initialize connection to IC");
     return -1;

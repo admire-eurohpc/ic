@@ -270,7 +270,7 @@ test_cb(hg_handle_t h, margo_instance_id mid)
     out.rc = ICC_FAILURE;
     LOG_ERROR(mid, "Could not get RPC input: %s", HG_Error_to_string(hret));
   } else {
-    margo_info(mid, "Got \"TEST\" RPC from client %s with argument %u\n", in.clid, in.number);
+    margo_info(mid, "Got \"TEST\" RPC from %s client %s with argument %u\n", in.type, in.clid, in.number);
   }
 
   hret = margo_respond(h, &out);

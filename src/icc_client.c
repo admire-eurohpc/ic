@@ -7,10 +7,15 @@
 
 #include "icc.h"
 
+
+static enum icc_client_type
+_icc_typecode(const char *type);
+
+
 void
 usage(void)
 {
-  (void)fprintf(stderr, "usage: icc_client [--bidirectional]\n");
+  (void)fprintf(stderr, "usage: icc_client [--type=mpi|flexmpi|adhoccli|jobmon]\n");
   exit(1);
 }
 
@@ -18,17 +23,20 @@ usage(void)
 int
 main(int argc, char **argv)
 {
-  static int bidir = 0;
   static struct option longopts[] = {
-    { "bidirectional", no_argument, &bidir, 1 },
-    { NULL,            0,           NULL,   0 }
+    { "type", required_argument, NULL, 't' },
+    { NULL,   0,                 NULL,  0  },
   };
 
   int ch;
-  while ((ch = getopt_long(argc, argv, "b", longopts, NULL)) != -1)
+  enum icc_client_type typeid = 0;
+
+  while ((ch = getopt_long(argc, argv, "t:", longopts, NULL)) != -1)
     switch (ch) {
-    case 'b':
-      bidir = 1;
+    case 't':
+      typeid = _icc_typecode(optarg);
+      if (typeid == ICC_TYPE_UNDEFINED)
+	usage();
       break;
     case 0:
       continue;
@@ -38,26 +46,38 @@ main(int argc, char **argv)
   argc -= optind;
   argv += optind;
 
-  int rc;
-  int rpc_retcode;
+  int ret;
+  int rpcret;
 
   struct icc_context *icc;
   /* XX add a type option, get rid of bidir */
-  icc_init(ICC_LOG_INFO, bidir, ICC_TYPE_FLEXMPI, &icc);
+  icc_init(ICC_LOG_INFO, typeid, &icc);
   assert(icc != NULL);
 
-  rc = icc_rpc_test(icc, 32, &rpc_retcode);
+  ret = icc_rpc_test(icc, 32, typeid, &rpcret);
 
-  if (rc == ICC_SUCCESS)
-    printf("icc_client: RPC \"TEST\" successful: retcode=%d\n", rpc_retcode);
+  if (ret == ICC_SUCCESS)
+    printf("icc_client: RPC \"TEST\" successful: retcode=%d\n", rpcret);
   else
-    fprintf(stderr, "Error sending RPC to IC (retcode=%d)\n", rc);
+    fprintf(stderr, "Error sending RPC to IC (retcode=%d)\n", ret);
 
-  if (bidir)
+  /* FlexMPI apps need to wait for malleability commands */
+  if (typeid == ICC_TYPE_FLEXMPI)
     icc_sleep(icc, 30000);
 
-  rc = icc_fini(icc);
-  assert(rc == 0);
+  ret = icc_fini(icc);
+  assert(ret == 0);
 
   return EXIT_SUCCESS;
+}
+
+
+static enum icc_client_type
+_icc_typecode(const char *type)
+{
+  if (!strncmp(type, "mpi", 4)) return ICC_TYPE_MPI;
+  else if (!strncmp(type, "flexmpi", 8)) return ICC_TYPE_FLEXMPI;
+  else if (!strncmp(type, "adhoccli", 9)) return ICC_TYPE_ADHOCCLI;
+  else if (!strncmp(type, "jobmon", 7)) return ICC_TYPE_JOBMON;
+  else return ICC_TYPE_UNDEFINED;
 }
