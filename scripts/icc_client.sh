@@ -26,4 +26,4 @@ LD_LIBRARY_PATH=$libpath
 
 export PATH LD_LIBRARY_PATH ADMIRE_DIR
 
-srun --time=00:00:30 icc_client
+srun --time=00:00:30 client

@@ -15,7 +15,7 @@ _icc_typecode(const char *type);
 void
 usage(void)
 {
-  (void)fprintf(stderr, "usage: icc_client [--type=mpi|flexmpi|adhoccli|jobmon]\n");
+  (void)fprintf(stderr, "usage: ICC client [--type=mpi|flexmpi|adhoccli|jobmon]\n");
   exit(1);
 }
 
