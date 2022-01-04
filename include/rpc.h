@@ -86,50 +86,57 @@ typedef void (*icc_callback_t)(hg_handle_t h, margo_instance_id mid);
  * RPC codes. Codes 1 to 127 are reserved for
  * internal use.
  *
- * ICC_RPC_TARGET_REGISTER: Register an IC "target". Once registered,
- * and IC client can both send and receive RPC server. The client
- * needs to be started in MARGO_SERVER_MODE to have an address.
+ * ICC_RPC_CLIENT_REGISTER: Register an IC client as a Margo
+ * "target". Once registered, and IC client can both send and receive
+ * RPC server. The client needs to be started in MARGO_SERVER_MODE to
+ * have an address.
  *
- * ICC_RPC_TARGET_DEREGISTER: Deregister an IC "target".
+ * ICC_RPC_CLIENT_DEREGISTER: Deregister an IC client.
  *
  * For the public RPCs, see the functions documentation in icc.h.
  */
 enum icc_rpc_code {
-  ICC_RPC_ERROR = 0,
+  RPC_ERROR = 0,
 
   /* internal RPCs */
-  ICC_RPC_TARGET_REGISTER,
-  ICC_RPC_TARGET_DEREGISTER,
+  RPC_CLIENT_REGISTER,
+  RPC_CLIENT_DEREGISTER,
 
   /* public RPCs */
-  ICC_RPC_TEST = 128,
-  ICC_RPC_ADHOC_NODES,
-  ICC_RPC_JOBMON_SUBMIT,
-  ICC_RPC_JOBMON_EXIT,
-  ICC_RPC_MALLEABILITY_AVAIL,
-  ICC_RPC_FLEXMPI_MALLEABILITY,
+  RPC_TEST = 128,
+  RPC_ADHOC_NODES,
+  RPC_JOBMON_SUBMIT,
+  RPC_JOBMON_EXIT,
+  RPC_MALLEABILITY_AVAIL,
+  RPC_FLEXMPI_MALLEABILITY,
 
-  ICC_RPC_COUNT
+  RPC_COUNT
 };
 
 /**
- * Mercury-generated structs. Each struct is associated with one of
- * the RPC identified by an icc_rpc_code (check the name for
- * correspondance).
+ * Mercury-generated input/output RPC structs. Each input struct is
+ * associated with one of the RPC identified by a name RPC_xx_NAME.
  */
 
 /* Generic output struct */
 MERCURY_GEN_PROC(rpc_out_t, ((int64_t)(rc)))
 
-MERCURY_GEN_PROC(target_register_in_t,
+
+#define RPC_CLIENT_REGISTER_NAME  "icc_client_register"
+#define RPC_CLIENT_DEREGISTER_NAME  "icc_client_deregister"
+
+MERCURY_GEN_PROC(client_register_in_t,
                  ((hg_const_string_t)(clid))
                  ((hg_const_string_t)(type))
                  ((hg_uint32_t)(jobid))
                  ((hg_const_string_t)(addr_str))
                  ((hg_uint16_t)(provid)))
 
-MERCURY_GEN_PROC(target_deregister_in_t,
+MERCURY_GEN_PROC(client_deregister_in_t,
                  ((hg_const_string_t)(clid)))
+
+
+#define RPC_TEST_NAME  "icc_test"
 
 MERCURY_GEN_PROC(test_in_t,
                  ((hg_const_string_t)(clid))
@@ -137,11 +144,9 @@ MERCURY_GEN_PROC(test_in_t,
                  ((hg_uint32_t)(jobid))
                  ((uint8_t)(number)))
 
-MERCURY_GEN_PROC(adhoc_nodes_in_t,
-                 ((hg_const_string_t)(clid))
-                 ((uint32_t)(jobid))
-                 ((uint32_t)(nnodes))
-                 ((uint32_t)(adhoc_nnodes)))
+
+#define RPC_JOBMON_SUBMIT_NAME  "icc_jobmon_submit"
+#define RPC_JOBMON_EXIT_NAME  "icc_jobmon_exit"
 
 MERCURY_GEN_PROC(jobmon_submit_in_t,
                  ((hg_const_string_t)(clid))
@@ -154,6 +159,18 @@ MERCURY_GEN_PROC(jobmon_exit_in_t,
                  ((uint32_t)(jobid))
                  ((uint32_t)(jobstepid)))
 
+
+#define RPC_ADHOC_NODES_NAME  "icc_adhoc_nodes"
+
+MERCURY_GEN_PROC(adhoc_nodes_in_t,
+                 ((hg_const_string_t)(clid))
+                 ((uint32_t)(jobid))
+                 ((uint32_t)(nnodes))
+                 ((uint32_t)(adhoc_nnodes)))
+
+
+#define RPC_MALLEABILITY_AVAIL_NAME  "icc_malleability_avail"
+
 MERCURY_GEN_PROC(malleability_avail_in_t,
                  ((hg_const_string_t)(clid))
                  ((uint32_t)(jobid))
@@ -161,40 +178,22 @@ MERCURY_GEN_PROC(malleability_avail_in_t,
                  ((hg_const_string_t)(portname))
                  ((uint32_t)(nnodes)))
 
+
+#define RPC_FLEXMPI_MALLEABILITY_NAME  "icc_flexmpi_malleability"
+
 MERCURY_GEN_PROC(flexmpi_malleability_in_t,
                  ((hg_const_string_t)(command)))
 
 
 /**
- * Register RPCs to Margo instance MID. If the id in IDS is 0, the
- * corresponding RPC will not be registered. If it is not 0, the
- * RPC will be registered with the callback given in CALLBACKS, or
- * with NULL if no callback is given.
- *
- * Once registered the Mercury id of the RPC will be placed in the IDS
- * array.
- *
- * Returns 0 if the registrations went fine, -1 otherwise.
- *
- * WARNING:
- * The function pointers in CALLBACKS will be passed to RPCs handler,
- * the caller must make sure that they don’t go out of scope before
- * margo_finalize is called (how would a function go out of scope
- * though?).
- */
-int
-register_rpcs(margo_instance_id mid, icc_callback_t callbacks[ICC_RPC_COUNT], hg_id_t ids[ICC_RPC_COUNT]);
-
-
-/**
  * Send RPC identifed by RPC_CODE from Margo instance MID to the Margo
- * provider identified by ADDR & PROVID with input struct DATA.
+ * provider identified by ADDR with input struct DATA.
  *
  * Returns 0 or -1 in case of error. RETCODE is filled with the RPC
  * return code.
  */
 int
-rpc_send(margo_instance_id mid, hg_addr_t addr, uint16_t provid, hg_id_t rpc_id,
+rpc_send(margo_instance_id mid, hg_addr_t addr, hg_id_t rpc_id,
          void *data, int *retcode);
 
 #endif

@@ -22,14 +22,15 @@ libicc_minorname := $(libicc_soname).$(ICC_MINOR).$(ICC_PATCH)
 icc_server_bin := icc_server
 client_bin := client
 app_manager_bin := app_manager
-libadhoccli_so := libadhoccli.so
-libjobmon_so := libjobmon.so
+libslurmadhoccli_so := libslurmadhoccli.so
+libslurmjobmon_so := libslurmjobmon.so
 testapp_bin := testapp
 
-sources := icc_server.c rpc.c icdb.c icc.c adhoccli.c jobmon.c flexmpi.c app_manager.c testapp.c client.c
+sources := icc_server.c rpc.c cb.c icdb.c icc.c adhoccli.c cbserver.c flexmpi.c app_manager.c
+sources += slurmjobmon.c slurmadhoccli.c client.c testapp.c
 
 # keep libicc in front
-binaries := $(libicc_so) $(icc_server_bin) $(client_bin) $(libadhoccli_so) $(libjobmon_so) $(app_manager_bin) $(testapp_bin)
+binaries := $(libicc_so) $(icc_server_bin) $(client_bin) $(libslurmjobmon_so) $(libslurmjobmon_so) $(app_manager_bin) $(testapp_bin)
 
 objects := $(sources:.c=.o)
 depends := $(sources:.c=.d)
@@ -76,11 +77,11 @@ $(objects): %.o: %.c
 
 icdb.o: CFLAGS += `$(PKG_CONFIG) --cflags hiredis uuid`
 
-$(icc_server_bin): rpc.o icdb.o
+$(icc_server_bin): rpc.o icdb.o cb.o cbserver.o
 $(icc_server_bin): CFLAGS += `$(PKG_CONFIG) --cflags margo uuid`
 $(icc_server_bin): LDLIBS += `$(PKG_CONFIG) --libs margo hiredis` -pthread -Wl,--no-undefined
 
-$(libicc_so): rpc.o flexmpi.o
+$(libicc_so): rpc.o cb.o flexmpi.o
 $(libicc_so): CFLAGS += `$(PKG_CONFIG) --cflags margo uuid`
 $(libicc_so): LDLIBS += `$(PKG_CONFIG) --libs margo uuid` -Wl,--no-undefined,-h$(libicc_minorname)
 
@@ -90,7 +91,7 @@ $(app_manager_bin): CFLAGS += `$(PKG_CONFIG) --cflags margo`
 $(app_manager_bin): LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined
 $(app_manager_bin): LDLIBS += -L. -licc -pthread
 
-$(libjobmon_so) $(libadhoccli_so): LDLIBS += -L. -licc -lslurm
+$(libslurmjobmon_so) $(libslurmadhoccli_so): LDLIBS += -L. -licc -lslurm
 
 $(testapp_bin): CFLAGS += `$(PKG_CONFIG) --cflags mpi`
 $(testapp_bin): LDLIBS += `$(PKG_CONFIG) --libs mpi margo` -L. -licc

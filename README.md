@@ -166,8 +166,8 @@ To run the ICC server, simply use the executable:
 To communicate with the ICC server, clients must be linked to the
 dynamic library `libicc.so`. The header file `include/icc.h` details
 the API. Examples client are available in the `example` directory: a
-generic client `client.c`, two Slurm SPANK plugins `adhoccli.c` and
-`jobmon.c` and an MPI application `testapp.c`
+generic client `client.c`, two Slurm SPANK plugins `slurmadhoccli.c` and
+`slurmjobmon.c` and an MPI application `testapp.c`
 
 For example, to run the test ICC client, run:
 ```

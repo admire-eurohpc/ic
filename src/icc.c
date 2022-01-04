@@ -6,6 +6,7 @@
 #include <margo.h>
 
 #include "rpc.h"
+#include "cb.h"
 #include "flexmpi.h"
 
 
@@ -36,9 +37,6 @@
  */
 static const char *_icc_type_str(enum icc_client_type type);
 
-/* RPC callbacks */
-static void test_cb(hg_handle_t h, margo_instance_id mid);
-
 struct icc_context {
   margo_instance_id mid;
   uint8_t           bidirectional;
@@ -48,8 +46,7 @@ struct icc_context {
 };
 
 
-static hg_id_t rpc_hg_ids[ICC_RPC_COUNT] = { 0 };
-static icc_callback_t rpc_callbacks[ICC_RPC_COUNT] = { NULL };
+static hg_id_t rpc_hg_ids[RPC_COUNT] = { 0 };
 
 
 /* public functions */
@@ -113,28 +110,26 @@ icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_c
     goto error;
   }
 
+  /* set client UUID */
   uuid_t uuid;
   uuid_generate(uuid);
   uuid_unparse(uuid, icc->clid);
 
-  /* register client RPCs (i.e cb is NULL)
-     XX could be a for loop */
-  REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TEST, NULL);
-  REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_MALLEABILITY_AVAIL, NULL);
-  REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_JOBMON_SUBMIT, NULL);
-  REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_JOBMON_EXIT, NULL);
-  REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_ADHOC_NODES, NULL);
-  /* ... prep registration of other RPCs here */
+  /* register RPCs. Note that if the callback is not NULL the client
+     is able to send AND receive the RPC */
+  rpc_hg_ids[RPC_TEST] = MARGO_REGISTER(icc->mid, RPC_TEST_NAME, test_in_t, rpc_out_t, test_cb);
+  rpc_hg_ids[RPC_JOBMON_SUBMIT] = MARGO_REGISTER(icc->mid, RPC_JOBMON_SUBMIT_NAME, jobmon_submit_in_t, rpc_out_t, NULL);
+  rpc_hg_ids[RPC_JOBMON_EXIT] = MARGO_REGISTER(icc->mid, RPC_JOBMON_EXIT_NAME, jobmon_exit_in_t, rpc_out_t, NULL);
+  rpc_hg_ids[RPC_ADHOC_NODES] = MARGO_REGISTER(icc->mid, RPC_ADHOC_NODES_NAME, adhoc_nodes_in_t, rpc_out_t, NULL);
+  rpc_hg_ids[RPC_MALLEABILITY_AVAIL] = MARGO_REGISTER(icc->mid, RPC_MALLEABILITY_AVAIL_NAME, malleability_avail_in_t, rpc_out_t, NULL);
 
   if (bidir) {
-    REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TARGET_REGISTER, NULL);
-    REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TARGET_DEREGISTER, NULL);
-    /* note this overwrites the previous registration without callback */
-    REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_TEST, test_cb);
+    rpc_hg_ids[RPC_CLIENT_REGISTER] = MARGO_REGISTER(icc->mid, RPC_CLIENT_REGISTER_NAME, client_register_in_t, rpc_out_t, NULL);
+    rpc_hg_ids[RPC_CLIENT_DEREGISTER] = MARGO_REGISTER(icc->mid, RPC_CLIENT_DEREGISTER_NAME, client_deregister_in_t, rpc_out_t, NULL);
   }
 
   if (typeid == ICC_TYPE_FLEXMPI) {
-    REGISTER_PREP(rpc_hg_ids, rpc_callbacks, ICC_RPC_FLEXMPI_MALLEABILITY, flexmpi_malleability_cb);
+    rpc_hg_ids[RPC_FLEXMPI_MALLEABILITY] = MARGO_REGISTER(icc->mid, RPC_FLEXMPI_MALLEABILITY_NAME, flexmpi_malleability_in_t, rpc_out_t, flexmpi_malleability_cb);
     int sfd = flexmpi_socket(icc->mid, "localhost", "7670");
     if (sfd == -1) {
       margo_error(icc->mid, "Could not initialize FlexMPI socket");
@@ -143,18 +138,12 @@ icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_c
     }
   }
 
-  rc = register_rpcs(icc->mid, rpc_callbacks, rpc_hg_ids);
-  if (rc) {
-    margo_error(icc->mid, "Could not register RPCs");
-    rc = ICC_FAILURE;
-    goto error;
-  }
 
   /* send address to IC to be able to receive RPCs */
   if (bidir == 1) {
     char addr_str[ICC_ADDR_LEN];
     hg_size_t addr_str_size = ICC_ADDR_LEN;
-    target_register_in_t rpc_in;
+    client_register_in_t rpc_in;
     int rpc_rc;
 
     icc->bidirectional = 1;
@@ -173,8 +162,7 @@ icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_c
     rpc_in.clid = icc->clid;
     rpc_in.type = _icc_type_str(typeid);
 
-    rc = rpc_send(icc->mid, icc->addr, icc->provider_id,
-                  rpc_hg_ids[ICC_RPC_TARGET_REGISTER], &rpc_in, &rpc_rc);
+    rc = rpc_send(icc->mid, icc->addr, rpc_hg_ids[RPC_CLIENT_REGISTER], &rpc_in, &rpc_rc);
 
     if (rc || rpc_rc) {
       margo_error(icc->mid, "Could not register address of the bidirectional client to the IC");
@@ -215,11 +203,10 @@ icc_fini(struct icc_context *icc)
 
 
   if (icc->bidirectional) {
-    target_deregister_in_t in;
+    client_deregister_in_t in;
     in.clid = icc->clid;
 
-    rc = rpc_send(icc->mid, icc->addr, icc->provider_id,
-                  rpc_hg_ids[ICC_RPC_TARGET_DEREGISTER], &in, &rpcrc);
+    rc = rpc_send(icc->mid, icc->addr, rpc_hg_ids[RPC_CLIENT_DEREGISTER], &in, &rpcrc);
 
     if (rc || rpcrc) {
       margo_error(icc->mid, "Could not deregister target to IC");
@@ -249,7 +236,7 @@ icc_rpc_test(struct icc_context *icc, uint8_t number, enum icc_client_type type,
   in.number = number;
   in.type = _icc_type_str(type);
 
-  rc = rpc_send(icc->mid, icc->addr, icc->provider_id, rpc_hg_ids[ICC_RPC_TEST], &in, retcode);
+  rc = rpc_send(icc->mid, icc->addr, rpc_hg_ids[RPC_TEST], &in, retcode);
 
   return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
@@ -267,7 +254,7 @@ icc_rpc_adhoc_nodes(struct icc_context *icc, uint32_t jobid, uint32_t nnodes, ui
   in.nnodes = nnodes;
   in.adhoc_nnodes = adhoc_nnodes;
 
-  rc = rpc_send(icc->mid, icc->addr, icc->provider_id, rpc_hg_ids[ICC_RPC_ADHOC_NODES], &in, retcode);
+  rc = rpc_send(icc->mid, icc->addr, rpc_hg_ids[RPC_ADHOC_NODES], &in, retcode);
 
   return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
@@ -285,7 +272,7 @@ icc_rpc_jobmon_submit(struct icc_context *icc, uint32_t jobid, uint32_t jobstepi
   in.jobstepid = jobstepid;
   in.nnodes = nnodes;
 
-  rc = rpc_send(icc->mid, icc->addr, icc->provider_id, rpc_hg_ids[ICC_RPC_JOBMON_SUBMIT], &in, retcode);
+  rc = rpc_send(icc->mid, icc->addr, rpc_hg_ids[RPC_JOBMON_SUBMIT], &in, retcode);
 
   return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
@@ -302,7 +289,7 @@ icc_rpc_jobmon_exit(struct icc_context *icc, uint32_t jobid, uint32_t jobstepid,
   in.jobid = jobid;
   in.jobstepid = jobstepid;
 
-  rc = rpc_send(icc->mid, icc->addr, icc->provider_id, rpc_hg_ids[ICC_RPC_JOBMON_EXIT], &in, retcode);
+  rc = rpc_send(icc->mid, icc->addr, rpc_hg_ids[RPC_JOBMON_EXIT], &in, retcode);
 
   return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
@@ -323,7 +310,7 @@ icc_rpc_malleability_avail(struct icc_context *icc, char *type, char *portname, 
   in.jobid = jobid;
   in.nnodes = nnodes;
 
-  rc = rpc_send(icc->mid, icc->addr, icc->provider_id, rpc_hg_ids[ICC_RPC_MALLEABILITY_AVAIL], &in, retcode);
+  rc = rpc_send(icc->mid, icc->addr, rpc_hg_ids[RPC_MALLEABILITY_AVAIL], &in, retcode);
 
   return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
@@ -348,26 +335,3 @@ _icc_type_str(enum icc_client_type type)
   }
 }
 
-
-/* RPC callbacks */
-static void
-test_cb(hg_handle_t h, margo_instance_id mid) {
-  hg_return_t hret;
-  test_in_t in;
-  rpc_out_t out;
-
-  out.rc = ICC_SUCCESS;
-
-  hret = margo_get_input(h, &in);
-  if (hret != HG_SUCCESS) {
-    out.rc = ICC_FAILURE;
-    margo_error(mid, "Could not get RPC input: %s", HG_Error_to_string(hret));
-  } else {
-    margo_info(mid, "Got \"ICC\" RPC with argument %u\n", in.number);
-  }
-
-  hret = margo_respond(h, &out);
-  if (hret != HG_SUCCESS) {
-    margo_error(mid, "Could not respond to HPC");
-  }
-}

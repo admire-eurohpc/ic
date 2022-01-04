@@ -1,11 +1,14 @@
+#include <assert.h>
 #include <errno.h>
 #include <netdb.h>              /* sockets */
 #include <sys/socket.h>         /* sockets */
 #include <sys/types.h>          /* sockets */
 #include <margo.h>
 
-#include "flexmpi.h"
 #include "rpc.h"
+
+#define FLEXMPI_COMMAND_MAX_LEN 256
+
 
 static ABT_mutex_memory mutexmem = ABT_MUTEX_INITIALIZER;
 
@@ -49,13 +52,17 @@ flexmpi_socket(margo_instance_id mid, const char *node, const char *service)
 
 
 void
-flexmpi_malleability_cb(hg_handle_t h, margo_instance_id mid)
+flexmpi_malleability_cb(hg_handle_t h)
 {
   hg_return_t hret;
+  margo_instance_id mid;
   flexmpi_malleability_in_t in;
   rpc_out_t out;
   ABT_mutex mutex;
   int nbytes;
+
+  mid = margo_hg_handle_get_instance(h);
+  assert(mid);
 
   out.rc = RPC_OK;
 
@@ -102,3 +109,5 @@ flexmpi_malleability_cb(hg_handle_t h, margo_instance_id mid)
     margo_error(mid, "%s: Could not respond to RPC", __func__);
   }
 }
+DECLARE_MARGO_RPC_HANDLER(flexmpi_malleability_cb);
+

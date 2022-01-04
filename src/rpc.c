@@ -63,82 +63,8 @@ icc_addr_file()
 }
 
 
-/* Internal RPCs machinery */
-#define ICC_REGISTER_RPC(mid,ids,cbs,idx,in,out)  if (ids[idx]) {       \
-    if (cbs[idx] == NULL) {                                             \
-      ids[idx] = MARGO_REGISTER(mid, "rpc_"#idx, in, out, NULL);        \
-    } else {                                                            \
-      ids[idx] = MARGO_REGISTER_PROVIDER(mid, "rpc_"#idx, in, out, cb, MARGO_PROVIDER_DEFAULT, ABT_POOL_NULL); \
-      struct rpc_data *d = calloc(1, sizeof(*d));                       \
-      d->callback = cbs[idx];                                           \
-      d->rpc_ids = ids;                                                 \
-      margo_register_data(mid, ids[idx], d, free);                      \
-    }                                                                   \
-  }
-
-struct rpc_data {
-  hg_id_t             *rpc_ids;
-  icc_callback_t      callback;
-};
-
-static void cb(hg_handle_t);
-DEFINE_MARGO_RPC_HANDLER(cb);
-
-static void
-cb(hg_handle_t h)
-{
-  margo_instance_id mid = margo_hg_handle_get_instance(h);
-  assert(mid);
-
-  const struct hg_info *info = margo_get_info(h);
-  const struct rpc_data *data = margo_registered_data(mid, info->id);
-
-  /* real callback associated with the RPC */
-  data->callback(h, mid);
-
-  hg_return_t hret = margo_destroy(h);
-  if (hret != HG_SUCCESS) {
-    margo_error(mid, "Could not destroy Margo RPC handle: %s", HG_Error_to_string(hret));
-  }
-}
-DECLARE_MARGO_RPC_HANDLER(cb);
-
 int
-register_rpcs(margo_instance_id mid, icc_callback_t callbacks[ICC_RPC_COUNT], hg_id_t ids[ICC_RPC_COUNT])
-{
-  /* reminder:
-     id == 0 => do not register RPC
-     callback == NULL => register RPC as client
-     callback != NULL => register RPC with given callback
-  */
-  assert(mid);
-  assert(callbacks != NULL);
-  assert(ids != NULL);
-
-  /* internal RPCs */
-  ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_TARGET_REGISTER, target_register_in_t, rpc_out_t);
-  ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_TARGET_DEREGISTER, target_deregister_in_t, rpc_out_t);
-
-  /* test RPC */
-  ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_TEST, test_in_t, rpc_out_t);
-
-  /* job monitoring RPCs */
-  ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_JOBMON_SUBMIT, jobmon_submit_in_t, rpc_out_t);
-  ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_JOBMON_EXIT, jobmon_exit_in_t, rpc_out_t);
-
-  /* ad-hoc storage RPCs */
-  ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_ADHOC_NODES, adhoc_nodes_in_t, rpc_out_t);
-
-  /* malleability */
-  ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_MALLEABILITY_AVAIL, malleability_avail_in_t, rpc_out_t);
-  ICC_REGISTER_RPC(mid, ids, callbacks, ICC_RPC_FLEXMPI_MALLEABILITY, flexmpi_malleability_in_t, rpc_out_t);
-
-  return 0;
-}
-
-
-int
-rpc_send(margo_instance_id mid, hg_addr_t addr, uint16_t provid, hg_id_t rpcid,
+rpc_send(margo_instance_id mid, hg_addr_t addr, hg_id_t rpcid,
          void *in, int *retcode)
 {
   assert(addr);
@@ -153,7 +79,7 @@ rpc_send(margo_instance_id mid, hg_addr_t addr, uint16_t provid, hg_id_t rpcid,
     return -1;
   }
 
-  hret = margo_provider_forward_timed(provid, handle, in, RPC_TIMEOUT_MS);
+  hret = margo_forward_timed(handle, in, RPC_TIMEOUT_MS);
   if (hret != HG_SUCCESS) {
     margo_error(mid, "Could not forward Margo RPC: %s", HG_Error_to_string(hret));
 
