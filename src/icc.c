@@ -27,6 +27,7 @@
  * Mercury macros move to .c?
  * ICC_TYPE_LEN check
  * RPC_CODE to string for logs (rpc.c)
+ * Cleanup FlexMPI socket, get rid of global socket var
 */
 
 
@@ -68,9 +69,10 @@ icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_c
   if (typeid == ICC_TYPE_FLEXMPI)
     bidir = 1;
 
-  /* use an extra thread for background RPC callbacks */
+  /* use 2 extra threads: 1 for RPC network progress, 1 for background
+     RPC callbacks */
   icc->mid = margo_init(HG_PROTOCOL,
-                        bidir ? MARGO_SERVER_MODE : MARGO_CLIENT_MODE, 0, 1);
+                        bidir ? MARGO_SERVER_MODE : MARGO_CLIENT_MODE, 1, 1);
   if (!icc->mid) {
     rc = ICC_FAILURE;
     goto error;
@@ -130,14 +132,13 @@ icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_c
 
   if (typeid == ICC_TYPE_FLEXMPI) {
     rpc_hg_ids[RPC_FLEXMPI_MALLEABILITY] = MARGO_REGISTER(icc->mid, RPC_FLEXMPI_MALLEABILITY_NAME, flexmpi_malleability_in_t, rpc_out_t, flexmpi_malleability_cb);
-    int sfd = flexmpi_socket(icc->mid, "localhost", "7670");
+    int sfd = flexmpi_socket(icc->mid, "localhost", "6666");
     if (sfd == -1) {
       margo_error(icc->mid, "Could not initialize FlexMPI socket");
       rc = ICC_FAILURE;
       goto error;
     }
   }
-
 
   /* send address to IC to be able to receive RPCs */
   if (bidir == 1) {

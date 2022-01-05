@@ -196,11 +196,9 @@ malleability_manager_th(void *arg)
   /* XX hardcoded malleability commands */
   size_t cmidx = 0;
   char *commands[] = {
-    "6:compute-12-2:2",
-    "6:compute-12-3:4",
-    "6:compute-12-3:-4",
-    "6:compute-12-2:-2",
-    "5"
+    "6:lhost:2",
+    "6:lhost:-2",
+    "5:"
   };
 
   while(1) {
@@ -244,7 +242,9 @@ malleability_manager_th(void *arg)
         LOG_ERROR(mid, "RPC %d returned with code %d", RPC_FLEXMPI_MALLEABILITY, rpcret);
       }
     }
-    cmidx = (cmidx + 1) % 5 ;            /* send next command */
+    if (nclients) {
+      cmidx = (cmidx + 1) % (sizeof(commands) / sizeof(commands[0])); /* send next command */
+    }
     margo_thread_sleep(mid, TIMEOUT_MS); /* sleep and retry clients query */
   }
 

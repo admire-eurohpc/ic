@@ -19,12 +19,12 @@ static struct addrinfo *flexinfo = NULL;  /* FlexMPI addrinfo */
 int
 flexmpi_socket(margo_instance_id mid, const char *node, const char *service)
 {
-  /* node = "compute-12-2", service = "7670" */
+  /* node = "localhost", service = "7670" */
   struct addrinfo hints, *res, *p;
   int ret;
 
   memset(&hints, 0, sizeof(hints));
-  hints.ai_family = AF_UNSPEC;    /* allow IPv4 or IPv6 */
+  hints.ai_family = AF_INET;      /* FlexMPI only supports IPV4 */
   hints.ai_socktype = SOCK_DGRAM; /* datagram socket */
 
   ret = getaddrinfo(node, service, &hints, &res);
@@ -77,7 +77,6 @@ flexmpi_malleability_cb(hg_handle_t h)
     out.rc = RPC_E2BIG;
     goto respond;
   }
-
 
   if (sock == -1 || flexinfo == NULL) {
     margo_error(mid, "%s: FlexMPI socket uninitialized", __func__);
