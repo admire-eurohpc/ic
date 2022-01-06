@@ -3,6 +3,7 @@ CC := gcc
 PREFIX ?=/usr/local
 INSTALL_PATH_LIB := $(PREFIX)/lib
 INSTALL_PATH_BIN := $(PREFIX)/bin
+INSTALL_PATH_INCLUDE := $(PREFIX)/include
 INSTALL := install
 MKDIR_P := mkdir -p
 PKG_CONFIG ?= pkg-config
@@ -11,13 +12,14 @@ includedir := include
 sourcedir := src
 exampledir := examples
 
-ICC_MAJOR := $(shell grep ICC_MAJOR $(includedir)/icc.h | awk '{print $$3}')
-ICC_MINOR := $(shell grep ICC_MINOR $(includedir)/icc.h | awk '{print $$3}')
-ICC_PATCH := $(shell grep ICC_PATCH $(includedir)/icc.h | awk '{print $$3}')
+icc_header := icc.h
+
+ICC_MAJOR := $(shell grep ICC_MAJOR $(includedir)/$(icc_header) | awk '{print $$3}')
+ICC_MINOR := $(shell grep ICC_MINOR $(includedir)/$(icc_header) | awk '{print $$3}')
 
 libicc_so := libicc.so
 libicc_soname :=  $(libicc_so).$(ICC_MAJOR)
-libicc_minorname := $(libicc_soname).$(ICC_MINOR).$(ICC_PATCH)
+libicc_realname := $(libicc_soname).$(ICC_MINOR)
 
 icc_server_bin := icc_server
 client_bin := client
@@ -52,8 +54,10 @@ clean:
 
 install: all
 	$(MKDIR_P) $(INSTALL_PATH_LIB) $(INSTALL_PATH_BIN)
-	$(INSTALL) -m 644 $(libicc_so) $(INSTALL_PATH_LIB)/$(libicc_minorname)
-	cd $(INSTALL_PATH_LIB) && ln -sf $(libicc_minorname) $(libicc_soname)
+	$(INSTALL) -m 644 $(libicc_so) $(INSTALL_PATH_LIB)/$(libicc_realname)
+	ln -rsf $(INSTALL_PATH_LIB)/$(libicc_realname) $(INSTALL_PATH_LIB)/$(libicc_soname)
+	ln -rsf $(INSTALL_PATH_LIB)/$(libicc_realname) $(INSTALL_PATH_LIB)/$(libicc_so)
+	$(INSTALL) -m 644 $(includedir)/$(icc_header) $(INSTALL_PATH_INCLUDE)
 	$(INSTALL) -m 755 $(icc_server_bin) $(INSTALL_PATH_BIN)
 	$(INSTALL) -m 755 $(client_bin) $(INSTALL_PATH_BIN)
 	$(INSTALL) -m 755 $(app_manager_bin) $(INSTALL_PATH_BIN)
@@ -62,7 +66,9 @@ install: all
 	$(INSTALL) -m 755 $(testapp_bin) $(INSTALL_PATH_BIN)
 
 uninstall:
-	$(RM) $(INSTALL_PATH_LIB)/$(libicc_soname) $(INSTALL_PATH_LIB)/$(libicc_minorname)
+	$(RM) $(INSTALL_PATH_INCLUDE)/$(icc_header)
+	$(RM) $(INSTALL_PATH_LIB)/$(libicc_soname) $(INSTALL_PATH_LIB)/$(libicc_so)
+	$(RM) $(INSTALL_PATH_LIB)/$(libicc_realname)
 	$(RM) $(INSTALL_PATH_BIN)/$(icc_server_bin)
 	$(RM) $(INSTALL_PATH_BIN)/$(client_bin)
 	$(RM) $(INSTALL_PATH_BIN)/$(app_manager_bin)
@@ -83,7 +89,7 @@ $(icc_server_bin): LDLIBS += `$(PKG_CONFIG) --libs margo hiredis` -pthread -Wl,-
 
 $(libicc_so): rpc.o cb.o flexmpi.o
 $(libicc_so): CFLAGS += `$(PKG_CONFIG) --cflags margo uuid`
-$(libicc_so): LDLIBS += `$(PKG_CONFIG) --libs margo uuid` -Wl,--no-undefined,-h$(libicc_minorname)
+$(libicc_so): LDLIBS += `$(PKG_CONFIG) --libs margo uuid` -Wl,--no-undefined,-h$(libicc_soname)
 
 $(client_bin): LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined -L. -licc
 

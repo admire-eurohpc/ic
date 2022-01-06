@@ -5,7 +5,6 @@
 
 #define ICC_MAJOR 1
 #define ICC_MINOR 0
-#define ICC_PATCH 0
 
 
 struct icc_context;
