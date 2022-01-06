@@ -12,11 +12,11 @@ void jobmon_exit_cb(hg_handle_t h);
 void adhoc_nodes_cb(hg_handle_t h);
 void malleability_avail_cb(hg_handle_t h);
 
-DEFINE_MARGO_RPC_HANDLER(client_register_cb);
-DEFINE_MARGO_RPC_HANDLER(client_deregister_cb);
-DEFINE_MARGO_RPC_HANDLER(jobmon_submit_cb);
-DEFINE_MARGO_RPC_HANDLER(jobmon_exit_cb);
-DEFINE_MARGO_RPC_HANDLER(adhoc_nodes_cb);
-DEFINE_MARGO_RPC_HANDLER(malleability_avail_cb);
+DECLARE_MARGO_RPC_HANDLER(client_register_cb);
+DECLARE_MARGO_RPC_HANDLER(client_deregister_cb);
+DECLARE_MARGO_RPC_HANDLER(jobmon_submit_cb);
+DECLARE_MARGO_RPC_HANDLER(jobmon_exit_cb);
+DECLARE_MARGO_RPC_HANDLER(adhoc_nodes_cb);
+DECLARE_MARGO_RPC_HANDLER(malleability_avail_cb);
 
 #endif

@@ -135,12 +135,18 @@ icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_c
 
   if (typeid == ICC_TYPE_FLEXMPI) {
     icc->rpcids[RPC_FLEXMPI_MALLEABILITY] = MARGO_REGISTER(icc->mid, RPC_FLEXMPI_MALLEABILITY_NAME, flexmpi_malleability_in_t, rpc_out_t, flexmpi_malleability_cb);
-    int sfd = flexmpi_socket(icc->mid, "localhost", "6666");
-    if (sfd == -1) {
+
+    /* init socket to FlexMPI app */
+    int *s = malloc(sizeof(*s));
+    *s = -1;
+    *s = flexmpi_socket(icc->mid, "localhost", "6666");
+    if (*s == -1) {
       margo_error(icc->mid, "Could not initialize FlexMPI socket");
       rc = ICC_FAILURE;
       goto error;
     }
+    /* pass socket to callback */
+    margo_register_data(icc->mid, icc->rpcids[RPC_FLEXMPI_MALLEABILITY], s, free);
   }
 
   /* send address to IC to be able to receive RPCs */

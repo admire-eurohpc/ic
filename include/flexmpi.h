@@ -4,6 +4,9 @@
 #include <margo.h>
 
 
+#define FLEXMPI_COMMAND_MAX_LEN 256
+
+
 /**
  * Initialize a socket to communicate with the FlexMPI application
  * identified by address NODE and port SERVICE.
@@ -22,6 +25,6 @@ int flexmpi_socket(margo_instance_id mid, const char *node, const char *service)
  *
  */
 void flexmpi_malleability_cb(hg_handle_t h);
-DEFINE_MARGO_RPC_HANDLER(flexmpi_malleability_cb);
+DECLARE_MARGO_RPC_HANDLER(flexmpi_malleability_cb);
 
 #endif

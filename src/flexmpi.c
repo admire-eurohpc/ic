@@ -3,25 +3,21 @@
 #include <netdb.h>              /* sockets */
 #include <sys/socket.h>         /* sockets */
 #include <sys/types.h>          /* sockets */
+#include <unistd.h>             /* close */
 #include <margo.h>
 
 #include "rpc.h"
-
-#define FLEXMPI_COMMAND_MAX_LEN 256
+#include "flexmpi.h"
 
 
 static ABT_mutex_memory mutexmem = ABT_MUTEX_INITIALIZER;
-
-/* XX get rid of global var */
-static int sock = 0;                      /* FlexMPI socket */
-static struct addrinfo *flexinfo = NULL;  /* FlexMPI addrinfo */
 
 int
 flexmpi_socket(margo_instance_id mid, const char *node, const char *service)
 {
   /* node = "localhost", service = "7670" */
   struct addrinfo hints, *res, *p;
-  int ret;
+  int sock, ret;
 
   memset(&hints, 0, sizeof(hints));
   hints.ai_family = AF_INET;      /* FlexMPI only supports IPV4 */
@@ -36,11 +32,17 @@ flexmpi_socket(margo_instance_id mid, const char *node, const char *service)
   /* get first valid socket */
   for (p = res; p != NULL; p = p->ai_next) {
     sock = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-    if (sock == -1) continue;
-    break;
+    if (sock == -1) continue;   /* failure, try next socket */
+
+    /* connect even though it is a UDP socket, this sets the defaults
+       destination address and allow using send instead of sendto */
+    ret = connect(sock, p->ai_addr, p->ai_addrlen);
+    if (ret == 0) break;        /* success */
+
+    close(sock);
   }
 
-  flexinfo = p;
+  freeaddrinfo(res);
 
   if (p == NULL) {
     margo_error(mid, "%s: Could not open FlexMPI socket", __func__);
@@ -78,7 +80,11 @@ flexmpi_malleability_cb(hg_handle_t h)
     goto respond;
   }
 
-  if (sock == -1 || flexinfo == NULL) {
+  /* get socket data */
+  const struct hg_info *info = margo_get_info(h);
+  int *flexsock = (int *)margo_registered_data(mid, info->id);
+
+  if (*flexsock == -1) {
     margo_error(mid, "%s: FlexMPI socket uninitialized", __func__);
     out.rc = RPC_ERR;
     goto respond;
@@ -90,14 +96,13 @@ flexmpi_malleability_cb(hg_handle_t h)
   /* try to send the FlexMPI command
      if the send blocks, ignore and wait for the next command.
      /!\ Specifically avoid blocking because we are holding a mutex */
-  nbytes = sendto(sock, in.command, strlen(in.command), MSG_DONTWAIT,
-                  (struct sockaddr *)flexinfo->ai_addr, flexinfo->ai_addrlen);
+  nbytes = send(*flexsock, in.command, strlen(in.command), MSG_DONTWAIT);
 
   ABT_mutex_unlock(mutex);
 
   if (nbytes == -1) {
     if (errno != EWOULDBLOCK && errno != EAGAIN) {
-      margo_error(mid, "%s: Could not write to FlexMPI socket", __func__);
+      margo_error(mid, "%s: Could not write to FlexMPI socket (%s)", __func__, strerror(errno));
       out.rc = RPC_ERR;
     }
   }
@@ -108,5 +113,4 @@ flexmpi_malleability_cb(hg_handle_t h)
     margo_error(mid, "%s: Could not respond to RPC", __func__);
   }
 }
-DECLARE_MARGO_RPC_HANDLER(flexmpi_malleability_cb);
-
+DEFINE_MARGO_RPC_HANDLER(flexmpi_malleability_cb);

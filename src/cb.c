@@ -44,4 +44,4 @@ test_cb(hg_handle_t h)
   MARGO_RESPOND(h, out, hret)
   MARGO_DESTROY_HANDLE(h, hret);
 }
-DECLARE_MARGO_RPC_HANDLER(test_cb);
+DEFINE_MARGO_RPC_HANDLER(test_cb);

@@ -69,7 +69,7 @@ client_register_cb(hg_handle_t h)
   MARGO_RESPOND(h, out, hret);
   MARGO_DESTROY_HANDLE(h, hret);
 }
-DECLARE_MARGO_RPC_HANDLER(client_register_cb);
+DEFINE_MARGO_RPC_HANDLER(client_register_cb);
 
 
 void
@@ -116,7 +116,7 @@ client_deregister_cb(hg_handle_t h)
   MARGO_RESPOND(h, out, hret);
   MARGO_DESTROY_HANDLE(h, hret);
 }
-DECLARE_MARGO_RPC_HANDLER(client_deregister_cb);
+DEFINE_MARGO_RPC_HANDLER(client_deregister_cb);
 
 
 void
@@ -164,7 +164,7 @@ jobmon_submit_cb(hg_handle_t h)
   MARGO_RESPOND(h, out, hret);
   MARGO_DESTROY_HANDLE(h, hret);
 }
-DECLARE_MARGO_RPC_HANDLER(jobmon_submit_cb);
+DEFINE_MARGO_RPC_HANDLER(jobmon_submit_cb);
 
 
 void
@@ -184,7 +184,7 @@ jobmon_exit_cb(hg_handle_t h)
 
   MARGO_DESTROY_HANDLE(h, hret);
 }
-DECLARE_MARGO_RPC_HANDLER(jobmon_exit_cb);
+DEFINE_MARGO_RPC_HANDLER(jobmon_exit_cb);
 
 void
 adhoc_nodes_cb(hg_handle_t h)
@@ -210,6 +210,7 @@ adhoc_nodes_cb(hg_handle_t h)
   MARGO_RESPOND(h, out, hret);
   MARGO_DESTROY_HANDLE(h, hret);
 }
+DEFINE_MARGO_RPC_HANDLER(adhoc_nodes_cb);
 
 
 void
@@ -256,4 +257,4 @@ malleability_avail_cb(hg_handle_t h)
   MARGO_RESPOND(h, out, ret);
   MARGO_DESTROY_HANDLE(h, hret)
 }
-DECLARE_MARGO_RPC_HANDLER(malleability_avail_cb);
+DEFINE_MARGO_RPC_HANDLER(malleability_avail_cb);
