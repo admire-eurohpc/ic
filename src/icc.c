@@ -30,6 +30,15 @@
  * Cleanup FlexMPI socket, get rid of global socket var
 */
 
+struct icc_context {
+  margo_instance_id mid;
+  hg_addr_t         addr;		/* server address */
+  hg_id_t           rpcids[RPC_COUNT];	/* RPCs ids */
+  uint8_t           bidirectional;
+  uint16_t          provider_id;
+  char              clid[UUID_STR_LEN];	/* client uuid */
+};
+
 
 /* utils */
 
@@ -38,19 +47,9 @@
  */
 static const char *_icc_type_str(enum icc_client_type type);
 
-struct icc_context {
-  margo_instance_id mid;
-  uint8_t           bidirectional;
-  hg_addr_t         addr;
-  uint16_t          provider_id;
-  char              clid[UUID_STR_LEN]; /* client uuid */
-};
-
-
-static hg_id_t rpc_hg_ids[RPC_COUNT] = { 0 };
-
 
 /* public functions */
+
 int
 icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_context **icc_context)
 {
@@ -119,19 +118,23 @@ icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_c
 
   /* register RPCs. Note that if the callback is not NULL the client
      is able to send AND receive the RPC */
-  rpc_hg_ids[RPC_TEST] = MARGO_REGISTER(icc->mid, RPC_TEST_NAME, test_in_t, rpc_out_t, test_cb);
-  rpc_hg_ids[RPC_JOBMON_SUBMIT] = MARGO_REGISTER(icc->mid, RPC_JOBMON_SUBMIT_NAME, jobmon_submit_in_t, rpc_out_t, NULL);
-  rpc_hg_ids[RPC_JOBMON_EXIT] = MARGO_REGISTER(icc->mid, RPC_JOBMON_EXIT_NAME, jobmon_exit_in_t, rpc_out_t, NULL);
-  rpc_hg_ids[RPC_ADHOC_NODES] = MARGO_REGISTER(icc->mid, RPC_ADHOC_NODES_NAME, adhoc_nodes_in_t, rpc_out_t, NULL);
-  rpc_hg_ids[RPC_MALLEABILITY_AVAIL] = MARGO_REGISTER(icc->mid, RPC_MALLEABILITY_AVAIL_NAME, malleability_avail_in_t, rpc_out_t, NULL);
+  for (int i = 0; i < RPC_COUNT; i++) {
+    icc->rpcids[i] = 0;
+  }
+
+  icc->rpcids[RPC_TEST] = MARGO_REGISTER(icc->mid, RPC_TEST_NAME, test_in_t, rpc_out_t, test_cb);
+  icc->rpcids[RPC_JOBMON_SUBMIT] = MARGO_REGISTER(icc->mid, RPC_JOBMON_SUBMIT_NAME, jobmon_submit_in_t, rpc_out_t, NULL);
+  icc->rpcids[RPC_JOBMON_EXIT] = MARGO_REGISTER(icc->mid, RPC_JOBMON_EXIT_NAME, jobmon_exit_in_t, rpc_out_t, NULL);
+  icc->rpcids[RPC_ADHOC_NODES] = MARGO_REGISTER(icc->mid, RPC_ADHOC_NODES_NAME, adhoc_nodes_in_t, rpc_out_t, NULL);
+  icc->rpcids[RPC_MALLEABILITY_AVAIL] = MARGO_REGISTER(icc->mid, RPC_MALLEABILITY_AVAIL_NAME, malleability_avail_in_t, rpc_out_t, NULL);
 
   if (bidir) {
-    rpc_hg_ids[RPC_CLIENT_REGISTER] = MARGO_REGISTER(icc->mid, RPC_CLIENT_REGISTER_NAME, client_register_in_t, rpc_out_t, NULL);
-    rpc_hg_ids[RPC_CLIENT_DEREGISTER] = MARGO_REGISTER(icc->mid, RPC_CLIENT_DEREGISTER_NAME, client_deregister_in_t, rpc_out_t, NULL);
+    icc->rpcids[RPC_CLIENT_REGISTER] = MARGO_REGISTER(icc->mid, RPC_CLIENT_REGISTER_NAME, client_register_in_t, rpc_out_t, NULL);
+    icc->rpcids[RPC_CLIENT_DEREGISTER] = MARGO_REGISTER(icc->mid, RPC_CLIENT_DEREGISTER_NAME, client_deregister_in_t, rpc_out_t, NULL);
   }
 
   if (typeid == ICC_TYPE_FLEXMPI) {
-    rpc_hg_ids[RPC_FLEXMPI_MALLEABILITY] = MARGO_REGISTER(icc->mid, RPC_FLEXMPI_MALLEABILITY_NAME, flexmpi_malleability_in_t, rpc_out_t, flexmpi_malleability_cb);
+    icc->rpcids[RPC_FLEXMPI_MALLEABILITY] = MARGO_REGISTER(icc->mid, RPC_FLEXMPI_MALLEABILITY_NAME, flexmpi_malleability_in_t, rpc_out_t, flexmpi_malleability_cb);
     int sfd = flexmpi_socket(icc->mid, "localhost", "6666");
     if (sfd == -1) {
       margo_error(icc->mid, "Could not initialize FlexMPI socket");
@@ -163,7 +166,7 @@ icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_c
     rpc_in.clid = icc->clid;
     rpc_in.type = _icc_type_str(typeid);
 
-    rc = rpc_send(icc->mid, icc->addr, rpc_hg_ids[RPC_CLIENT_REGISTER], &rpc_in, &rpc_rc);
+    rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_CLIENT_REGISTER], &rpc_in, &rpc_rc);
 
     if (rc || rpc_rc) {
       margo_error(icc->mid, "Could not register address of the bidirectional client to the IC");
@@ -207,7 +210,7 @@ icc_fini(struct icc_context *icc)
     client_deregister_in_t in;
     in.clid = icc->clid;
 
-    rc = rpc_send(icc->mid, icc->addr, rpc_hg_ids[RPC_CLIENT_DEREGISTER], &in, &rpcrc);
+    rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_CLIENT_DEREGISTER], &in, &rpcrc);
 
     if (rc || rpcrc) {
       margo_error(icc->mid, "Could not deregister target to IC");
@@ -237,7 +240,7 @@ icc_rpc_test(struct icc_context *icc, uint8_t number, enum icc_client_type type,
   in.number = number;
   in.type = _icc_type_str(type);
 
-  rc = rpc_send(icc->mid, icc->addr, rpc_hg_ids[RPC_TEST], &in, retcode);
+  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_TEST], &in, retcode);
 
   return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
@@ -255,7 +258,7 @@ icc_rpc_adhoc_nodes(struct icc_context *icc, uint32_t jobid, uint32_t nnodes, ui
   in.nnodes = nnodes;
   in.adhoc_nnodes = adhoc_nnodes;
 
-  rc = rpc_send(icc->mid, icc->addr, rpc_hg_ids[RPC_ADHOC_NODES], &in, retcode);
+  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_ADHOC_NODES], &in, retcode);
 
   return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
@@ -273,7 +276,7 @@ icc_rpc_jobmon_submit(struct icc_context *icc, uint32_t jobid, uint32_t jobstepi
   in.jobstepid = jobstepid;
   in.nnodes = nnodes;
 
-  rc = rpc_send(icc->mid, icc->addr, rpc_hg_ids[RPC_JOBMON_SUBMIT], &in, retcode);
+  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_JOBMON_SUBMIT], &in, retcode);
 
   return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
@@ -290,7 +293,7 @@ icc_rpc_jobmon_exit(struct icc_context *icc, uint32_t jobid, uint32_t jobstepid,
   in.jobid = jobid;
   in.jobstepid = jobstepid;
 
-  rc = rpc_send(icc->mid, icc->addr, rpc_hg_ids[RPC_JOBMON_EXIT], &in, retcode);
+  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_JOBMON_EXIT], &in, retcode);
 
   return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
@@ -311,7 +314,7 @@ icc_rpc_malleability_avail(struct icc_context *icc, char *type, char *portname, 
   in.jobid = jobid;
   in.nnodes = nnodes;
 
-  rc = rpc_send(icc->mid, icc->addr, rpc_hg_ids[RPC_MALLEABILITY_AVAIL], &in, retcode);
+  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_MALLEABILITY_AVAIL], &in, retcode);
 
   return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
