@@ -13,7 +13,7 @@
 #define NTHREADS 3
 #define TIMEOUT_MS 5000
 
-#define LOG_ERROR(mid,fmt, ...)  margo_error(mid, "%s (%s:%d): "fmt, __func__, __FILE__, __LINE__ __VA_OPT__(,)__VA_ARGS__)
+#define LOG_ERROR(mid,fmt, ...)  margo_error(mid, "%s (%s:%d): "fmt, __func__, __FILE__, __LINE__, ##__VA_ARGS__)
 
 /* XX temp malleability manager stub */
 #define NCLIENTS     4
