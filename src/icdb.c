@@ -405,8 +405,7 @@ _icdb_set_status(struct icdb_context *icdb, int status,
 
   icdb->status = status;
 
-  int nbytes;
-
+  int nbytes = 0;
   if (filename && lineno && funcname) {
     nbytes = snprintf(icdb->errstr, ICDB_ERRSTR_LEN, "%s (%s:%d): ", funcname, filename, lineno);
     if (nbytes < 0) {

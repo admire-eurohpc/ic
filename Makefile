@@ -31,7 +31,7 @@ sources := icc_server.c rpc.c cb.c icdb.c icc.c adhoccli.c cbserver.c flexmpi.c
 sources += slurmjobmon.c slurmadhoccli.c client.c testapp.c
 
 # keep libicc in front
-binaries := $(libicc_so) $(icc_server_bin) $(client_bin) $(libslurmjobmon_so) $(libslurmjobmon_so) $(testapp_bin)
+binaries := $(libicc_so) $(icc_server_bin) $(client_bin) $(libslurmjobmon_so) $(libslurmjobmon_so)
 
 objects := $(sources:.c=.o)
 depends := $(sources:.c=.d)
@@ -39,7 +39,7 @@ depends := $(sources:.c=.d)
 vpath %.c $(sourcedir) $(exampledir)
 
 CPPFLAGS := -I$(includedir) -MMD
-CFLAGS := -Wall -Wextra -O2 -g
+CFLAGS := -std=gnu99 -Wall -Wextra -O2 -g
 
 
 .PHONY: all clean install uninstall
@@ -61,7 +61,7 @@ install: all
 	$(INSTALL) -m 755 $(client_bin) $(INSTALL_PATH_BIN)
 	$(INSTALL) -m 755 scripts/icc_server.sh $(INSTALL_PATH_BIN)/icc_server.sh
 	$(INSTALL) -m 755 scripts/icc_client.sh $(INSTALL_PATH_BIN)/icc_client.sh
-	$(INSTALL) -m 755 $(testapp_bin) $(INSTALL_PATH_BIN)
+	# $(INSTALL) -m 755 $(testapp_bin) $(INSTALL_PATH_BIN)
 
 uninstall:
 	$(RM) $(INSTALL_PATH_INCLUDE)/$(icc_header)
@@ -71,7 +71,7 @@ uninstall:
 	$(RM) $(INSTALL_PATH_BIN)/$(client_bin)
 	$(RM) $(INSTALL_PATH_BIN)/icc_server.sh
 	$(RM) $(INSTALL_PATH_BIN)/icc_client.sh
-	$(RM) $(INSTALL_PATH_BIN)/$(testapp_bin)
+	# $(RM) $(INSTALL_PATH_BIN)/$(testapp_bin)
 
 
 # forces the creation of object files
@@ -92,8 +92,8 @@ $(client_bin): LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined -L. -li
 
 $(libslurmjobmon_so) $(libslurmadhoccli_so): LDLIBS += -L. -licc -lslurm
 
-$(testapp_bin): CFLAGS += `$(PKG_CONFIG) --cflags mpi`
-$(testapp_bin): LDLIBS += `$(PKG_CONFIG) --libs mpi margo` -L. -licc
+# $(testapp_bin): CFLAGS += `$(PKG_CONFIG) --cflags mpi`
+# $(testapp_bin): LDLIBS += `$(PKG_CONFIG) --libs mpi margo` -L. -licc
 
 lib%.so: CFLAGS += -fpic
 lib%.so: LDFLAGS += -shared

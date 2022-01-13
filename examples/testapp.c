@@ -14,7 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>             /* getopt */
-#include <mpich/mpi.h>
+#include <mpi.h>
 
 #include "icc.h"
 
