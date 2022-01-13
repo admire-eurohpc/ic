@@ -6,6 +6,13 @@
 
 #define FLEXMPI_COMMAND_MAX_LEN 256
 
+typedef int (*flexmpi_reconfigure_t)(const char *); /* signature of the reconfigure func */
+
+struct flexmpi_cbdata {
+  int sock;
+  flexmpi_reconfigure_t func;
+};
+
 
 /**
  * Initialize a socket to communicate with the FlexMPI application
@@ -14,6 +21,15 @@
  * Return a socket descriptor or -1 in case of error.
  */
 int flexmpi_socket(margo_instance_id mid, const char *node, const char *service);
+
+
+/**
+ * Get the FlexMPI function responsible for reconfiguration for use in
+ * a ICC callback.
+ *
+ * Return a pointer to the function or NULL in case of error.
+ */
+flexmpi_reconfigure_t flexmpi_func(margo_instance_id mid);
 
 
 /**

@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <dlfcn.h>              /* dlopen/dlsym */
 #include <errno.h>
 #include <netdb.h>              /* sockets */
 #include <sys/socket.h>         /* sockets */
@@ -9,6 +10,9 @@
 #include "rpc.h"
 #include "flexmpi.h"
 
+
+#define LIBEMPI_SO "libempi.so"                   /* FlexMPI library */
+#define FLEXMPI_RECONFIGURE "flexmpi_reconfigure" /* FlexMPI reconfigure func */
 
 static ABT_mutex_memory mutexmem = ABT_MUTEX_INITIALIZER;
 
@@ -53,6 +57,29 @@ flexmpi_socket(margo_instance_id mid, const char *node, const char *service)
 }
 
 
+flexmpi_reconfigure_t
+flexmpi_func(margo_instance_id mid)
+{
+  void *handle;
+  flexmpi_reconfigure_t func;
+
+  handle = dlopen(LIBEMPI_SO, RTLD_NOW);
+
+  if (!handle) {
+    margo_info(mid, "%s: FlexMPI %s", __func__, dlerror());
+    return NULL;
+  }
+
+  func = dlsym(handle, FLEXMPI_RECONFIGURE);
+
+  if (!func) {
+    margo_info(mid, "%s: FlexMPI %s", __func__, dlerror());
+  }
+
+  return func;
+}
+
+
 void
 flexmpi_malleability_cb(hg_handle_t h)
 {
@@ -61,7 +88,7 @@ flexmpi_malleability_cb(hg_handle_t h)
   flexmpi_malleability_in_t in;
   rpc_out_t out;
   ABT_mutex mutex;
-  int nbytes;
+  int rc, nbytes;
 
   mid = margo_hg_handle_get_instance(h);
   assert(mid);
@@ -80,11 +107,19 @@ flexmpi_malleability_cb(hg_handle_t h)
     goto respond;
   }
 
-  /* get socket data */
+  /* get function pointer and socket data */
   const struct hg_info *info = margo_get_info(h);
-  int *flexsock = (int *)margo_registered_data(mid, info->id);
+  struct flexmpi_cbdata *data = (struct flexmpi_cbdata *)margo_registered_data(mid, info->id);
 
-  if (*flexsock == -1) {
+  /* try pointer to FlexMPI reconfiguration function */
+  if (data->func) {
+    rc = data->func(in.command);
+    out.rc = rc ? RPC_ERR : RPC_OK;
+    goto respond;
+  }
+
+  /* no FlexMPI function pointer, fallback to socket control */
+  if (data->sock == -1) {
     margo_error(mid, "%s: FlexMPI socket uninitialized", __func__);
     out.rc = RPC_ERR;
     goto respond;
@@ -96,7 +131,7 @@ flexmpi_malleability_cb(hg_handle_t h)
   /* try to send the FlexMPI command
      if the send blocks, ignore and wait for the next command.
      /!\ Specifically avoid blocking because we are holding a mutex */
-  nbytes = send(*flexsock, in.command, strlen(in.command), MSG_DONTWAIT);
+  nbytes = send(data->sock, in.command, strlen(in.command), MSG_DONTWAIT);
 
   ABT_mutex_unlock(mutex);
 
