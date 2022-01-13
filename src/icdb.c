@@ -3,8 +3,9 @@
 #include <inttypes.h>           /* PRIuXX */
 #include <stdlib.h>             /* malloc */
 #include <string.h>             /* strncpy */
-#include <uuid.h>               /* UUID_STR_LEN */
 #include <hiredis.h>
+#include "uuid_admire.h"        /* UUID_STR_LEN */
+
 #include "icdb.h"
 
 /** XX TODO

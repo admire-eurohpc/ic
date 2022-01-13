@@ -3,8 +3,8 @@
 #include <netdb.h>              /* addrinfo */
 #include <stdlib.h>             /* malloc */
 #include <string.h>
-#include <uuid.h>
 #include <margo.h>
+#include "uuid_admire.h"
 
 #include "rpc.h"
 #include "cb.h"
