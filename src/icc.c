@@ -1,3 +1,4 @@
+#include <dlfcn.h>              /* dlopen/dlsym */
 #include <errno.h>
 #include <netdb.h>              /* addrinfo */
 #include <stdlib.h>             /* malloc */
@@ -32,11 +33,12 @@
 
 struct icc_context {
   margo_instance_id mid;
-  hg_addr_t         addr;		/* server address */
-  hg_id_t           rpcids[RPC_COUNT];	/* RPCs ids */
+  hg_addr_t         addr;               /* server address */
+  hg_id_t           rpcids[RPC_COUNT];  /* RPCs ids */
   uint8_t           bidirectional;
   uint16_t          provider_id;
-  char              clid[UUID_STR_LEN];	/* client uuid */
+  char              clid[UUID_STR_LEN]; /* client uuid */
+  void              *flexhandle;        /* dlopen handle to FlexMPI library */
 };
 
 
@@ -139,7 +141,7 @@ icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_c
     struct flexmpi_cbdata *d = malloc(sizeof(*d));
 
     /* get FlexMPI reconfiguration function */
-    d->func = flexmpi_func(icc->mid);
+    d->func = flexmpi_func(icc->mid, &icc->flexhandle);
 
     if (!d->func) {
       margo_info(icc->mid, "%s: No FlexMPI reconfiguration function, will fall back to socket", __func__);
@@ -232,6 +234,14 @@ icc_fini(struct icc_context *icc)
 
     if (margo_addr_free(icc->mid, icc->addr) != HG_SUCCESS) {
       margo_error(icc->mid, "Could not free Margo address");
+      rc = ICC_FAILURE;
+    }
+  }
+
+  if (icc->flexhandle) {
+    rc = dlclose(icc->flexhandle);
+    if (rc) {
+      margo_error(icc->mid, "%s", dlerror());
       rc = ICC_FAILURE;
     }
   }

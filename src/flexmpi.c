@@ -58,22 +58,19 @@ flexmpi_socket(margo_instance_id mid, const char *node, const char *service)
 
 
 flexmpi_reconfigure_t
-flexmpi_func(margo_instance_id mid)
+flexmpi_func(margo_instance_id mid, void **handle)
 {
-  void *handle;
   flexmpi_reconfigure_t func;
 
-  handle = dlopen(LIBEMPI_SO, RTLD_NOW);
-
-  if (!handle) {
-    margo_info(mid, "%s: FlexMPI %s", __func__, dlerror());
+  *handle = dlopen(LIBEMPI_SO, RTLD_NOW);
+  if (!*handle) {
+    margo_info(mid, "%s: FlexMPI dlopen %s", __func__, dlerror());
     return NULL;
   }
 
-  func = dlsym(handle, FLEXMPI_RECONFIGURE);
-
+  func = dlsym(*handle, FLEXMPI_RECONFIGURE);
   if (!func) {
-    margo_info(mid, "%s: FlexMPI %s", __func__, dlerror());
+    margo_info(mid, "%s: FlexMPI dlsym %s", __func__, dlerror());
   }
 
   return func;

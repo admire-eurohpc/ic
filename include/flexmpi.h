@@ -27,9 +27,10 @@ int flexmpi_socket(margo_instance_id mid, const char *node, const char *service)
  * Get the FlexMPI function responsible for reconfiguration for use in
  * a ICC callback.
  *
- * Return a pointer to the function or NULL in case of error.
+ * Return a pointer to the function or NULL in case of error. The
+ * dlopen handle is also returned in HANDLE.
  */
-flexmpi_reconfigure_t flexmpi_func(margo_instance_id mid);
+flexmpi_reconfigure_t flexmpi_func(margo_instance_id mid, void **handle);
 
 
 /**
