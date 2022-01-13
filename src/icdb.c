@@ -109,7 +109,8 @@ _icdb_set_status(struct icdb_context *icdb, int status,
 /* public functions */
 
 int
-icdb_init(struct icdb_context **icdb_context) {
+icdb_init(struct icdb_context **icdb_context)
+{
   *icdb_context = NULL;
 
   struct icdb_context *icdb = calloc(1, sizeof(*icdb));
@@ -137,7 +138,8 @@ icdb_init(struct icdb_context **icdb_context) {
 
 
 void
-icdb_fini(struct icdb_context **icdb) {
+icdb_fini(struct icdb_context **icdb)
+{
   if (icdb) {
       if (*icdb)
         redisFree((*icdb)->redisctx);
@@ -148,7 +150,8 @@ icdb_fini(struct icdb_context **icdb) {
 
 
 char *
-icdb_errstr(struct icdb_context *icdb) {
+icdb_errstr(struct icdb_context *icdb)
+{
   if (!icdb)
     return NULL;
 
@@ -163,7 +166,8 @@ icdb_errstr(struct icdb_context *icdb) {
 
 
 int
-icdb_command(struct icdb_context *icdb, const char *format, ...) {
+icdb_command(struct icdb_context *icdb, const char *format, ...)
+{
   CHECK_ICDB(icdb);
 
   if (!icdb->redisctx)

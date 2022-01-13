@@ -24,7 +24,7 @@ struct malleability_manager_arg {
   hg_id_t *rpc_ids;
   struct icdb_context **icdbs;  /* pool of DB connection */
 };
-void malleability_manager_th(void *arg);
+static void malleability_manager_th(void *arg);
 
 
 int
@@ -159,7 +159,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
 char *instr_vec[6];             /* vector of malleability instructions */
 char *next_instruction = NULL;  /* next malleability instruction.
                                    SHARED between MM_th and IC */
-void
+static void
 malleability_manager_th(void *arg)
 {
   hg_return_t hret;

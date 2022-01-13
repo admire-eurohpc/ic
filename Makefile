@@ -23,16 +23,15 @@ libicc_realname := $(libicc_soname).$(ICC_MINOR)
 
 icc_server_bin := icc_server
 client_bin := client
-app_manager_bin := app_manager
 libslurmadhoccli_so := libslurmadhoccli.so
 libslurmjobmon_so := libslurmjobmon.so
 testapp_bin := testapp
 
-sources := icc_server.c rpc.c cb.c icdb.c icc.c adhoccli.c cbserver.c flexmpi.c app_manager.c
+sources := icc_server.c rpc.c cb.c icdb.c icc.c adhoccli.c cbserver.c flexmpi.c
 sources += slurmjobmon.c slurmadhoccli.c client.c testapp.c
 
 # keep libicc in front
-binaries := $(libicc_so) $(icc_server_bin) $(client_bin) $(libslurmjobmon_so) $(libslurmjobmon_so) $(app_manager_bin) $(testapp_bin)
+binaries := $(libicc_so) $(icc_server_bin) $(client_bin) $(libslurmjobmon_so) $(libslurmjobmon_so) $(testapp_bin)
 
 objects := $(sources:.c=.o)
 depends := $(sources:.c=.d)
@@ -60,7 +59,6 @@ install: all
 	$(INSTALL) -m 644 $(includedir)/$(icc_header) $(INSTALL_PATH_INCLUDE)
 	$(INSTALL) -m 755 $(icc_server_bin) $(INSTALL_PATH_BIN)
 	$(INSTALL) -m 755 $(client_bin) $(INSTALL_PATH_BIN)
-	$(INSTALL) -m 755 $(app_manager_bin) $(INSTALL_PATH_BIN)
 	$(INSTALL) -m 755 scripts/icc_server.sh $(INSTALL_PATH_BIN)/icc_server.sh
 	$(INSTALL) -m 755 scripts/icc_client.sh $(INSTALL_PATH_BIN)/icc_client.sh
 	$(INSTALL) -m 755 $(testapp_bin) $(INSTALL_PATH_BIN)
@@ -71,7 +69,6 @@ uninstall:
 	$(RM) $(INSTALL_PATH_LIB)/$(libicc_realname)
 	$(RM) $(INSTALL_PATH_BIN)/$(icc_server_bin)
 	$(RM) $(INSTALL_PATH_BIN)/$(client_bin)
-	$(RM) $(INSTALL_PATH_BIN)/$(app_manager_bin)
 	$(RM) $(INSTALL_PATH_BIN)/icc_server.sh
 	$(RM) $(INSTALL_PATH_BIN)/icc_client.sh
 	$(RM) $(INSTALL_PATH_BIN)/$(testapp_bin)
@@ -92,10 +89,6 @@ $(libicc_so): CFLAGS += `$(PKG_CONFIG) --cflags margo uuid`
 $(libicc_so): LDLIBS += `$(PKG_CONFIG) --libs margo uuid` -ldl -Wl,--no-undefined,-h$(libicc_soname)
 
 $(client_bin): LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined -L. -licc
-
-$(app_manager_bin): CFLAGS += `$(PKG_CONFIG) --cflags margo`
-$(app_manager_bin): LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined
-$(app_manager_bin): LDLIBS += -L. -licc -pthread
 
 $(libslurmjobmon_so) $(libslurmadhoccli_so): LDLIBS += -L. -licc -lslurm
 
