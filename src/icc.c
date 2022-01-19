@@ -175,8 +175,15 @@ icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_c
       goto error;
     }
 
-    char *jobid = getenv("SLURM_JOBID");
+    char *jobid, *jobntasks, *jobnnodes;
+    jobid = getenv("SLURM_JOBID");
+    jobntasks = getenv("SLURM_NTASKS");
+    jobnnodes = getenv("SLURM_JOB_NODES");
+
+    /* XX fixme: is atoi safe here, overflow risk? */
     rpc_in.jobid = jobid ? atoi(jobid) : 0;
+    rpc_in.jobntasks = jobntasks ? atoi(jobntasks) : 0;
+    rpc_in.jobnnodes = jobnnodes ? atoi(jobnnodes) : 0;
     rpc_in.addr_str = addr_str;
     rpc_in.provid = icc->provider_id;
     rpc_in.clid = icc->clid;
@@ -185,7 +192,7 @@ icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_c
     rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_CLIENT_REGISTER], &rpc_in, &rpc_rc);
 
     if (rc || rpc_rc) {
-      margo_error(icc->mid, "Could not register address of the bidirectional client to the IC");
+      margo_error(icc->mid, "Could not register address of the bidirectional client to the IC (ret = %d, RPC ret = %d)", rc, rpc_rc);
       rc = ICC_FAILURE;
       goto error;
     }

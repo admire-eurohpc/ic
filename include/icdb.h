@@ -74,7 +74,8 @@ icdb_initclient(struct icdb_client *client) {
  * Add an IC client identified by CLID to the database.
  */
 int icdb_setclient(struct icdb_context *icdb, const char *clid,
-                   const char *type, const char *addr, uint16_t provid, uint32_t jobid);
+                   const char *type, const char *addr, uint16_t provid,
+		   uint32_t jobid, uint32_t jobntasks, uint32_t jobnnodes);
 
 /**
  * Get the IC client CLID.

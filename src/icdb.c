@@ -337,7 +337,8 @@ icdb_getclients(struct icdb_context *icdb, const char *type, uint32_t jobid,
 
 int
 icdb_setclient(struct icdb_context *icdb, const char *clid,
-               const char *type, const char *addr, uint16_t provid, uint32_t jobid)
+               const char *type, const char *addr, uint16_t provid,
+	       uint32_t jobid, uint32_t jobntasks, uint32_t jobnnodes)
 {
   CHECK_ICDB(icdb);
   CHECK_PARAM(icdb, clid);
@@ -351,8 +352,8 @@ icdb_setclient(struct icdb_context *icdb, const char *clid,
 
   /* XX add transaction around 1) and 2) */
   /* 1) write client to hashmap */
-  rep = redisCommand(ctx, "HSET client:%s clid %s type %s addr %s provid %"PRIu32" jobid %"PRIu32,
-                     clid, clid, type, addr, provid, jobid);
+  rep = redisCommand(ctx, "HSET client:%s clid %s type %s addr %s provid %"PRIu32" jobid %"PRIu32" ntasks %"PRIu32" nnodes %"PRIu32,
+                     clid, clid, type, addr, provid, jobid, jobntasks, jobnnodes);
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
 
   /* 2) write to client sets (~indexes)  */
