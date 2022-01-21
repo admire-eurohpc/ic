@@ -31,24 +31,20 @@
     ICDB_SET_STATUS(icdb, ICDB_FAILURE, "Failure");                     \
   }
 
-/* it is "safe" to cast to ull here, because _icdb_get_uint validates the range */
-#define ICDB_GET_UINT(icdb,rep,dest,name,max)   switch (_icdb_get_uint(rep, (unsigned long long *)dest, max)) { \
-  case ICDB_SUCCESS:                                                    \
-    ICDB_SET_STATUS(icdb, ICDB_SUCCESS, "Success");                     \
-    break;                                                              \
-  case ICDB_EPARAM:                                                     \
-    ICDB_SET_STATUS(icdb, ICDB_EPARAM, "Bad parameters for %s", name);  \
-    break;                                                              \
-  case ICDB_E2BIG:                                                      \
-    ICDB_SET_STATUS(icdb, ICDB_E2BIG, "Field %s larger than "#max, name); \
-    break;                                                              \
-  default:                                                              \
-    ICDB_SET_STATUS(icdb, ICDB_FAILURE, "Not an integer \"%s\"", rep->str); \
+#define ICDB_GET_UINT(icdb,rep,dest,name,fmt) {                         \
+    CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_STRING);                      \
+    int _n = sscanf(rep->str, "%"fmt, dest);                            \
+    if (_n == 1)                                                        \
+      ICDB_SET_STATUS(icdb, ICDB_SUCCESS, "Success");                   \
+    else if (errno)                                                     \
+      ICDB_SET_STATUS(icdb, ICDB_FAILURE, "Conversion error for %s: %s", name, strerror(errno)); \
+    else                                                                \
+      ICDB_SET_STATUS(icdb, ICDB_FAILURE, "No conversion possible for %s", name); \
   }
 
-#define ICDB_GET_UINT16(icdb,rep,dest,name) ICDB_GET_UINT(icdb,rep,dest,name,UINT16_MAX)
-#define ICDB_GET_UINT32(icdb,rep,dest,name) ICDB_GET_UINT(icdb,rep,dest,name,UINT32_MAX)
-#define ICDB_GET_UINT64(icdb,rep,dest,name) ICDB_GET_UINT(icdb,rep,dest,name,UINT64_MAX)
+#define ICDB_GET_UINT16(icdb,rep,dest,name)  ICDB_GET_UINT(icdb,rep,dest,name,SCNu16)
+#define ICDB_GET_UINT32(icdb,rep,dest,name)  ICDB_GET_UINT(icdb,rep,dest,name,SCNu32)
+#define ICDB_GET_UINT64(icdb,rep,dest,name)  ICDB_GET_UINT(icdb,rep,dest,name,SCNu64)
 
 #define CHECK_ICDB(icdb)  if (!(icdb) || !(icdb)->redisctx) {           \
     if ((icdb)) {                                                       \
@@ -85,15 +81,6 @@ struct icdb_context {
 
 
 /* internal utility functions */
-
-/**
- * Get an unsigned integer from a Redis reply "str" member into RES.
- *
- */
-static int
-_icdb_get_uint(const redisReply *rep, unsigned long long *res, unsigned long long max);
-
-
 /**
  * Get a string from a Redis reply "str" member int DEST.
  *
@@ -446,32 +433,6 @@ _icdb_get_str(const redisReply *rep, char *dest, size_t maxlen)
 
   strncpy(dest, rep->str, rep->len);
   dest[rep->len] = '\0';
-
-  return ICDB_SUCCESS;
-}
-
-static int
-_icdb_get_uint(const redisReply *rep, unsigned long long *res, unsigned long long max)
-{
-  if (!rep || !res || !rep->str) {
-    return ICDB_EPARAM;
-  }
-
-  if (rep->type != REDIS_REPLY_STRING) {
-    return ICDB_EPARAM;
-  }
-
-  char *end;
-  errno = 0;
-
-  *res = strtoull(rep->str, &end, 0);
-
-  if (errno != 0 || end == rep->str || *end != '\0') {
-    return ICDB_FAILURE;
-  }
-  else if (*res > max) {
-    return ICDB_E2BIG;
-  }
 
   return ICDB_SUCCESS;
 }
