@@ -29,6 +29,11 @@
  * ICC_TYPE_LEN check
  * RPC_CODE to string for logs (rpc.c)
  * Cleanup FlexMPI socket, get rid of global socket var
+ * icc: send timestamp in register RPC
+ * handle crashing application (via Slurm?)
+ * malleability thread: arg out of scope
+ * malleability thread: block on condition variable?
+ * icdb: handle clients as a struct, commit func?
 */
 
 struct icc_context {
@@ -36,7 +41,7 @@ struct icc_context {
   hg_addr_t         addr;               /* server address */
   hg_id_t           rpcids[RPC_COUNT];  /* RPCs ids */
   uint8_t           bidirectional;
-  uint16_t          provider_id;
+  uint16_t          provider_id;        /* Margo provider ID (unused) */
   char              clid[UUID_STR_LEN]; /* client uuid */
   void              *flexhandle;        /* dlopen handle to FlexMPI library */
 };
@@ -53,10 +58,9 @@ static const char *_icc_type_str(enum icc_client_type type);
 /* public functions */
 
 int
-icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_context **icc_context)
+icc_init(enum icc_log_level log_level, enum icc_client_type typeid, unsigned int nprocs, struct icc_context **icc_context)
 {
   hg_return_t hret;
-  int bidir;
   int rc = ICC_SUCCESS;
 
   *icc_context = NULL;
@@ -65,15 +69,15 @@ icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_c
   if (!icc)
     return -errno;
 
-  bidir = 0;
+  icc->bidirectional = 0;
   /*  FlexMPI apps must be able to both receive AND send RPCs to the IC */
   if (typeid == ICC_TYPE_FLEXMPI)
-    bidir = 1;
+    icc->bidirectional = 1;
 
   /* use 2 extra threads: 1 for RPC network progress, 1 for background
      RPC callbacks */
   icc->mid = margo_init(HG_PROTOCOL,
-                        bidir ? MARGO_SERVER_MODE : MARGO_CLIENT_MODE, 1, 1);
+                        icc->bidirectional ? MARGO_SERVER_MODE : MARGO_CLIENT_MODE, 1, 1);
   if (!icc->mid) {
     rc = ICC_FAILURE;
     goto error;
@@ -130,7 +134,7 @@ icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_c
   icc->rpcids[RPC_ADHOC_NODES] = MARGO_REGISTER(icc->mid, RPC_ADHOC_NODES_NAME, adhoc_nodes_in_t, rpc_out_t, NULL);
   icc->rpcids[RPC_MALLEABILITY_AVAIL] = MARGO_REGISTER(icc->mid, RPC_MALLEABILITY_AVAIL_NAME, malleability_avail_in_t, rpc_out_t, NULL);
 
-  if (bidir) {
+  if (icc->bidirectional) {
     icc->rpcids[RPC_CLIENT_REGISTER] = MARGO_REGISTER(icc->mid, RPC_CLIENT_REGISTER_NAME, client_register_in_t, rpc_out_t, NULL);
     icc->rpcids[RPC_CLIENT_DEREGISTER] = MARGO_REGISTER(icc->mid, RPC_CLIENT_DEREGISTER_NAME, client_deregister_in_t, rpc_out_t, NULL);
   }
@@ -160,13 +164,12 @@ icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_c
   }
 
   /* send address to IC to be able to receive RPCs */
-  if (bidir == 1) {
+  if (icc->bidirectional == 1) {
     char addr_str[ICC_ADDR_LEN];
     hg_size_t addr_str_size = ICC_ADDR_LEN;
     client_register_in_t rpc_in;
     int rpc_rc;
 
-    icc->bidirectional = 1;
     icc->provider_id = MARGO_PROVIDER_DEFAULT;
 
     if (get_hg_addr(icc->mid, addr_str, &addr_str_size)) {
@@ -184,6 +187,7 @@ icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_c
     rpc_in.jobid = jobid ? atoi(jobid) : 0;
     rpc_in.jobntasks = jobntasks ? atoi(jobntasks) : 0;
     rpc_in.jobnnodes = jobnnodes ? atoi(jobnnodes) : 0;
+    rpc_in.nprocs = nprocs;
     rpc_in.addr_str = addr_str;
     rpc_in.provid = icc->provider_id;
     rpc_in.clid = icc->clid;
@@ -209,6 +213,7 @@ icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_c
   }
   return rc;
 }
+
 
 int
 icc_sleep(struct icc_context *icc, double timeout_ms)

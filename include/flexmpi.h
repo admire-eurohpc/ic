@@ -4,8 +4,6 @@
 #include <margo.h>
 
 
-#define FLEXMPI_COMMAND_MAX_LEN 256
-
 typedef int (*flexmpi_reconfigure_t)(const char *); /* signature of the reconfigure func */
 
 struct flexmpi_cbdata {

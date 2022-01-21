@@ -19,4 +19,9 @@ DECLARE_MARGO_RPC_HANDLER(jobmon_exit_cb);
 DECLARE_MARGO_RPC_HANDLER(adhoc_nodes_cb);
 DECLARE_MARGO_RPC_HANDLER(malleability_avail_cb);
 
+struct cb_data {
+  struct icdb_context **icdbs;	/* pool of DB connection */
+  hg_id_t             *rpcids;
+};
+
 #endif

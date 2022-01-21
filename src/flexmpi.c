@@ -99,7 +99,7 @@ flexmpi_malleability_cb(hg_handle_t h)
     goto respond;
   }
 
-  if (strnlen(in.command, FLEXMPI_COMMAND_MAX_LEN) == FLEXMPI_COMMAND_MAX_LEN) {
+  if (strnlen(in.command, FLEXMPI_COMMAND_LEN) == FLEXMPI_COMMAND_LEN) {
     out.rc = RPC_E2BIG;
     goto respond;
   }

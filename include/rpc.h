@@ -20,6 +20,9 @@
 #define RPC_E2BIG 2
 
 
+#define LOG_ERROR(mid,fmt, ...)  margo_error(mid, "%s (%s:%d): "fmt, __func__, __FILE__, __LINE__, ##__VA_ARGS__)
+
+
 /**
  * Get the Mercury (Hg) address string from the Margo server instance
  * MID and write it to ADDR_STR.
@@ -131,6 +134,7 @@ MERCURY_GEN_PROC(client_register_in_t,
                  ((hg_uint32_t)(jobid))
                  ((hg_uint32_t)(jobntasks))
                  ((hg_uint32_t)(jobnnodes))
+                 ((hg_uint64_t)(nprocs))
                  ((hg_const_string_t)(addr_str))
                  ((hg_uint16_t)(provid)))
 
@@ -182,6 +186,7 @@ MERCURY_GEN_PROC(malleability_avail_in_t,
 
 
 #define RPC_FLEXMPI_MALLEABILITY_NAME  "icc_flexmpi_malleability"
+#define FLEXMPI_COMMAND_LEN 256
 
 MERCURY_GEN_PROC(flexmpi_malleability_in_t,
                  ((hg_const_string_t)(command)))

@@ -218,5 +218,10 @@ follows is an effort to document the “schema” accessible to the intelligent 
 - IC clients (e.g connecting application) have their information
   stored in `client:<clid>`, where `clid` is an uuid string uniquely
   identifying the client.
-- There is a corresponding index `index:clients`, containing the
-  `clid` of all registered clients.
+- `index:clients` contains the `clid` of all registered clients.
+- `index:clients:type:<type>` contains the `clid` of all clients of type `<type>`
+- `index:clients:jobid:<jobid>` contains the `clid` of all clients
+  registered within the job `<jobid>`
+
+- `job:<jobid>` store the feature of a job as passed by the tasks
+  running in the allocation: number of associated nodes and tasks.

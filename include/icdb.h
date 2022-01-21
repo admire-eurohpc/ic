@@ -48,13 +48,17 @@ int icdb_command(struct icdb_context *icdb, const char *format, ...);
 
 /**
  * IC client
+ * XX fixme: get rid of NFIELDS
  */
+# define ICDB_CLIENT_NFIELDS 6
+
 struct icdb_client {
   char clid[UUID_STR_LEN];
   char type[ICC_TYPE_LEN];
   char addr[ICC_ADDR_LEN];
   uint16_t provid;
   uint32_t jobid;
+  uint64_t nprocs;              /* nprocesses in client */
 };
 
 inline void
@@ -67,6 +71,26 @@ icdb_initclient(struct icdb_client *client) {
   client->addr[0] = '\0';
   client->provid = 0;
   client->jobid = 0;
+  client->nprocs = 0;
+}
+
+
+/**
+ * Job
+ */
+
+struct icdb_job {
+  uint32_t jobid;
+  uint32_t nnodes;
+  uint32_t ntasks;
+};
+
+inline void
+icdb_initjob(struct icdb_job *job) {
+  if (!job) return;
+  job->jobid = 0;
+  job->nnodes = 0;
+  job->ntasks= 0;
 }
 
 
@@ -75,12 +99,12 @@ icdb_initclient(struct icdb_client *client) {
  */
 int icdb_setclient(struct icdb_context *icdb, const char *clid,
                    const char *type, const char *addr, uint16_t provid,
-		   uint32_t jobid, uint32_t jobntasks, uint32_t jobnnodes);
+                   uint32_t jobid, uint32_t jobntasks, uint32_t jobnnodes, uint64_t nprocs);
 
 /**
  * Get the IC client CLID.
  *
- * Returns ICDB_SUCCESS or and error code in case of error. In
+ * Returns ICDB_SUCCESS or an error code in case of error. In
  * particular, ICDB_NORESULT is returned if there is no client with
  * this ID.
  */
@@ -108,8 +132,31 @@ int icdb_getclients(struct icdb_context *icdb, const char *type, uint32_t jobid,
 
 /**
  * Delete IC client CLID.
+ *
+ * Returns the corresponding jobid in JOBID.
+ *
+ * Returns ICDB_SUCCESS or an error code.
  */
-int icdb_delclient(struct icdb_context *icdb, const char *clid);
+int icdb_delclient(struct icdb_context *icdb, const char *clid, uint32_t *jobid);
+
+
+/**
+ * Increment the process count of client CLID by INCRBY. INCRBY can be
+ * negative, in which case the process count is decremented.
+ *
+ * Returns ICDB_SUCCESS or an error code.
+ */
+int icdb_incrnprocs(struct icdb_context *icdb, char *clid, int64_t incrby);
+
+
+/**
+ * Get job JOBID into JOB. Allocation of job is the responsibility of
+ * the caller.
+ *
+ * Returns ICDB_SUCCESS or an error code.
+ */
+
+int icdb_getjob(struct icdb_context *icdb, uint32_t jobid, struct icdb_job *job);
 
 
 #endif

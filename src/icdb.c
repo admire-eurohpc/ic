@@ -238,6 +238,9 @@ icdb_getclient(struct icdb_context *icdb, const char *clid, struct icdb_client *
     else if (!strcmp(key, "jobid")) {
       ICDB_GET_UINT32(icdb, r, &client->jobid, key);
     }
+    else if (!strcmp(key, "nprocs")) {
+      ICDB_GET_UINT64(icdb, r, &client->nprocs, key);
+    }
 
     if (icdb->status != ICDB_SUCCESS)
       break;
@@ -272,15 +275,17 @@ icdb_getclients(struct icdb_context *icdb, const char *type, uint32_t jobid,
                        "GET client:*->type "
                        "GET client:*->addr "
                        "GET client:*->provid "
-                       "GET client:*->jobid");
+                       "GET client:*->jobid "
+                       "GET client:*->nprocs");
     CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
   }
 
-  /* SORT returns fields one after the other, a client is 5 fields */
+  /* SORT returns fields one after the other, a client is
+     ICDB_CLIENT_NFIELDS fields */
   /* XX use limit/offset at some point?*/
-  *count = rep->elements / 5;
+  assert(rep->elements % ICDB_CLIENT_NFIELDS == 0);
 
-  assert(rep->elements % 5 == 0);
+  *count = rep->elements / ICDB_CLIENT_NFIELDS;
 
   if (size < *count) {
     ICDB_SET_STATUS(icdb, ICDB_E2BIG, "Too many clients to store");
@@ -290,8 +295,8 @@ icdb_getclients(struct icdb_context *icdb, const char *type, uint32_t jobid,
   size_t i, j;
   redisReply *r;
   for (i = 0; i < *count; i++) {
-    for (j = 0; j < 5; j++) {
-      r = rep->element[i * 5 + j];
+    for (j = 0; j < ICDB_CLIENT_NFIELDS; j++) {
+      r = rep->element[i * ICDB_CLIENT_NFIELDS + j];
       CHECK_REP_TYPE(icdb, r, REDIS_REPLY_STRING);
       switch (j) {
       case 0:
@@ -310,6 +315,9 @@ icdb_getclients(struct icdb_context *icdb, const char *type, uint32_t jobid,
       case 4:
         ICDB_GET_UINT32(icdb, r, &clients[i].jobid, "jobid");
         break;
+      case 5:
+        ICDB_GET_UINT64(icdb, r, &clients[i].nprocs, "nprocs");
+        break;
       }
       /* immediately stop processing if one field is in error */
       if (icdb->status != ICDB_SUCCESS) {
@@ -325,7 +333,8 @@ icdb_getclients(struct icdb_context *icdb, const char *type, uint32_t jobid,
 int
 icdb_setclient(struct icdb_context *icdb, const char *clid,
                const char *type, const char *addr, uint16_t provid,
-	       uint32_t jobid, uint32_t jobntasks, uint32_t jobnnodes)
+               uint32_t jobid, uint32_t jobntasks, uint32_t jobnnodes,
+               uint64_t nprocs)
 {
   CHECK_ICDB(icdb);
   CHECK_PARAM(icdb, clid);
@@ -337,13 +346,18 @@ icdb_setclient(struct icdb_context *icdb, const char *clid,
   redisReply *rep;
   redisContext *ctx = icdb->redisctx;
 
-  /* XX add transaction around 1) and 2) */
-  /* 1) write client to hashmap */
-  rep = redisCommand(ctx, "HSET client:%s clid %s type %s addr %s provid %"PRIu32" jobid %"PRIu32" ntasks %"PRIu32" nnodes %"PRIu32,
-                     clid, clid, type, addr, provid, jobid, jobntasks, jobnnodes);
+  /* XX fixme: wrap in transaction */
+
+  /* 1) Create or update job */
+  rep = redisCommand(ctx, "HSET job:%"PRIu32" jobid %"PRIu32" ntasks %"PRIu32" nnodes %"PRIu32,
+                     jobid, jobid, jobntasks, jobnnodes);
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
 
-  /* 2) write to client sets (~indexes)  */
+  /* 2) write client to hashmap */
+  rep = redisCommand(ctx, "HSET client:%s clid %s type %s addr %s provid %"PRIu32" jobid %"PRIu32" nprocs %"PRIu64, clid, clid, type, addr, provid, jobid, nprocs);
+  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
+
+  /* 3) write to client sets (~indexes)  */
   rep = redisCommand(ctx, "SADD index:clients %s", clid);
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
 
@@ -358,7 +372,7 @@ icdb_setclient(struct icdb_context *icdb, const char *clid,
 
 
 int
-icdb_delclient(struct icdb_context *icdb, const char *clid)
+icdb_delclient(struct icdb_context *icdb, const char *clid, uint32_t *jobid)
 {
   CHECK_ICDB(icdb);
   CHECK_PARAM(icdb, clid);
@@ -366,20 +380,91 @@ icdb_delclient(struct icdb_context *icdb, const char *clid)
   icdb->status = ICDB_SUCCESS;
 
   redisReply *rep;
-  /* Remove client and client index  */
-  /* XX transaction? + separate check */
-  rep = redisCommand(icdb->redisctx, "DEL client:%s", clid);
-  rep = redisCommand(icdb->redisctx, "SREM index:clients %s", clid);
+  char *type;
 
-  /* DEL returns the number of keys that were deleted */
-  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
-  if (rep->integer != 1) {
-    ICDB_SET_STATUS(icdb, ICDB_FAILURE, "Wrong number of client deleted: %d", rep->integer);
+  rep = redisCommand(icdb->redisctx, "HMGET client:%s jobid type", clid);
+  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
+
+  if (rep->elements == 0) {
+    ICDB_SET_STATUS(icdb, ICDB_NORESULT, "No client with id %s", clid);
+    return ICDB_NORESULT;
   }
+
+  /* HMGET values in order */
+  CHECK_REP_TYPE(icdb, rep->element[0], REDIS_REPLY_STRING);
+  CHECK_REP_TYPE(icdb, rep->element[1], REDIS_REPLY_STRING);
+
+  ICDB_GET_UINT32(icdb, rep->element[0], jobid, "jobid");
+  type = rep->element[1]->str;
+
+  /* Remove client and client index  */
+  /* XX fixme: wrap in transaction */
+  /* DEL & SREM return the number of keys that were deleted */
+  rep = redisCommand(icdb->redisctx, "SREM index:clients:type:%s %s", type, clid);
+  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
+
+  rep = redisCommand(icdb->redisctx, "SREM index:clients:jobid:%"PRIu32" %s", *jobid, clid);
+  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
+
+  rep = redisCommand(icdb->redisctx, "SREM index:clients %s", clid);
+  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
+
+  rep = redisCommand(icdb->redisctx, "DEL client:%s", clid);
+  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
 
   return icdb->status;
 }
 
+
+int icdb_incrnprocs(struct icdb_context *icdb, char *clid, int64_t incrby) {
+  CHECK_ICDB(icdb);
+  icdb->status = ICDB_SUCCESS;
+
+  redisReply *rep;
+
+  rep = redisCommand(icdb->redisctx, "HINCRBY client:%s nprocs %"PRId64, clid, incrby);
+  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
+
+  return icdb->status;
+}
+
+
+int
+icdb_getjob(struct icdb_context *icdb, uint32_t jobid, struct icdb_job *job)
+{
+  CHECK_ICDB(icdb);
+
+  icdb->status = ICDB_SUCCESS;
+
+  redisReply *rep;
+  redisContext *ctx = icdb->redisctx;
+
+  rep = redisCommand(ctx, "HGETALL job:%"PRIu32, jobid);
+  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
+
+  /* HGETALL returns all keys followed by their respective value */
+  for (size_t i = 0; i < rep->elements; i++) {
+    char *key = rep->element[i]->str;
+    redisReply *r = rep->element[++i];
+
+    CHECK_REP_TYPE(icdb, r, REDIS_REPLY_STRING);
+
+    if (!strcmp(key, "jobid")) {
+      ICDB_GET_UINT32(icdb, r, &job->jobid, key);
+    }
+    else if (!strcmp(key, "nnodes")) {
+      ICDB_GET_UINT32(icdb, r, &job->nnodes, key);
+    }
+    else if (!strcmp(key, "ntasks")) {
+      ICDB_GET_UINT32(icdb, r, &job->ntasks, key);
+    }
+
+    if (icdb->status != ICDB_SUCCESS)
+      break;
+  }
+
+  return icdb->status;
+}
 
 /** ICDB Utils */
 

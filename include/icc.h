@@ -43,9 +43,14 @@ enum icc_client_type {
  * Initialize an ICC client instance and returns the associated
  * context in ICC_CONTEXT.
  *
+ * TYPEID is the type of ICC client. NPROCS is the number of processes
+ * in this client, such as can be returned by MPI_COMM_SIZE. Can be 0
+ * for clients that are not applications.
+ *
  * Return ICC_SUCCESS or error code.
  */
-int icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_context **icc);
+int icc_init(enum icc_log_level log_level, enum icc_client_type typeid, unsigned int nprocs,
+	     struct icc_context **icc);
 
 
 /**
