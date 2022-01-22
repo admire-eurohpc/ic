@@ -12,6 +12,12 @@
 
 #define NTHREADS 3
 
+/* malleability manager stub */
+#define NCLIENTS     4
+#define NCLIENTS_MAX 1024
+
+static void malleability_th(void *arg);
+
 
 int
 main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
@@ -103,14 +109,40 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   rpc_ids[RPC_MALLEABILITY_AVAIL] = MARGO_REGISTER(mid, RPC_MALLEABILITY_AVAIL_NAME, malleability_avail_in_t, rpc_out_t, malleability_avail_cb);
   rpc_ids[RPC_FLEXMPI_MALLEABILITY] = MARGO_REGISTER(mid, RPC_FLEXMPI_MALLEABILITY_NAME, flexmpi_malleability_in_t, rpc_out_t, NULL);
 
-  /* give access to the pool of db connection and other rpcs */
-  struct cb_data d = {.icdbs = icdbs, .rpcids = rpc_ids};
+  /* malleability thread from the pool of Margo ULTs */
+  ABT_pool pool;
+  struct malleability_data malldat;
+
+  ABT_mutex_create(&(malldat.mutex));
+  ABT_cond_create(&(malldat.cond));
+  malldat.sleep = 1;
+
+  malldat.mid = mid;
+  malldat.rpcids = rpc_ids;
+  malldat.icdbs = icdbs;
+  malldat.jobid = 0;
+
+  /* XX return code from ULT? */
+  margo_get_handler_pool(mid, &pool);
+
+  rc = ABT_thread_create(pool, malleability_th, &malldat, ABT_THREAD_ATTR_NULL, NULL);
+  if (rc != 0) {
+    LOG_ERROR(mid, "Could not create malleability ULT (ret = %d)", rc);
+    goto error;
+  }
+
+  /* attach data to RPCs  */
+  struct cb_data d = { .icdbs = icdbs, .rpcids = rpc_ids, .malldat = &malldat };
   margo_register_data(mid, rpc_ids[RPC_CLIENT_REGISTER], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_CLIENT_DEREGISTER], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_JOBMON_SUBMIT], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_MALLEABILITY_AVAIL], &d, NULL);
 
   margo_wait_for_finalize(mid);
+
+  /* clean up malleability thread */
+  ABT_mutex_free(&malldat.mutex);
+  ABT_cond_free(&malldat.cond);
 
   /* close connections to DB */
   for (size_t i = 0; i < NTHREADS; i++) {
@@ -122,4 +154,127 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
  error:
   if (mid) margo_finalize(mid);
   return -1;
+}
+
+/* Malleability manager stub */
+
+void
+malleability_th(void *arg)
+{
+  struct icdb_client *clients;
+  struct malleability_data *data = (struct malleability_data *)arg;
+
+  while (1) {
+    ABT_mutex_lock(data->mutex);
+    while (data->sleep)
+      ABT_cond_wait(data->cond, data->mutex);
+    ABT_mutex_unlock(data->mutex);
+
+    int ret, xrank;
+    void *tmp;
+
+    if (!data->icdbs) {
+      LOG_ERROR(data->mid, "ICDB context is NULL");
+      return;
+    }
+
+    ret = ABT_self_get_xstream_rank(&xrank);
+    if (ret != ABT_SUCCESS) {
+      LOG_ERROR(data->mid, "Could not get Argobots ES rank");
+      return;
+    }
+
+    size_t size;
+    unsigned long long nclients;
+    struct icdb_context *icdb;
+    struct icdb_job job;
+
+    icdb = data->icdbs[xrank];
+
+    ret = icdb_getjob(icdb, data->jobid, &job);
+    if (ret != ICDB_SUCCESS) {
+      LOG_ERROR(data->mid, "IC database error: %s", icdb_errstr(icdb));
+      return;
+    }
+
+    size = NCLIENTS;
+    /* XX fixme: multiplication could overflow, use reallocarray? */
+    /* XX do not alloc/free on every call */
+    clients = malloc(sizeof(*clients) * size);
+    if (!clients) {
+      LOG_ERROR(data->mid, "Failed malloc");
+      return;
+    }
+
+    do {
+      /* XX fixme filter on flexmpi client */
+      ret = icdb_getclients(icdb, NULL, 0, clients, size, &nclients);
+
+      /* clients array is too small, expand */
+      if (ret == ICDB_E2BIG && size < NCLIENTS_MAX) {
+        size *= 2;
+        tmp = realloc(clients, sizeof(*clients) * size);
+        if (!tmp) {
+          LOG_ERROR(data->mid, "Failed malloc");
+          return;
+        }
+        clients = tmp;
+        continue;
+      }
+      else if (ret != ICDB_SUCCESS) {
+        LOG_ERROR(data->mid, "IC database error: %s", icdb_errstr(icdb));
+        free(clients);
+        return;
+      }
+      break;
+    } while (1);
+
+
+    for (unsigned i = 0; i < nclients; i++) {
+      char command[FLEXMPI_COMMAND_LEN];
+      int nbytes;
+      long long dprocs;
+
+      dprocs = job.ntasks / nclients - clients[i].nprocs;
+
+      nbytes = snprintf(command, FLEXMPI_COMMAND_LEN, "6:lhost:%lld", dprocs);
+      if (nbytes >= FLEXMPI_COMMAND_LEN || nbytes < 0) {
+        LOG_ERROR(data->mid, "Could not prepare malleability command");
+        break;
+      }
+
+      /* make malleability RPC */
+      hg_addr_t addr;
+      hg_return_t hret;
+      int rpcret;
+
+      flexmpi_malleability_in_t in = { .command = command };
+
+      hret = margo_addr_lookup(data->mid, clients[i].addr, &addr);
+      if (hret != HG_SUCCESS) {
+        LOG_ERROR(data->mid, "Could not get Mercury address: %s", HG_Error_to_string(hret));
+        break;
+      }
+
+      ret = rpc_send(data->mid, addr, data->rpcids[RPC_FLEXMPI_MALLEABILITY], &in, &rpcret);
+      if (ret) {
+        LOG_ERROR(data->mid, "Could not send RPC %d", RPC_FLEXMPI_MALLEABILITY);
+      } else if (rpcret) {
+        LOG_ERROR(data->mid, "RPC %d returned with code %d", RPC_FLEXMPI_MALLEABILITY, rpcret);
+      }
+      else {
+        /* XX generalize with a "writeclient" function? */
+        ret = icdb_incrnprocs(icdb, clients[i].clid, dprocs);
+        if (ret != ICDB_SUCCESS) {
+          LOG_ERROR(data->mid, "IC database error: %s", icdb_errstr(icdb));
+        }
+      }
+    }
+
+    /* go back to sleep */
+    data->sleep = 1;
+  }
+
+  free(clients);
+  return;
 }

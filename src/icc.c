@@ -28,12 +28,12 @@
  * Mercury macros move to .c?
  * ICC_TYPE_LEN check
  * RPC_CODE to string for logs (rpc.c)
- * Cleanup FlexMPI socket, get rid of global socket var
  * icc: send timestamp in register RPC
  * handle crashing application (via Slurm?)
- * malleability thread: arg out of scope
- * malleability thread: block on condition variable?
  * icdb: handle clients as a struct, commit func?
+ * malleability: filter on FlexMPI/iMPI, separate
+ * malleability: duplication in arg struct
+ * malleability: return from ULT, get retcode
 */
 
 struct icc_context {
