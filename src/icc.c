@@ -1,3 +1,4 @@
+#include <assert.h>              /* assert */
 #include <dlfcn.h>              /* dlopen/dlsym */
 #include <errno.h>
 #include <netdb.h>              /* addrinfo */
@@ -140,6 +141,7 @@ icc_init(enum icc_log_level log_level, enum icc_client_type typeid, unsigned int
   }
 
   if (typeid == ICC_TYPE_FLEXMPI) {
+    icc->rpcids[RPC_MALLEABILITY_REGION] = MARGO_REGISTER(icc->mid, RPC_MALLEABILITY_REGION_NAME, malleability_region_in_t, rpc_out_t, NULL);
     icc->rpcids[RPC_FLEXMPI_MALLEABILITY] = MARGO_REGISTER(icc->mid, RPC_FLEXMPI_MALLEABILITY_NAME, flexmpi_malleability_in_t, rpc_out_t, flexmpi_malleability_cb);
 
     struct flexmpi_cbdata *d = malloc(sizeof(*d));
@@ -355,6 +357,24 @@ icc_rpc_malleability_avail(struct icc_context *icc, char *type, char *portname, 
   return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
 
+
+int
+icc_rpc_malleability_region(struct icc_context *icc, enum icc_malleability_region_action type, int *retcode)
+{
+  int rc;
+  malleability_region_in_t in;
+
+  CHECK_ICC(icc);
+
+  assert(type > ICC_MALLEABILITY_UNDEFINED && type <= UINT8_MAX);
+
+  in.clid = icc->clid;
+  in.type = type; /* safe to cast type to uint8 because of the check above */
+
+  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_MALLEABILITY_REGION], &in, retcode);
+
+  return rc ? ICC_FAILURE : ICC_SUCCESS;
+}
 
 static inline const char *
 _icc_type_str(enum icc_client_type type)

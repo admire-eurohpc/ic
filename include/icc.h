@@ -38,7 +38,6 @@ enum icc_client_type {
 };
 
 
-
 /**
  * Initialize an ICC client instance and returns the associated
  * context in ICC_CONTEXT.
@@ -50,7 +49,7 @@ enum icc_client_type {
  * Return ICC_SUCCESS or error code.
  */
 int icc_init(enum icc_log_level log_level, enum icc_client_type typeid, unsigned int nprocs,
-	     struct icc_context **icc);
+             struct icc_context **icc);
 
 
 /**
@@ -122,5 +121,27 @@ int icc_rpc_jobmon_exit(struct icc_context *icc, uint32_t jobid, uint32_t jobste
  * Return ICC_SUCCESS or an error code.
  */
 int icc_rpc_malleability_avail(struct icc_context *icc, char *type, char *portname, uint32_t jobid, uint32_t nnodes, int *retcode);
+
+
+/**
+ * Malleability notification.
+ */
+enum icc_malleability_region_action {
+  ICC_MALLEABILITY_UNDEFINED = 0,
+  ICC_MALLEABILITY_REGION_ENTER,
+  ICC_MALLEABILITY_REGION_LEAVE
+};
+
+/**
+ * RPC MALLEABILITY_REGION: Notify the server of the start (if type is
+ * ICC_MALLEABILITY_START) or end (if type is ICC_MALLEABILITY_END) of
+ * a malleability region..
+ *
+ * RETCODE is filled with the RPC return status code on completion.
+ *
+ * Return ICC_SUCCESS or an error code.
+ */
+int icc_rpc_malleability_region(struct icc_context *icc, enum icc_malleability_region_action type, int *retcode);
+
 
 #endif

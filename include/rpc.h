@@ -10,9 +10,9 @@
 #include "icc_priv.h"
 #include "icc.h"
 
-#define HG_PROTOCOL "ofi+tcp"	  /* Mercury protocol */
+#define HG_PROTOCOL "ofi+tcp"     /* Mercury protocol */
 #define MARGO_PROVIDER_DEFAULT 0  /* for using multiple Argobots
-				     pools, unused for now */
+                                     pools, unused for now */
 
 #define RPC_OK  0
 #define RPC_ERR -1
@@ -111,6 +111,7 @@ enum icc_rpc_code {
   RPC_JOBMON_SUBMIT,
   RPC_JOBMON_EXIT,
   RPC_MALLEABILITY_AVAIL,
+  RPC_MALLEABILITY_REGION,
   RPC_FLEXMPI_MALLEABILITY,
 
   RPC_COUNT
@@ -183,6 +184,13 @@ MERCURY_GEN_PROC(malleability_avail_in_t,
                  ((hg_const_string_t)(type))
                  ((hg_const_string_t)(portname))
                  ((uint32_t)(nnodes)))
+
+
+#define RPC_MALLEABILITY_REGION_NAME  "icc_malleability_region"
+
+MERCURY_GEN_PROC(malleability_region_in_t,
+                 ((hg_const_string_t)(clid))
+                 ((uint8_t)(type)))
 
 
 #define RPC_FLEXMPI_MALLEABILITY_NAME  "icc_flexmpi_malleability"

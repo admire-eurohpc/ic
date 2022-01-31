@@ -308,3 +308,32 @@ malleability_avail_cb(hg_handle_t h)
 }
 DEFINE_MARGO_RPC_HANDLER(malleability_avail_cb);
 
+
+void
+malleability_region_cb(hg_handle_t h)
+{
+  hg_return_t hret;
+  margo_instance_id mid;
+  malleability_region_in_t in;
+  rpc_out_t out;
+  int ret;
+
+  mid = margo_hg_handle_get_instance(h);
+  assert(mid);
+
+  out.rc = ICC_SUCCESS;
+
+  MARGO_GET_INPUT(h, in, hret);
+  if (hret != HG_SUCCESS) {
+    out.rc = ICC_FAILURE;
+    goto respond;
+  }
+
+  margo_info(mid, "Application %s %s malleability region", in.clid,
+             in.type == ICC_MALLEABILITY_REGION_ENTER ? "entering" : "leaving");
+
+ respond:
+  MARGO_RESPOND(h, out, ret);
+  MARGO_DESTROY_HANDLE(h, hret)
+}
+DEFINE_MARGO_RPC_HANDLER(malleability_region_cb);

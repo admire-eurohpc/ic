@@ -36,7 +36,7 @@ main(int argc, char **argv)
     case 't':
       typeid = _icc_typecode(optarg);
       if (typeid == ICC_TYPE_UNDEFINED)
-	usage();
+        usage();
       break;
     case 0:
       continue;
@@ -61,8 +61,15 @@ main(int argc, char **argv)
     fprintf(stderr, "Error sending RPC to IC (retcode=%d)\n", ret);
 
   /* FlexMPI apps need to wait for malleability commands */
-  if (typeid == ICC_TYPE_FLEXMPI)
-    icc_sleep(icc, 30000);
+  if (typeid == ICC_TYPE_FLEXMPI) {
+    ret = icc_rpc_malleability_region(icc, ICC_MALLEABILITY_REGION_ENTER, &rpcret);
+    assert(ret == ICC_SUCCESS && rpcret == ICC_SUCCESS);
+
+    icc_sleep(icc, 4000);
+
+    ret = icc_rpc_malleability_region(icc, ICC_MALLEABILITY_REGION_LEAVE, &rpcret);
+    assert(ret == ICC_SUCCESS && rpcret == ICC_SUCCESS);
+  }
 
   ret = icc_fini(icc);
   assert(ret == 0);
