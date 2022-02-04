@@ -244,6 +244,8 @@ malleability_th(void *arg)
         break;
       }
 
+      margo_info(data->mid, "Malleability: passing command %s to client %s", command, clients[i].clid);
+
       /* make malleability RPC */
       hg_addr_t addr;
       hg_return_t hret;

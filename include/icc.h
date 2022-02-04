@@ -134,8 +134,8 @@ enum icc_malleability_region_action {
 
 /**
  * RPC MALLEABILITY_REGION: Notify the server of the start (if type is
- * ICC_MALLEABILITY_START) or end (if type is ICC_MALLEABILITY_END) of
- * a malleability region..
+ * ICC_MALLEABILITY_REGION_ENTER) or end (if type is
+ * ICC_MALLEABILITY_REGION_LEAVE) of a malleability region..
  *
  * RETCODE is filled with the RPC return status code on completion.
  *

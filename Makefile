@@ -88,7 +88,7 @@ $(libicc_so): rpc.o cb.o flexmpi.o
 $(libicc_so): CFLAGS += `$(PKG_CONFIG) --cflags margo uuid`
 $(libicc_so): LDLIBS += `$(PKG_CONFIG) --libs margo uuid` -ldl -Wl,--no-undefined,-h$(libicc_soname)
 
-$(client_bin): LDLIBS += `$(PKG_CONFIG) --libs margo` -Wl,--no-undefined -L. -licc
+$(client_bin): LDLIBS += -L. `$(PKG_CONFIG) --libs margo` -licc -Wl,--no-undefined
 
 $(libslurmjobmon_so) $(libslurmadhoccli_so): LDLIBS += -L. -licc -lslurm
 

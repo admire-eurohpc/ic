@@ -283,6 +283,7 @@ icc_rpc_test(struct icc_context *icc, uint8_t number, enum icc_client_type type,
   return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
 
+
 int
 icc_rpc_adhoc_nodes(struct icc_context *icc, uint32_t jobid, uint32_t nnodes, uint32_t adhoc_nnodes, int *retcode)
 {
@@ -375,6 +376,7 @@ icc_rpc_malleability_region(struct icc_context *icc, enum icc_malleability_regio
 
   return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
+
 
 static inline const char *
 _icc_type_str(enum icc_client_type type)

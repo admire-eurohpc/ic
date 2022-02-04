@@ -29,6 +29,5 @@ export PATH LD_LIBRARY_PATH ADMIRE_DIR
 mkdir -p $ADMIRE_DIR
 
 srun --time=00:10:00 redis-server &
+sleep 2				# give some time to Redis to start
 srun --time=00:10:00 icc_server
-
-wait
