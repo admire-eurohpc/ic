@@ -2,7 +2,6 @@
 #include <inttypes.h>           /* PRId32 */
 #include <stddef.h>             /* NULL */
 #include <stdint.h>             /* uint32_t, etc. */
-#include <stdlib.h>             /* strtol */
 #include <string.h>             /* strerror */
 #include <slurm/spank.h>
 

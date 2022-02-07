@@ -2,7 +2,7 @@
 #include <dlfcn.h>              /* dlopen/dlsym */
 #include <errno.h>
 #include <netdb.h>              /* addrinfo */
-#include <stdlib.h>             /* malloc */
+#include <stdlib.h>             /* malloc, getenv, strtoxx */
 #include <string.h>
 #include <margo.h>
 #include "uuid_admire.h"
@@ -24,17 +24,17 @@
  * Cleanup error/info messages
  * margo_free_input in callback!
  * icc_init error code errno vs ICC? cleanup all
- * do we need an include directory?
- * Factorize boilerplate out of callbacks
- * Mercury macros move to .c?
+ * unecessary include directory?
  * ICC_TYPE_LEN check
  * RPC_CODE to string for logs (rpc.c)
  * icc: send timestamp in register RPC
+ * icc: compute ntasks from SLURM_TASKS_PER_NODE?
  * handle crashing application (via Slurm?)
  * icdb: handle clients as a struct, commit func?
+ * malleability: return from ULT, get retcode + finalize icc_server?
  * malleability: filter on FlexMPI/iMPI, separate
  * malleability: duplication in arg struct
- * malleability: return from ULT, get retcode
+ * malleability: RPC for "reconfig acceptance/exec" on MPI side?
 */
 
 struct icc_context {
@@ -54,6 +54,17 @@ struct icc_context {
  * Convert an ICC client type code to a string.
  */
 static const char *_icc_type_str(enum icc_client_type type);
+
+/**
+ * Convert the string pointed by NPTR to an uint32_t and put the
+ * result in the buffer pointed by DEST. NPTR and DEST must not be
+ * NULL.
+ *
+ * DEST is set to 0 if no conversion takes place.
+ *
+ * Return 0 on success, -errno on error.
+ */
+static int _strtouint32(const char *nptr, uint32_t *dest);
 
 
 /* public functions */
@@ -181,14 +192,53 @@ icc_init(enum icc_log_level log_level, enum icc_client_type typeid, unsigned int
     }
 
     char *jobid, *jobntasks, *jobnnodes;
-    jobid = getenv("SLURM_JOBID");
-    jobntasks = getenv("SLURM_NTASKS");
-    jobnnodes = getenv("SLURM_JOB_NODES");
 
-    /* XX fixme: is atoi safe here, overflow risk? */
-    rpc_in.jobid = jobid ? atoi(jobid) : 0;
-    rpc_in.jobntasks = jobntasks ? atoi(jobntasks) : 0;
-    rpc_in.jobnnodes = jobnnodes ? atoi(jobnnodes) : 0;
+    jobid = getenv("SLURM_JOB_ID");
+    if (!jobid) {
+      jobid = getenv("SLURM_JOBID");
+      if (!jobid) {
+        margo_error(icc->mid, "Cannot get job ID");
+        return ICC_FAILURE;
+      }
+    }
+
+    jobnnodes = getenv("SLURM_JOB_NUM_NODES");
+    if (!jobnnodes) {
+      jobnnodes = getenv("SLURM_NNODES");
+      if (!jobnnodes) {
+        margo_error(icc->mid, "Cannot get job nnodes");
+        return ICC_FAILURE;
+      }
+    }
+
+    /* ntasks env is not set by SLURM without the --ntasks option */
+    jobntasks = getenv("SLURM_NTASKS");
+    if (!jobntasks) {
+      jobntasks = getenv("SLURM_NPROCS");
+      if (!jobntasks) {
+        margo_error(icc->mid, "Cannot get job ntasks");
+        return ICC_FAILURE;
+      }
+    }
+
+    rc = _strtouint32(jobid, &rpc_in.jobid);
+    if (rc) {
+      margo_error(icc->mid, "Error converting job ID \"%s\": %s", jobid, strerror(-rc));
+      return ICC_FAILURE;
+    }
+
+    rc = _strtouint32(jobnnodes, &rpc_in.jobnnodes);
+    if (rc) {
+      margo_error(icc->mid, "Error converting job nnodes \"%s\": %s", jobnnodes, strerror(-rc));
+      return ICC_FAILURE;
+    }
+
+    rc = _strtouint32(jobntasks, &rpc_in.jobntasks);
+    if (rc) {
+      margo_error(icc->mid, "Error converting job ntasks \"%s\": %s", jobntasks, strerror(-rc));
+      return ICC_FAILURE;
+    }
+
     rpc_in.nprocs = nprocs;
     rpc_in.addr_str = addr_str;
     rpc_in.provid = icc->provider_id;
@@ -397,3 +447,31 @@ _icc_type_str(enum icc_client_type type)
   }
 }
 
+static int
+_strtouint32(const char *nptr, uint32_t *dest)
+{
+  char *end;
+  unsigned long long val;
+
+  assert(nptr != NULL);
+  assert(dest != NULL);
+
+  *dest = 0;
+  errno = 0;
+
+  val = strtoull(nptr, &end, 0);
+
+  if (errno != 0) {
+    return -errno;
+  }
+  else if (end == nptr || *end != '\0') {
+    return -EINVAL;
+  }
+
+  if (val > UINT32_MAX)
+    return -EINVAL;
+
+  *dest = val;
+
+  return 0;
+}
