@@ -26,9 +26,10 @@ client_bin := client
 libslurmadhoccli_so := libslurmadhoccli.so
 libslurmjobmon_so := libslurmjobmon.so
 testapp_bin := testapp
+spawn_bin := spawn
 
 sources := icc_server.c rpc.c cb.c icdb.c icc.c adhoccli.c cbserver.c flexmpi.c
-sources += slurmjobmon.c slurmadhoccli.c client.c testapp.c
+sources += slurmjobmon.c slurmadhoccli.c client.c testapp.c spawn.c
 
 # keep libicc in front
 binaries := $(libicc_so) $(icc_server_bin) $(client_bin) $(libslurmjobmon_so) $(libslurmjobmon_so)
@@ -91,6 +92,9 @@ $(libicc_so): LDLIBS += `$(PKG_CONFIG) --libs margo uuid` -ldl -Wl,--no-undefine
 $(client_bin): LDLIBS += -L. `$(PKG_CONFIG) --libs margo` -licc -Wl,--no-undefined
 
 $(libslurmjobmon_so) $(libslurmadhoccli_so): LDLIBS += -L. -licc -lslurm
+
+$(spawn_bin): CFLAGS += `$(PKG_CONFIG) --cflags mpi`
+$(spawn_bin): LDLIBS += `$(PKG_CONFIG) --libs mpi`
 
 # $(testapp_bin): CFLAGS += `$(PKG_CONFIG) --cflags mpi`
 # $(testapp_bin): LDLIBS += `$(PKG_CONFIG) --libs mpi margo` -L. -licc
