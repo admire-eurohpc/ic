@@ -93,8 +93,8 @@ $(client_bin): LDLIBS += -L. `$(PKG_CONFIG) --libs margo` -licc -Wl,--no-undefin
 
 $(libslurmjobmon_so) $(libslurmadhoccli_so): LDLIBS += -L. -licc -lslurm
 
-$(spawn_bin): CFLAGS += `$(PKG_CONFIG) --cflags mpi`
-$(spawn_bin): LDLIBS += `$(PKG_CONFIG) --libs mpi`
+$(spawn_bin): CFLAGS += `$(PKG_CONFIG) --cflags mpich`
+$(spawn_bin): LDLIBS += `$(PKG_CONFIG) --libs mpich`
 
 # $(testapp_bin): CFLAGS += `$(PKG_CONFIG) --cflags mpi`
 # $(testapp_bin): LDLIBS += `$(PKG_CONFIG) --libs mpi margo` -L. -licc
