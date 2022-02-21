@@ -127,7 +127,7 @@ int icdb_getclient(struct icdb_context *icdb, const char *clid, struct icdb_clie
  * database.
  */
 int icdb_getclients(struct icdb_context *icdb, const char *type, uint32_t jobid,
-                    struct icdb_client clients[], size_t size, unsigned long long *count);
+                    struct icdb_client clients[], size_t size, size_t *count);
 
 
 /**

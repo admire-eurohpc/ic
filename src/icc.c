@@ -84,8 +84,9 @@ icc_init(enum icc_log_level log_level, enum icc_client_type typeid, unsigned int
     return -errno;
 
   icc->bidirectional = 0;
-  /*  FlexMPI apps must be able to both receive AND send RPCs to the IC */
-  if (typeid == ICC_TYPE_FLEXMPI)
+
+  /*  Apps that must be able to both receive AND send RPCs to the IC */
+  if (typeid == ICC_TYPE_MPI || typeid == ICC_TYPE_FLEXMPI)
     icc->bidirectional = 1;
 
   /* use 2 extra threads: 1 for RPC network progress, 1 for background

@@ -181,12 +181,11 @@ malleability_th(void *arg)
 
     ret = ABT_self_get_xstream_rank(&xrank);
     if (ret != ABT_SUCCESS) {
-      LOG_ERROR(data->mid, "Could not get Argobots ES rank");
+      LOG_ERROR(data->mid, "Argobots ES rank");
       return;
     }
 
-    size_t size;
-    unsigned long long nclients;
+    size_t size, nclients;
     struct icdb_context *icdb;
     struct icdb_job job;
 
@@ -194,7 +193,7 @@ malleability_th(void *arg)
 
     ret = icdb_getjob(icdb, data->jobid, &job);
     if (ret != ICDB_SUCCESS) {
-      LOG_ERROR(data->mid, "IC database error: %s", icdb_errstr(icdb));
+      LOG_ERROR(data->mid, "IC database: %s", icdb_errstr(icdb));
       return;
     }
 
@@ -208,8 +207,8 @@ malleability_th(void *arg)
     }
 
     do {
-      /* XX fixme filter on flexmpi client */
-      ret = icdb_getclients(icdb, NULL, 0, clients, size, &nclients);
+      /* XX fixme filter on (flex)MPI clients?*/
+      ret = icdb_getclients(icdb, NULL, data->jobid, clients, size, &nclients);
 
       /* clients array is too small, expand */
       if (ret == ICDB_E2BIG && size < NCLIENTS_MAX) {
@@ -223,7 +222,7 @@ malleability_th(void *arg)
         continue;
       }
       else if (ret != ICDB_SUCCESS) {
-        LOG_ERROR(data->mid, "IC database error: %s", icdb_errstr(icdb));
+        LOG_ERROR(data->mid, "IC database failure: %s", icdb_errstr(icdb));
         free(clients);
         return;
       }
@@ -231,7 +230,10 @@ malleability_th(void *arg)
     } while (1);
 
 
-    for (unsigned i = 0; i < nclients; i++) {
+    margo_info(data->mid, "Malleability: Job %"PRIu32": got %zu client%s",
+	       data->jobid, nclients, nclients > 1 ? "s" : "");
+
+    for (size_t i = 0; i < nclients; i++) {
       char command[FLEXMPI_COMMAND_LEN];
       int nbytes;
       long long dprocs;
@@ -240,11 +242,11 @@ malleability_th(void *arg)
 
       nbytes = snprintf(command, FLEXMPI_COMMAND_LEN, "6:lhost:%lld", dprocs);
       if (nbytes >= FLEXMPI_COMMAND_LEN || nbytes < 0) {
-        LOG_ERROR(data->mid, "Could not prepare malleability command");
+        LOG_ERROR(data->mid, "Failed to prepare malleability command");
         break;
       }
 
-      margo_info(data->mid, "Malleability: passing command %s to client %s", command, clients[i].clid);
+      margo_info(data->mid, "Malleability: Job %"PRIu32": passing command %s to client %s", clients[i].jobid, command, clients[i].clid);
 
       /* make malleability RPC */
       hg_addr_t addr;
@@ -255,13 +257,13 @@ malleability_th(void *arg)
 
       hret = margo_addr_lookup(data->mid, clients[i].addr, &addr);
       if (hret != HG_SUCCESS) {
-        LOG_ERROR(data->mid, "Could not get Mercury address: %s", HG_Error_to_string(hret));
+        LOG_ERROR(data->mid, "Failed getting Mercury address: %s", HG_Error_to_string(hret));
         break;
       }
 
       ret = rpc_send(data->mid, addr, data->rpcids[RPC_FLEXMPI_MALLEABILITY], &in, &rpcret);
       if (ret) {
-        LOG_ERROR(data->mid, "Could not send RPC %d", RPC_FLEXMPI_MALLEABILITY);
+        LOG_ERROR(data->mid, "RPC send failed %d", RPC_FLEXMPI_MALLEABILITY);
       } else if (rpcret) {
         LOG_ERROR(data->mid, "RPC %d returned with code %d", RPC_FLEXMPI_MALLEABILITY, rpcret);
       }
@@ -269,7 +271,7 @@ malleability_th(void *arg)
         /* XX generalize with a "writeclient" function? */
         ret = icdb_incrnprocs(icdb, clients[i].clid, dprocs);
         if (ret != ICDB_SUCCESS) {
-          LOG_ERROR(data->mid, "IC database error: %s", icdb_errstr(icdb));
+          LOG_ERROR(data->mid, "IC database failure: %s", icdb_errstr(icdb));
         }
       }
     }

@@ -72,6 +72,14 @@
     return ICDB_FAILURE;                                                \
   }
 
+#define ICDB_CLIENT_QUERY  " ALPHA DESC "       \
+  "GET client:*->clid "                         \
+  "GET client:*->type "                         \
+  "GET client:*->addr "                         \
+  "GET client:*->provid "                       \
+  "GET client:*->jobid "                        \
+  "GET client:*->nprocs"
+
 
 struct icdb_context {
   redisContext      *redisctx;
@@ -252,7 +260,7 @@ icdb_getclient(struct icdb_context *icdb, const char *clid, struct icdb_client *
 
 int
 icdb_getclients(struct icdb_context *icdb, const char *type, uint32_t jobid,
-                struct icdb_client *clients, size_t size, unsigned long long *count)
+                struct icdb_client *clients, size_t size, size_t *count)
 {
   CHECK_ICDB(icdb);
   CHECK_PARAM(icdb, clients);
@@ -260,25 +268,24 @@ icdb_getclients(struct icdb_context *icdb, const char *type, uint32_t jobid,
   redisReply *rep = NULL;
 
   *count = 0;
-
-  /* XX filter! use SINTER for multiple filters */
   if (type && jobid) {
+    /* XX use SINTER for multiple filters */
     ;
   } else if (type) {
-    ;
+    rep = redisCommand(icdb->redisctx,
+                       "SORT index:clients:type:%s"
+                       ICDB_CLIENT_QUERY, type);
   } else if (jobid) {
-    ;
+    rep = redisCommand(icdb->redisctx,
+                       "SORT index:clients:jobid:%"PRIu32
+                       ICDB_CLIENT_QUERY, jobid);
+
   } else {
     rep = redisCommand(icdb->redisctx,
-                       "SORT index:clients ALPHA DESC "
-                       "GET client:*->clid "
-                       "GET client:*->type "
-                       "GET client:*->addr "
-                       "GET client:*->provid "
-                       "GET client:*->jobid "
-                       "GET client:*->nprocs");
-    CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
+                       "SORT index:clients"
+                       ICDB_CLIENT_QUERY);
   }
+  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
 
   /* SORT returns fields one after the other, a client is
      ICDB_CLIENT_NFIELDS fields */
