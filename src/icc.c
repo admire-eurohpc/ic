@@ -2,8 +2,9 @@
 #include <dlfcn.h>              /* dlopen/dlsym */
 #include <errno.h>
 #include <netdb.h>              /* addrinfo */
-#include <stdlib.h>             /* malloc, getenv, strtoxx */
-#include <string.h>
+#include <stdlib.h>             /* malloc, getenv, setenv, strtoxx */
+#include <stdio.h>              /* getline */
+#include <string.h>             /* strerror, strchr */
 #include <margo.h>
 #include "uuid_admire.h"
 
@@ -12,6 +13,7 @@
 #include "flexmpi.h"
 
 
+#define ADMIRE_JOB_ENV  "admire_job.env"
 #define CHECK_ICC(icc)  if (!(icc)) { return ICC_FAILURE; }
 
 
@@ -191,52 +193,80 @@ icc_init(enum icc_log_level log_level, enum icc_client_type typeid, unsigned int
       goto error;
     }
 
+    /* get job information, either from the environment or from the
+       file ADMIRE_JOB_ENV. Environment variables take precedence over
+       values in the file */
+
+    FILE *f = NULL;
+    f = fopen(ADMIRE_JOB_ENV, "r");
+    if (!f) {
+      margo_info(icc->mid, "Ignoring environment file %s: %s", ADMIRE_JOB_ENV, strerror(errno));
+    }
+    else {
+      char *line = NULL;
+      char *val = NULL;
+      size_t len = 0;
+      ssize_t nread;
+
+      while ((nread = getline(&line, &len, f)) != -1) {
+        val = strchr(line, '=');
+        if (val == NULL) {
+          margo_error(icc->mid, "Invalid environment file %s", ADMIRE_JOB_ENV);
+          goto error;
+        }
+
+        /* line points to env key, val to env value */
+        *val = '\0';
+        val++;
+
+        rc = setenv(line, val, 0); /* do not overwrite environment */
+        if (rc) {
+          margo_error(icc->mid, "Could not set Admire environment variables: %s", strerror(errno));
+          goto error;
+        }
+      }
+      free(line);
+      fclose(f);
+    }
+
     char *jobid, *jobntasks, *jobnnodes;
+    jobid = getenv("ADMIRE_JOB_ID");
+    jobnnodes = getenv("ADMIRE_JOB_NNODES");
+    jobntasks = getenv("ADMIRE_JOB_NTASKS");
 
-    jobid = getenv("SLURM_JOB_ID");
     if (!jobid) {
-      jobid = getenv("SLURM_JOBID");
-      if (!jobid) {
-        margo_error(icc->mid, "Cannot get job ID");
-        return ICC_FAILURE;
-      }
+      margo_error(icc->mid, "Missing ADMIRE_JOB_ID");
+      rc = ICC_FAILURE;
+      goto error;
     }
-
-    jobnnodes = getenv("SLURM_JOB_NUM_NODES");
     if (!jobnnodes) {
-      jobnnodes = getenv("SLURM_NNODES");
-      if (!jobnnodes) {
-        margo_error(icc->mid, "Cannot get job nnodes");
-        return ICC_FAILURE;
-      }
-    }
-
-    /* ntasks env is not set by SLURM without the --ntasks option */
-    jobntasks = getenv("SLURM_NTASKS");
-    if (!jobntasks) {
-      jobntasks = getenv("SLURM_NPROCS");
-      if (!jobntasks) {
-        margo_error(icc->mid, "Cannot get job ntasks");
-        return ICC_FAILURE;
-      }
+      margo_error(icc->mid, "Missing ADMIRE_JOB_NNODES");
+      rc = ICC_FAILURE;
+      goto error;
     }
 
     rc = _strtouint32(jobid, &rpc_in.jobid);
     if (rc) {
       margo_error(icc->mid, "Error converting job ID \"%s\": %s", jobid, strerror(-rc));
-      return ICC_FAILURE;
+      rc = ICC_FAILURE;
+      goto error;
     }
 
     rc = _strtouint32(jobnnodes, &rpc_in.jobnnodes);
     if (rc) {
       margo_error(icc->mid, "Error converting job nnodes \"%s\": %s", jobnnodes, strerror(-rc));
-      return ICC_FAILURE;
+      rc = ICC_FAILURE;
+      goto error;
     }
 
-    rc = _strtouint32(jobntasks, &rpc_in.jobntasks);
-    if (rc) {
-      margo_error(icc->mid, "Error converting job ntasks \"%s\": %s", jobntasks, strerror(-rc));
-      return ICC_FAILURE;
+    /* note: ntasks env is not set by SLURM without the --ntasks option */
+    if (jobntasks) {
+      rc = _strtouint32(jobntasks, &rpc_in.jobntasks);
+      if (rc) {
+        margo_error(icc->mid, "Error converting job ntasks \"%s\": %s", jobntasks, strerror(-rc));
+        rc = ICC_FAILURE;
+        goto error;
+      }
     }
 
     rpc_in.nprocs = nprocs;
@@ -464,7 +494,7 @@ _strtouint32(const char *nptr, uint32_t *dest)
   if (errno != 0) {
     return -errno;
   }
-  else if (end == nptr || *end != '\0') {
+  else if (end == nptr || (*end != '\0' && *end != '\n')) {
     return -EINVAL;
   }
 

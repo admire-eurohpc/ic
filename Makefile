@@ -62,6 +62,7 @@ install: all
 	$(INSTALL) -m 755 $(client_bin) $(INSTALL_PATH_BIN)
 	$(INSTALL) -m 755 scripts/icc_server.sh $(INSTALL_PATH_BIN)/icc_server.sh
 	$(INSTALL) -m 755 scripts/icc_client.sh $(INSTALL_PATH_BIN)/icc_client.sh
+	$(INSTALL) -m 755 scripts/admire_prolog.sh $(INSTALL_PATH_BIN)/admire_prolog.sh
 	# $(INSTALL) -m 755 $(testapp_bin) $(INSTALL_PATH_BIN)
 
 uninstall:
@@ -72,6 +73,7 @@ uninstall:
 	$(RM) $(INSTALL_PATH_BIN)/$(client_bin)
 	$(RM) $(INSTALL_PATH_BIN)/icc_server.sh
 	$(RM) $(INSTALL_PATH_BIN)/icc_client.sh
+	$(RM) $(INSTALL_PATH_BIN)/admire_prolog.sh
 	# $(RM) $(INSTALL_PATH_BIN)/$(testapp_bin)
 
 
