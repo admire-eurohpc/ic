@@ -112,22 +112,18 @@ int icdb_getclient(struct icdb_context *icdb, const char *clid, struct icdb_clie
 
 
 /**
- * Get no more than COUNT IC clients into the array CLIENTS of size
- * SIZE. Filter by TYPE or JOBID. If TYPE is NULL or JOBID is 0, the
- * corresponding filter is not applied.
+ * Get no more than IC clients into the array of size COUNT. Filter by
+ * TYPE or JOBID. If TYPE is NULL or JOBID is 0, the corresponding
+ * filter is not applied. XX FIXME multiple filters not implemented
+ * yet.
  *
- * The number of clients found is returned in COUNT. ICDB_E2BIG is
+ * COUNT is updated with the number of clients found. ICDB_E2BIG is
  * returned if CLIENTS is too small to store them all. In this case,
  * the caller has to resize the array accordingly. Note that because
  * the filtering XX
- *
- * This is a cursor based iterator: call with CURSOR = 0 the first
- * time, then pass the cursor back to the next calls, until it comes
- * back 0, at which point all clients have been returned from
- * database.
  */
 int icdb_getclients(struct icdb_context *icdb, const char *type, uint32_t jobid,
-                    struct icdb_client clients[], size_t size, size_t *count);
+                    struct icdb_client clients[], size_t *count);
 
 
 /**

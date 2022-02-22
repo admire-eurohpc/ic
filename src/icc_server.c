@@ -185,7 +185,7 @@ malleability_th(void *arg)
       return;
     }
 
-    size_t size, nclients;
+    size_t nclients;
     struct icdb_context *icdb;
     struct icdb_job job;
 
@@ -197,10 +197,10 @@ malleability_th(void *arg)
       return;
     }
 
-    size = NCLIENTS;
+    nclients = NCLIENTS;
     /* XX fixme: multiplication could overflow, use reallocarray? */
     /* XX do not alloc/free on every call */
-    clients = malloc(sizeof(*clients) * size);
+    clients = malloc(sizeof(*clients) * nclients);
     if (!clients) {
       LOG_ERROR(data->mid, "Failed malloc");
       return;
@@ -208,18 +208,21 @@ malleability_th(void *arg)
 
     do {
       /* XX fixme filter on (flex)MPI clients?*/
-      ret = icdb_getclients(icdb, NULL, data->jobid, clients, size, &nclients);
+      ret = icdb_getclients(icdb, NULL, data->jobid, clients, &nclients);
 
       /* clients array is too small, expand */
-      if (ret == ICDB_E2BIG && size < NCLIENTS_MAX) {
-        size *= 2;
-        tmp = realloc(clients, sizeof(*clients) * size);
+      if (ret == ICDB_E2BIG && nclients <= NCLIENTS_MAX) {
+        tmp = realloc(clients, sizeof(*clients) * nclients);
         if (!tmp) {
           LOG_ERROR(data->mid, "Failed malloc");
           return;
         }
         clients = tmp;
         continue;
+      }
+      else if (nclients > NCLIENTS_MAX){
+        LOG_ERROR(data->mid, "Too many clients returned from DB");
+        return;
       }
       else if (ret != ICDB_SUCCESS) {
         LOG_ERROR(data->mid, "IC database failure: %s", icdb_errstr(icdb));

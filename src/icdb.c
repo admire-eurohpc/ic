@@ -260,16 +260,22 @@ icdb_getclient(struct icdb_context *icdb, const char *clid, struct icdb_client *
 
 int
 icdb_getclients(struct icdb_context *icdb, const char *type, uint32_t jobid,
-                struct icdb_client *clients, size_t size, size_t *count)
+                struct icdb_client *clients, size_t *count)
 {
+  /*
+   * XX For now we return every clients at once. The thinking is
+   * that this query is mainly used with a jobid filter, and there
+   * is not an unbounded number of clients per job. Maybe at some
+   * point a cursor might be more appropriate
+   */
   CHECK_ICDB(icdb);
   CHECK_PARAM(icdb, clients);
 
   redisReply *rep = NULL;
 
-  *count = 0;
+
   if (type && jobid) {
-    /* XX use SINTER for multiple filters */
+    /* XX FIXME use SINTER for multiple filters */
     ;
   } else if (type) {
     rep = redisCommand(icdb->redisctx,
@@ -289,15 +295,14 @@ icdb_getclients(struct icdb_context *icdb, const char *type, uint32_t jobid,
 
   /* SORT returns fields one after the other, a client is
      ICDB_CLIENT_NFIELDS fields */
-  /* XX use limit/offset at some point?*/
   assert(rep->elements % ICDB_CLIENT_NFIELDS == 0);
 
-  *count = rep->elements / ICDB_CLIENT_NFIELDS;
-
-  if (size < *count) {
+  if (*count < (rep->elements / ICDB_CLIENT_NFIELDS)) {
     ICDB_SET_STATUS(icdb, ICDB_E2BIG, "Too many clients to store");
     return ICDB_E2BIG;
   }
+
+  *count = rep->elements / ICDB_CLIENT_NFIELDS;
 
   size_t i, j;
   redisReply *r;
