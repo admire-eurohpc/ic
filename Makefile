@@ -28,7 +28,7 @@ libslurmjobmon_so := libslurmjobmon.so
 testapp_bin := testapp
 spawn_bin := spawn
 
-sources := icc_server.c rpc.c cb.c icdb.c icc.c adhoccli.c cbserver.c flexmpi.c
+sources := server.c rpc.c cb.c icdb.c icc.c adhoccli.c cbserver.c flexmpi.c
 sources += slurmjobmon.c slurmadhoccli.c client.c testapp.c spawn.c
 
 # keep libicc in front
