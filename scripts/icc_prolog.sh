@@ -26,12 +26,9 @@ else
     ADMIRE_JOB_NTASKS=-1
 fi
 
-# if run in a Slurm prolog, this will set the tasks env
-export ADMIRE_JOB_ID ADMIRE_JOB_NNODES ADMIRE_JOB_NTASKS
-
-# otherwise, env will get picked up from the file ADMIRE_JOB_ENV
 cat << EOF >| $ADMIRE_JOB_ENV
 ADMIRE_JOB_ID=$ADMIRE_JOB_ID
 ADMIRE_JOB_NNODES=$ADMIRE_JOB_NNODES
 ADMIRE_JOB_NTASKS=$ADMIRE_JOB_NTASKS
 EOF
+
