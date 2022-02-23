@@ -2,6 +2,7 @@
 #include <inttypes.h>           /* PRId32 */
 #include <stddef.h>             /* NULL */
 #include <stdint.h>             /* uint32_t, etc. */
+#include <stdlib.h>             /* strtoul */
 #include <string.h>             /* strerror */
 #include <slurm/spank.h>
 
@@ -81,7 +82,7 @@ slurm_spank_local_user_init(spank_t sp, int ac __attribute__((unused)),
   int rpc_retcode;
   int rc;
 
-  rc = icc_init(ICC_LOG_INFO, ICC_TYPE_ADHOCCLI, &icc);
+  rc = icc_init(ICC_LOG_INFO, ICC_TYPE_ADHOCCLI, 0, &icc);
   if (rc != ICC_SUCCESS) {
     slurm_error("ADMIRE: Could not initialize connection to IC");
     return -1;
