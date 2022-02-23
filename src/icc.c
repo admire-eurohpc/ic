@@ -33,6 +33,8 @@
  * icc: compute ntasks from SLURM_TASKS_PER_NODE?
  * handle crashing application (via Slurm?)
  * icdb: handle clients as a struct, commit func?
+ * icdb/deljob: Check with Slurm before deleting a job, risk of race cond.
+ * icdb: error string in context, yay or nay?
  * malleability: return from ULT, get retcode + finalize icc_server?
  * malleability: filter on FlexMPI/iMPI, separate
  * malleability: duplication in arg struct
@@ -152,6 +154,10 @@ icc_init(enum icc_log_level log_level, enum icc_client_type typeid, unsigned int
   if (icc->bidirectional) {
     icc->rpcids[RPC_CLIENT_REGISTER] = MARGO_REGISTER(icc->mid, RPC_CLIENT_REGISTER_NAME, client_register_in_t, rpc_out_t, NULL);
     icc->rpcids[RPC_CLIENT_DEREGISTER] = MARGO_REGISTER(icc->mid, RPC_CLIENT_DEREGISTER_NAME, client_deregister_in_t, rpc_out_t, NULL);
+  }
+
+  if (typeid == ICC_TYPE_JOBCLEANER) {
+    icc->rpcids[RPC_JOBCLEAN] = MARGO_REGISTER(icc->mid, RPC_JOBCLEAN_NAME, jobclean_in_t, rpc_out_t, NULL);
   }
 
   if (typeid == ICC_TYPE_FLEXMPI) {
@@ -364,6 +370,20 @@ icc_rpc_test(struct icc_context *icc, uint8_t number, enum icc_client_type type,
   return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
 
+int
+icc_rpc_jobclean(struct icc_context *icc, uint32_t jobid, int *retcode)
+{
+  int rc;
+  jobclean_in_t in;
+
+  CHECK_ICC(icc);
+
+  in.jobid = jobid;
+
+  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_JOBCLEAN], &in, retcode);
+
+  return rc ? ICC_FAILURE : ICC_SUCCESS;
+}
 
 int
 icc_rpc_adhoc_nodes(struct icc_context *icc, uint32_t jobid, uint32_t nnodes, uint32_t adhoc_nnodes, int *retcode)

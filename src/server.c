@@ -103,6 +103,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   rpc_ids[RPC_CLIENT_REGISTER] = MARGO_REGISTER(mid, RPC_CLIENT_REGISTER_NAME, client_register_in_t, rpc_out_t, client_register_cb);
   rpc_ids[RPC_CLIENT_DEREGISTER] = MARGO_REGISTER(mid, RPC_CLIENT_DEREGISTER_NAME, client_deregister_in_t, rpc_out_t, client_deregister_cb);
   rpc_ids[RPC_TEST] = MARGO_REGISTER(mid, RPC_TEST_NAME, test_in_t, rpc_out_t, test_cb);
+  rpc_ids[RPC_JOBCLEAN] = MARGO_REGISTER(mid, RPC_JOBCLEAN_NAME, jobclean_in_t, rpc_out_t, jobclean_cb);
   rpc_ids[RPC_JOBMON_SUBMIT] = MARGO_REGISTER(mid, RPC_JOBMON_SUBMIT_NAME, jobmon_submit_in_t, rpc_out_t, jobmon_submit_cb);
   rpc_ids[RPC_JOBMON_EXIT] = MARGO_REGISTER(mid, RPC_JOBMON_EXIT_NAME, jobmon_exit_in_t, rpc_out_t, jobmon_exit_cb);
   rpc_ids[RPC_ADHOC_NODES] = MARGO_REGISTER(mid, RPC_ADHOC_NODES_NAME, adhoc_nodes_in_t, rpc_out_t, adhoc_nodes_cb);
@@ -136,6 +137,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   struct cb_data d = { .icdbs = icdbs, .rpcids = rpc_ids, .malldat = &malldat };
   margo_register_data(mid, rpc_ids[RPC_CLIENT_REGISTER], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_CLIENT_DEREGISTER], &d, NULL);
+  margo_register_data(mid, rpc_ids[RPC_JOBCLEAN], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_JOBMON_SUBMIT], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_MALLEABILITY_AVAIL], &d, NULL);
 
@@ -234,7 +236,7 @@ malleability_th(void *arg)
 
 
     margo_info(data->mid, "Malleability: Job %"PRIu32": got %zu client%s",
-	       data->jobid, nclients, nclients > 1 ? "s" : "");
+               data->jobid, nclients, nclients > 1 ? "s" : "");
 
     for (size_t i = 0; i < nclients; i++) {
       char command[FLEXMPI_COMMAND_LEN];

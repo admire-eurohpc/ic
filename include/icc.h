@@ -32,8 +32,9 @@ enum icc_client_type {
   ICC_TYPE_UNDEFINED,
   ICC_TYPE_MPI,
   ICC_TYPE_FLEXMPI,
-  ICC_TYPE_ADHOCCLI,
+  ICC_TYPE_JOBCLEANER,
   ICC_TYPE_JOBMON,
+  ICC_TYPE_ADHOCCLI,
   ICC_TYPE_COUNT,
 };
 
@@ -77,6 +78,18 @@ int icc_sleep(struct icc_context *icc, double timeout_ms);
  * Return ICC_SUCCESS or an error code.
  */
 int icc_rpc_test(struct icc_context *icc, uint8_t number, enum icc_client_type type, int *retcode);
+
+
+/**
+ * RPC JOBCLEAN: Instruct the IC to clean the data structures
+ * associated with JOBID.
+ *
+ * RETCODE is filled with the RPC return status code on completion.
+ *
+ * Return ICC_SUCCESS or an error code.
+ */
+
+int icc_rpc_jobclean(struct icc_context *icc, uint32_t jobid, int *retcode);
 
 
 /**

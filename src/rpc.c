@@ -75,13 +75,13 @@ rpc_send(margo_instance_id mid, hg_addr_t addr, hg_id_t rpcid,
 
   hret = margo_create(mid, addr, rpcid, &handle);
   if (hret != HG_SUCCESS) {
-    margo_error(mid, "Could not create Margo RPC: %s", HG_Error_to_string(hret));
+    margo_error(mid, "Margo RPC creation failure: %s", HG_Error_to_string(hret));
     return -1;
   }
 
   hret = margo_forward_timed(handle, in, RPC_TIMEOUT_MS);
   if (hret != HG_SUCCESS) {
-    margo_error(mid, "Could not forward Margo RPC: %s", HG_Error_to_string(hret));
+    margo_error(mid, "Margo RPC forwarding failure: %s", HG_Error_to_string(hret));
 
     if (hret != HG_NOENTRY) {
       hret = margo_destroy(handle);

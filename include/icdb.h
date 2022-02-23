@@ -151,8 +151,16 @@ int icdb_incrnprocs(struct icdb_context *icdb, char *clid, int64_t incrby);
  *
  * Returns ICDB_SUCCESS or an error code.
  */
-
 int icdb_getjob(struct icdb_context *icdb, uint32_t jobid, struct icdb_job *job);
 
+
+/**
+ * Delete JOBID and all clients associated with it.
+ *
+ * XX No check performed, a running job could be deleted. Ask Slurm?
+ *
+ * Returns ICDB_SUCCESS or an error code.
+ */
+int icdb_deljob(struct icdb_context *icdb, uint32_t jobid);
 
 #endif

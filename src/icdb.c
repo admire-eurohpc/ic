@@ -402,7 +402,7 @@ icdb_delclient(struct icdb_context *icdb, const char *clid, uint32_t *jobid)
     return ICDB_NORESULT;
   }
 
-  /* HMGET values in order */
+  /* HMGET gets values in order */
   CHECK_REP_TYPE(icdb, rep->element[0], REDIS_REPLY_STRING);
   CHECK_REP_TYPE(icdb, rep->element[1], REDIS_REPLY_STRING);
 
@@ -412,16 +412,53 @@ icdb_delclient(struct icdb_context *icdb, const char *clid, uint32_t *jobid)
   /* Remove client and client index  */
   /* XX fixme: wrap in transaction */
   /* DEL & SREM return the number of keys that were deleted */
-  rep = redisCommand(icdb->redisctx, "SREM index:clients:type:%s %s", type, clid);
-  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
 
-  rep = redisCommand(icdb->redisctx, "SREM index:clients:jobid:%"PRIu32" %s", *jobid, clid);
-  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
+  /* begin transaction */
+  rep = redisCommand(icdb->redisctx, "MULTI");
+  assert(rep->type == REDIS_REPLY_STATUS);
 
-  rep = redisCommand(icdb->redisctx, "SREM index:clients %s", clid);
-  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
+  redisCommand(icdb->redisctx, "SREM index:clients:jobid:%"PRIu32" %s", *jobid, clid);
+  redisCommand(icdb->redisctx, "SREM index:clients:type:%s %s", type, clid);
+  redisCommand(icdb->redisctx, "SREM index:clients %s", clid);
+  redisCommand(icdb->redisctx, "DEL client:%s", clid);
 
-  rep = redisCommand(icdb->redisctx, "DEL client:%s", clid);
+  /* end transaction & check responses */
+  rep = redisCommand(icdb->redisctx, "EXEC");
+  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
+  CHECK_REP_TYPE(icdb, rep->element[0], REDIS_REPLY_INTEGER); /* SREM */
+  CHECK_REP_TYPE(icdb, rep->element[0], REDIS_REPLY_INTEGER); /* SREM */
+  CHECK_REP_TYPE(icdb, rep->element[1], REDIS_REPLY_INTEGER); /* SREM */
+  CHECK_REP_TYPE(icdb, rep->element[0], REDIS_REPLY_INTEGER); /* DEL  */
+
+  return icdb->status;
+}
+
+
+int
+icdb_deljob(struct icdb_context *icdb, uint32_t jobid)
+{
+  CHECK_ICDB(icdb);
+
+  icdb->status = ICDB_SUCCESS;
+
+  redisReply *rep;
+  int ret;
+
+  /* 1. delete clients associated with jobid */
+  rep = redisCommand(icdb->redisctx, "SMEMBERS index:clients:jobid:%"PRIu32, jobid);
+  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
+
+  for (size_t i = 0; i < rep->elements; i++) {
+    uint32_t _jobid;
+    ret = icdb_delclient(icdb, rep->element[i]->str, &_jobid);
+    if (ret != ICDB_SUCCESS) {
+      return ret;
+    }
+    assert(_jobid == jobid);
+  }
+
+  /* 2. delete jobid */
+  rep = redisCommand(icdb->redisctx, "DEL job:%"PRIu32, jobid);
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
 
   return icdb->status;

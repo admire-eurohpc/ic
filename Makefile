@@ -22,17 +22,19 @@ libicc_soname :=  $(libicc_so).$(ICC_MAJOR)
 libicc_realname := $(libicc_soname).$(ICC_MINOR)
 
 icc_server_bin := icc_server
-client_bin := client
+icc_client_bin := icc_client
+icc_jobcleaner_bin := icc_jobcleaner
+
 libslurmadhoccli_so := libslurmadhoccli.so
 libslurmjobmon_so := libslurmjobmon.so
 testapp_bin := testapp
 spawn_bin := spawn
 
 sources := server.c rpc.c cb.c icdb.c icc.c adhoccli.c cbserver.c flexmpi.c
-sources += slurmjobmon.c slurmadhoccli.c client.c testapp.c spawn.c
+sources += slurmjobmon.c slurmadhoccli.c client.c testapp.c spawn.c jobcleaner.c
 
 # keep libicc in front
-binaries := $(libicc_so) $(icc_server_bin) $(client_bin) $(libslurmjobmon_so) $(libslurmjobmon_so)
+binaries := $(libicc_so) server client jobcleaner $(libslurmjobmon_so) $(libslurmadhoccli_so)
 
 objects := $(sources:.c=.o)
 depends := $(sources:.c=.d)
@@ -58,8 +60,9 @@ install: all
 	ln -rsf $(INSTALL_PATH_LIB)/$(libicc_realname) $(INSTALL_PATH_LIB)/$(libicc_soname)
 	ln -rsf $(INSTALL_PATH_LIB)/$(libicc_realname) $(INSTALL_PATH_LIB)/$(libicc_so)
 	$(INSTALL) -m 644 $(includedir)/$(icc_header) $(INSTALL_PATH_INCLUDE)
-	$(INSTALL) -m 755 $(icc_server_bin) $(INSTALL_PATH_BIN)
-	$(INSTALL) -m 755 $(client_bin) $(INSTALL_PATH_BIN)
+	$(INSTALL) -m 755 server $(INSTALL_PATH_BIN)/$(icc_server_bin)
+	$(INSTALL) -m 755 client $(INSTALL_PATH_BIN)/$(icc_client_bin)
+	$(INSTALL) -m 755 jobcleaner $(INSTALL_PATH_BIN)/$(icc_jobcleaner_bin)
 	$(INSTALL) -m 755 scripts/icc_server.sh $(INSTALL_PATH_BIN)/icc_server.sh
 	$(INSTALL) -m 755 scripts/icc_client.sh $(INSTALL_PATH_BIN)/icc_client.sh
 	$(INSTALL) -m 755 scripts/admire_prolog.sh $(INSTALL_PATH_BIN)/admire_prolog.sh
@@ -70,7 +73,8 @@ uninstall:
 	$(RM) $(INSTALL_PATH_LIB)/$(libicc_soname) $(INSTALL_PATH_LIB)/$(libicc_so)
 	$(RM) $(INSTALL_PATH_LIB)/$(libicc_realname)
 	$(RM) $(INSTALL_PATH_BIN)/$(icc_server_bin)
-	$(RM) $(INSTALL_PATH_BIN)/$(client_bin)
+	$(RM) $(INSTALL_PATH_BIN)/$(icc_client_bin)
+	$(RM) $(INSTALL_PATH_BIN)/$(icc_jobcleaner_bin)
 	$(RM) $(INSTALL_PATH_BIN)/icc_server.sh
 	$(RM) $(INSTALL_PATH_BIN)/icc_client.sh
 	$(RM) $(INSTALL_PATH_BIN)/admire_prolog.sh
@@ -83,15 +87,17 @@ $(objects): %.o: %.c
 
 icdb.o: CFLAGS += `$(PKG_CONFIG) --cflags hiredis uuid`
 
-$(icc_server_bin): rpc.o icdb.o cb.o cbserver.o
-$(icc_server_bin): CFLAGS += `$(PKG_CONFIG) --cflags margo uuid`
-$(icc_server_bin): LDLIBS += `$(PKG_CONFIG) --libs margo hiredis` -pthread -Wl,--no-undefined
+server: rpc.o icdb.o cb.o cbserver.o
+server: CFLAGS += `$(PKG_CONFIG) --cflags margo uuid`
+server: LDLIBS += `$(PKG_CONFIG) --libs margo hiredis` -pthread -Wl,--no-undefined
 
 $(libicc_so): rpc.o cb.o flexmpi.o
 $(libicc_so): CFLAGS += `$(PKG_CONFIG) --cflags margo uuid`
 $(libicc_so): LDLIBS += `$(PKG_CONFIG) --libs margo uuid` -ldl -Wl,--no-undefined,-h$(libicc_soname)
 
-$(client_bin): LDLIBS += -L. `$(PKG_CONFIG) --libs margo` -licc -Wl,--no-undefined
+client: LDLIBS += -L. `$(PKG_CONFIG) --libs margo` -licc -Wl,--no-undefined
+
+jobcleaner: LDLIBS += -L. `$(PKG_CONFIG) --libs margo` -licc -Wl,--no-undefined
 
 $(libslurmjobmon_so) $(libslurmadhoccli_so): LDLIBS += -L. -licc -lslurm
 

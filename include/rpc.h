@@ -89,12 +89,12 @@ typedef void (*icc_callback_t)(hg_handle_t h, margo_instance_id mid);
  * RPC codes. Codes 1 to 127 are reserved for
  * internal use.
  *
- * ICC_RPC_CLIENT_REGISTER: Register an IC client as a Margo
+ * RPC_CLIENT_REGISTER: Register an IC client as a Margo
  * "target". Once registered, and IC client can both send and receive
  * RPC server. The client needs to be started in MARGO_SERVER_MODE to
  * have an address.
  *
- * ICC_RPC_CLIENT_DEREGISTER: Deregister an IC client.
+ * RPC_CLIENT_DEREGISTER: Deregister an IC client.
  *
  * For the public RPCs, see the functions documentation in icc.h.
  */
@@ -107,6 +107,7 @@ enum icc_rpc_code {
 
   /* public RPCs */
   RPC_TEST = 128,
+  RPC_JOBCLEAN,
   RPC_ADHOC_NODES,
   RPC_JOBMON_SUBMIT,
   RPC_JOBMON_EXIT,
@@ -150,6 +151,11 @@ MERCURY_GEN_PROC(test_in_t,
                  ((hg_const_string_t)(type))
                  ((hg_uint32_t)(jobid))
                  ((uint8_t)(number)))
+
+
+#define RPC_JOBCLEAN_NAME  "icc_jobclean"
+
+MERCURY_GEN_PROC(jobclean_in_t, ((hg_uint32_t)(jobid)))
 
 
 #define RPC_JOBMON_SUBMIT_NAME  "icc_jobmon_submit"

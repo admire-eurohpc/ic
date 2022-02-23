@@ -22,14 +22,19 @@
     LOG_ERROR(mid, "Could not destroy Margo RPC handle: %s", HG_Error_to_string(hret)); \
   }
 
+#define ABT_GET_XRANK(ret,xrank) ret = ABT_self_get_xstream_rank(&xrank); \
+  if (ret != ABT_SUCCESS) {                                             \
+    LOG_ERROR(mid, "Failed getting rank of ABT xstream ");              \
+  }
+
+
 
 void
 client_register_cb(hg_handle_t h)
 {
   hg_return_t hret;
   margo_instance_id mid;
-  int ret;
-  int xrank;
+  int ret, xrank;
   client_register_in_t in;
   rpc_out_t out;
 
@@ -44,10 +49,9 @@ client_register_cb(hg_handle_t h)
     goto respond;
   }
 
-  ret = ABT_self_get_xstream_rank(&xrank);
+  ABT_GET_XRANK(ret, xrank);
   if (ret != ABT_SUCCESS) {
     out.rc = ICC_FAILURE;
-    LOG_ERROR(mid, "Could not get Argobots ES rank");
     goto respond;
   }
 
@@ -96,8 +100,7 @@ client_deregister_cb(hg_handle_t h)
 {
   hg_return_t hret;
   margo_instance_id mid;
-  int ret;
-  int xrank;
+  int ret, xrank;
   client_deregister_in_t in;
   rpc_out_t out;
 
@@ -112,10 +115,9 @@ client_deregister_cb(hg_handle_t h)
     goto respond;
   }
 
-  ret = ABT_self_get_xstream_rank(&xrank);
+  ABT_GET_XRANK(ret, xrank);
   if (ret != ABT_SUCCESS) {
     out.rc = ICC_FAILURE;
-    margo_error(mid, "%s: Could not get Argobots ES rank", __func__);
     goto respond;
   }
 
@@ -155,12 +157,64 @@ DEFINE_MARGO_RPC_HANDLER(client_deregister_cb);
 
 
 void
+jobclean_cb(hg_handle_t h)
+{
+  hg_return_t hret;
+  margo_instance_id mid;
+  jobclean_in_t in;
+  rpc_out_t out;
+  int ret, xrank;
+
+  mid = margo_hg_handle_get_instance(h);
+  assert(mid);
+
+  out.rc = ICC_SUCCESS;
+
+  /* XX macro? */
+  const struct hg_info *info = margo_get_info(h);
+  struct cb_data *data = (struct cb_data *)margo_registered_data(mid, info->id);
+
+  if (!data) {
+    out.rc = ICC_FAILURE;
+    LOG_ERROR(mid, "No registered data");
+    goto respond;
+  }
+  assert(data->icdbs != NULL);
+
+  ABT_GET_XRANK(ret, xrank);
+  if (ret != ABT_SUCCESS) {
+    out.rc = ICC_FAILURE;
+    goto respond;
+  }
+
+  MARGO_GET_INPUT(h,in,hret);
+  if (hret == HG_SUCCESS) {
+    margo_info(mid, "Will cleanup job %"PRIu32"\n", in.jobid);
+  } else {
+    out.rc = ICC_FAILURE;
+    goto respond;
+  }
+
+  /* clean job from db */
+  ret = icdb_deljob(data->icdbs[xrank], in.jobid);
+  if (ret != ICDB_SUCCESS) {
+    LOG_ERROR(mid, "Cleanup failure job %"PRIu32": %s", in.jobid, icdb_errstr(data->icdbs[xrank]));
+    out.rc = ICC_FAILURE;
+  }
+
+ respond:
+  MARGO_RESPOND(h, out, hret)
+  MARGO_DESTROY_HANDLE(h, hret);
+}
+DEFINE_MARGO_RPC_HANDLER(jobclean_cb);
+
+
+void
 jobmon_submit_cb(hg_handle_t h)
 {
   hg_return_t hret;
   margo_instance_id mid;
-  int ret;
-  int xrank;
+  int ret, xrank;
   jobmon_submit_in_t in;
   rpc_out_t out;
 
@@ -175,10 +229,9 @@ jobmon_submit_cb(hg_handle_t h)
     goto respond;
   }
 
-  ret = ABT_self_get_xstream_rank(&xrank);
+  ABT_GET_XRANK(ret, xrank);
   if (ret != ABT_SUCCESS) {
     out.rc = ICC_FAILURE;
-    margo_error(mid, "%s: Could not get Argobots ES rank", __func__);
     goto respond;
   }
 
@@ -262,8 +315,7 @@ malleability_avail_cb(hg_handle_t h)
   margo_instance_id mid;
   malleability_avail_in_t in;
   rpc_out_t out;
-  int ret;
-  int xrank;
+  int ret, xrank;
 
   mid = margo_hg_handle_get_instance(h);
   assert(mid);
@@ -276,10 +328,9 @@ malleability_avail_cb(hg_handle_t h)
     goto respond;
   }
 
-  ret = ABT_self_get_xstream_rank(&xrank);
+  ABT_GET_XRANK(ret, xrank);
   if (ret != ABT_SUCCESS) {
     out.rc = ICC_FAILURE;
-    margo_error(mid, "%s: Could not get Argobots ES rank", __func__);
     goto respond;
   }
 
