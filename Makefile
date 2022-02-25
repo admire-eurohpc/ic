@@ -30,7 +30,7 @@ libslurmjobmon_so := libslurmjobmon.so
 testapp_bin := testapp
 spawn_bin := spawn
 
-sources := server.c rpc.c cb.c icdb.c icc.c adhoccli.c cbserver.c flexmpi.c
+sources := server.c rpc.c cb.c icdb.c icrm.c icc.c adhoccli.c cbserver.c flexmpi.c
 sources += slurmjobmon.c slurmadhoccli.c client.c testapp.c spawn.c jobcleaner.c
 
 # keep libicc in front
@@ -87,9 +87,9 @@ $(objects): %.o: %.c
 
 icdb.o: CFLAGS += `$(PKG_CONFIG) --cflags hiredis uuid`
 
-server: rpc.o icdb.o cb.o cbserver.o
+server: icdb.o icrm.o rpc.o cb.o cbserver.o
 server: CFLAGS += `$(PKG_CONFIG) --cflags margo uuid`
-server: LDLIBS += `$(PKG_CONFIG) --libs margo hiredis` -pthread -Wl,--no-undefined
+server: LDLIBS += `$(PKG_CONFIG) --libs margo hiredis` -lslurm -Wl,--no-undefined
 
 $(libicc_so): rpc.o cb.o flexmpi.o
 $(libicc_so): CFLAGS += `$(PKG_CONFIG) --cflags margo uuid`

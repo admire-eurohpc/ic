@@ -5,6 +5,7 @@
 #include "cbserver.h"
 #include "rpc.h"
 #include "icdb.h"
+#include "icrm.h"                 /* ressource manager */
 
 
 #define MARGO_GET_INPUT(h,in,hret)  hret = margo_get_input(h, &in);     \
@@ -188,17 +189,41 @@ jobclean_cb(hg_handle_t h)
   }
 
   MARGO_GET_INPUT(h,in,hret);
-  if (hret == HG_SUCCESS) {
-    margo_info(mid, "Will cleanup job %"PRIu32"\n", in.jobid);
-  } else {
+  if (hret != HG_SUCCESS) {
     out.rc = ICC_FAILURE;
     goto respond;
   }
 
-  /* clean job from db */
-  ret = icdb_deljob(data->icdbs[xrank], in.jobid);
-  if (ret != ICDB_SUCCESS) {
-    LOG_ERROR(mid, "Cleanup failure job %"PRIu32": %s", in.jobid, icdb_errstr(data->icdbs[xrank]));
+  /* clean job from db, ask Slurm first */
+  struct icrm_context *icrm;
+  enum icrm_jobstate state;
+
+  ret = icrm_init(&icrm);
+  if (ret != ICRM_SUCCESS) {
+    LOG_ERROR(mid, "Ressource manager init failure");
+    out.rc = ICC_FAILURE;
+    goto respond;
+  }
+
+  ret = icrm_jobstate(icrm, in.jobid, &state);
+  if (ret != ICRM_SUCCESS) {
+    LOG_ERROR(mid, "Ressource manager failure: %s", icrm_errstr(icrm));
+    out.rc = ICC_FAILURE;
+    goto respond;
+  }
+
+  icrm_fini(&icrm);
+
+  if (state != ICRM_JOB_PENDING && state != ICRM_JOB_RUNNING) {
+    margo_info(mid, "Job cleaner: Will cleanup job %"PRIu32"\n", in.jobid);
+
+    ret = icdb_deljob(data->icdbs[xrank], in.jobid);
+    if (ret != ICDB_SUCCESS) {
+      LOG_ERROR(mid, "Cleanup failure job %"PRIu32": %s", in.jobid, icdb_errstr(data->icdbs[xrank]));
+      out.rc = ICC_FAILURE;
+    }
+  } else {
+    margo_info(mid, "Job cleaner: ignoring running job %"PRIu32, in.jobid);
     out.rc = ICC_FAILURE;
   }
 

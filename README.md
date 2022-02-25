@@ -12,9 +12,10 @@ work:
 - margo     0.9.5
 - redis     6.2
 - hiredis   1.0.2
+- slurm     20.11.4
 
-In the following, it is supposed that the librarie need to be
-installed in `/usr/local`, adapt if necessary.
+In the following, it is supposed that the libraries need to be
+installed in `/usr/local`.
 
 ### Libfabric
 Get the release from:

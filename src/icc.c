@@ -29,12 +29,15 @@
  * unecessary include directory?
  * ICC_TYPE_LEN check
  * RPC_CODE to string for logs (rpc.c)
+ * server: unified ic context grouping db + rpcs + rm?
+ * server: log jobid.jobstepid in callbacks
  * icc: send timestamp in register RPC
  * icc: compute ntasks from SLURM_TASKS_PER_NODE?
  * handle crashing application (via Slurm?)
  * icdb: handle clients as a struct, commit func?
- * icdb/deljob: Check with Slurm before deleting a job, risk of race cond.
  * icdb: error string in context, yay or nay?
+ * icdb: status in context redundant?
+ * icdb: return icdberr_t from funcs + ERRSTR_LEN + context type _t
  * malleability: return from ULT, get retcode + finalize icc_server?
  * malleability: filter on FlexMPI/iMPI, separate
  * malleability: duplication in arg struct
