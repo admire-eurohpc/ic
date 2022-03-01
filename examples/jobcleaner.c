@@ -67,7 +67,7 @@ main(int argc, char **argv)
   }
 
   struct icc_context *icc;
-  icc_init(ICC_LOG_INFO, ICC_TYPE_JOBCLEANER, 0, &icc);
+  icc_init(ICC_LOG_INFO, ICC_TYPE_JOBCLEANER, &icc);
   assert(icc != NULL);
 
   ret = icc_rpc_jobclean(icc, jobid, &rpcret);

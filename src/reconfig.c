@@ -8,13 +8,69 @@
 #include <margo.h>
 
 #include "rpc.h"
-#include "flexmpi.h"
+#include "reconfig.h"
 
 
+/* XX TMP: FlexMPI specific */
 #define LIBEMPI_SO "libempi.so"                   /* FlexMPI library */
 #define FLEXMPI_RECONFIGURE "flexmpi_reconfigure" /* FlexMPI reconfigure func */
+#define FLEXMPI_COMMAND_LEN 256
+
+static int flexmpi_reconfigure(margo_instance_id mid, uint32_t maxprocs, const char *hostlist, flexmpi_reconfigure_t flexmpifunc, int flexmpisock);
 
 static ABT_mutex_memory mutexmem = ABT_MUTEX_INITIALIZER;
+
+
+void
+reconfigure_cb(hg_handle_t h)
+{
+  hg_return_t hret;
+  margo_instance_id mid;
+  reconfigure_in_t in;
+  rpc_out_t out;
+  int rc;
+
+  mid = margo_hg_handle_get_instance(h);
+  assert(mid);
+
+  out.rc = RPC_OK;
+
+  hret = margo_get_input(h, &in);
+  if (hret != HG_SUCCESS) {
+    out.rc = RPC_ERR;
+    margo_error(mid, "Input failure RPC_RECONFIGURE: %s", HG_Error_to_string(hret));
+    goto respond;
+  }
+
+  const struct hg_info *info = margo_get_info(h);
+  struct reconfig_data *d = (struct reconfig_data *)margo_registered_data(mid, info->id);
+
+  if (!d) {
+    margo_error(mid, "RPC_RECONFIG: No reconfiguration data");
+    out.rc = RPC_ERR;
+    goto respond;
+  }
+
+  /* call registered function */
+  if (d->func) {
+    rc = d->func(in.maxprocs, in.hostlist, d->data);
+  } else if (d->type == ICC_TYPE_FLEXMPI ) {
+    margo_error(mid, "IN RECONFIGURE_CB");
+    rc = flexmpi_reconfigure(mid, in.maxprocs, in.hostlist, d->flexmpifunc, d->flexmpisock);
+    margo_error(mid, "OUT RECONFIGURE_CB");
+  } else {
+    rc = RPC_ERR;
+  }
+  out.rc = rc ? RPC_ERR : RPC_OK;
+
+ respond:
+  hret = margo_respond(h, &out);
+  if (hret != HG_SUCCESS) {
+    margo_error(mid, "Response failure RPC_RECONFIGURE: %s", HG_Error_to_string(hret));
+  }
+}
+DEFINE_MARGO_RPC_HANDLER(reconfigure_cb);
+
 
 int
 flexmpi_socket(margo_instance_id mid, const char *node, const char *service)
@@ -77,49 +133,33 @@ flexmpi_func(margo_instance_id mid, void **handle)
 }
 
 
-void
-flexmpi_malleability_cb(hg_handle_t h)
+static int
+flexmpi_reconfigure(margo_instance_id mid, uint32_t maxprocs,
+                    const char *hostlist __attribute__((unused)),
+                    flexmpi_reconfigure_t flexmpifunc, int flexmpisock)
 {
-  hg_return_t hret;
-  margo_instance_id mid;
-  flexmpi_malleability_in_t in;
-  rpc_out_t out;
   ABT_mutex mutex;
-  int rc, nbytes;
+  int nbytes;
+  char cmd[FLEXMPI_COMMAND_LEN];
 
-  mid = margo_hg_handle_get_instance(h);
-  assert(mid);
+  margo_error(mid, "%s: IN FLEXMPI RECONFIGURE FUNCTION", __func__);
 
-  out.rc = RPC_OK;
+  nbytes = snprintf(cmd, FLEXMPI_COMMAND_LEN, "6:lhost:%u", maxprocs);
 
-  hret = margo_get_input(h, &in);
-  if (hret != HG_SUCCESS) {
-    out.rc = RPC_ERR;
-    margo_error(mid, "%s: Error getting FLEXMPI_MALLEABILITY RPC input: %s", __func__, HG_Error_to_string(hret));
-    goto respond;
+  if (nbytes < 0 || nbytes >= FLEXMPI_COMMAND_LEN) {
+    margo_error(mid, "Error generating FlexMPI command ");
+    return -1;
   }
-
-  if (strnlen(in.command, FLEXMPI_COMMAND_LEN) == FLEXMPI_COMMAND_LEN) {
-    out.rc = RPC_E2BIG;
-    goto respond;
-  }
-
-  /* get function pointer and socket data */
-  const struct hg_info *info = margo_get_info(h);
-  struct flexmpi_cbdata *data = (struct flexmpi_cbdata *)margo_registered_data(mid, info->id);
 
   /* try pointer to FlexMPI reconfiguration function */
-  if (data->func) {
-    rc = data->func(in.command);
-    out.rc = rc ? RPC_ERR : RPC_OK;
-    goto respond;
+  if (flexmpifunc) {
+    return flexmpifunc(cmd);
   }
 
   /* no FlexMPI function pointer, fallback to socket control */
-  if (data->sock == -1) {
+  if (flexmpisock == -1) {
     margo_error(mid, "%s: FlexMPI socket uninitialized", __func__);
-    out.rc = RPC_ERR;
-    goto respond;
+    return -1;
   }
 
   mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&mutexmem);
@@ -128,21 +168,15 @@ flexmpi_malleability_cb(hg_handle_t h)
   /* try to send the FlexMPI command
      if the send blocks, ignore and wait for the next command.
      /!\ Specifically avoid blocking because we are holding a mutex */
-  nbytes = send(data->sock, in.command, strlen(in.command), MSG_DONTWAIT);
+  nbytes = send(flexmpisock, cmd, strlen(cmd), MSG_DONTWAIT);
 
   ABT_mutex_unlock(mutex);
 
   if (nbytes == -1) {
     if (errno != EWOULDBLOCK && errno != EAGAIN) {
       margo_error(mid, "%s: Could not write to FlexMPI socket (%s)", __func__, strerror(errno));
-      out.rc = RPC_ERR;
+      return -1;
     }
   }
-
- respond:
-  hret = margo_respond(h, &out);
-  if (hret != HG_SUCCESS) {
-    margo_error(mid, "%s: Could not respond to RPC", __func__);
-  }
+  return -1;
 }
-DEFINE_MARGO_RPC_HANDLER(flexmpi_malleability_cb);

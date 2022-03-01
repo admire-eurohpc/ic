@@ -72,20 +72,6 @@ icc_to_margo_log_level(enum icc_log_level icc_log_level)
 
 
 /**
- * Shorthand to set the id and callbacks arrays before registering the
- * RPC.
- */
-#define REGISTER_PREP(ids,callbacks,idx,cb) ids[idx] = 1; callbacks[idx]=cb;
-
-/**
- * Internal callback type. This is the expected signature of the
- * functions used in the custom registration process in the icc_rpc
- * module.
- */
-typedef void (*icc_callback_t)(hg_handle_t h, margo_instance_id mid);
-
-
-/**
  * RPC codes. Codes 1 to 127 are reserved for
  * internal use.
  *
@@ -111,9 +97,9 @@ enum icc_rpc_code {
   RPC_ADHOC_NODES,
   RPC_JOBMON_SUBMIT,
   RPC_JOBMON_EXIT,
+  RPC_RECONFIGURE,
   RPC_MALLEABILITY_AVAIL,
   RPC_MALLEABILITY_REGION,
-  RPC_FLEXMPI_MALLEABILITY,
 
   RPC_COUNT
 };
@@ -199,11 +185,12 @@ MERCURY_GEN_PROC(malleability_region_in_t,
                  ((uint8_t)(type)))
 
 
-#define RPC_FLEXMPI_MALLEABILITY_NAME  "icc_flexmpi_malleability"
-#define FLEXMPI_COMMAND_LEN 256
+#define RPC_RECONFIGURE_NAME  "icc_reconfigure"
 
-MERCURY_GEN_PROC(flexmpi_malleability_in_t,
-                 ((hg_const_string_t)(command)))
+MERCURY_GEN_PROC(reconfigure_in_t,
+                 ((uint32_t)(cmdidx))
+                 ((int32_t)(maxprocs))
+		 ((hg_const_string_t)(hostlist)))
 
 
 /**

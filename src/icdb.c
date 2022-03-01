@@ -272,6 +272,7 @@ icdb_getclients(struct icdb_context *icdb, const char *type, uint32_t jobid,
   CHECK_PARAM(icdb, clients);
 
   redisReply *rep = NULL;
+  size_t need;
 
 
   if (type && jobid) {
@@ -297,12 +298,15 @@ icdb_getclients(struct icdb_context *icdb, const char *type, uint32_t jobid,
      ICDB_CLIENT_NFIELDS fields */
   assert(rep->elements % ICDB_CLIENT_NFIELDS == 0);
 
-  if (*count < (rep->elements / ICDB_CLIENT_NFIELDS)) {
+  need = rep->elements / ICDB_CLIENT_NFIELDS;
+
+  if (*count < need) {
+    *count = need;
     ICDB_SET_STATUS(icdb, ICDB_E2BIG, "Too many clients to store");
     return ICDB_E2BIG;
   }
 
-  *count = rep->elements / ICDB_CLIENT_NFIELDS;
+  *count = need;
 
   size_t i, j;
   redisReply *r;

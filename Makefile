@@ -28,13 +28,12 @@ icc_jobcleaner_bin := icc_jobcleaner
 libslurmadhoccli_so := libslurmadhoccli.so
 libslurmjobmon_so := libslurmjobmon.so
 testapp_bin := testapp
-spawn_bin := spawn
 
-sources := server.c rpc.c cb.c icdb.c icrm.c icc.c adhoccli.c cbserver.c flexmpi.c
+sources := server.c rpc.c cb.c icdb.c icrm.c icc.c adhoccli.c cbserver.c reconfig.c
 sources += slurmjobmon.c slurmadhoccli.c client.c testapp.c spawn.c jobcleaner.c
 
 # keep libicc in front
-binaries := $(libicc_so) server client jobcleaner $(libslurmjobmon_so) $(libslurmadhoccli_so)
+binaries := $(libicc_so) server client jobcleaner $(libslurmjobmon_so) $(libslurmadhoccli_so) spawn
 
 objects := $(sources:.c=.o)
 depends := $(sources:.c=.d)
@@ -85,13 +84,18 @@ uninstall:
 # necessary for automatic dependency handling
 $(objects): %.o: %.c
 
+lib%.so: CFLAGS += -fpic
+lib%.so: LDFLAGS += -shared
+lib%.so: %.o
+	$(LINK.o) $^ $(LDLIBS) -o $@
+
 icdb.o: CFLAGS += `$(PKG_CONFIG) --cflags hiredis uuid`
 
 server: icdb.o icrm.o rpc.o cb.o cbserver.o
 server: CFLAGS += `$(PKG_CONFIG) --cflags margo uuid`
 server: LDLIBS += `$(PKG_CONFIG) --libs margo hiredis` -lslurm -Wl,--no-undefined
 
-$(libicc_so): rpc.o cb.o flexmpi.o
+$(libicc_so): rpc.o cb.o reconfig.o
 $(libicc_so): CFLAGS += `$(PKG_CONFIG) --cflags margo uuid`
 $(libicc_so): LDLIBS += `$(PKG_CONFIG) --libs margo uuid` -ldl -Wl,--no-undefined,-h$(libicc_soname)
 
@@ -99,17 +103,12 @@ client: LDLIBS += -L. `$(PKG_CONFIG) --libs margo` -licc -Wl,--no-undefined
 
 jobcleaner: LDLIBS += -L. `$(PKG_CONFIG) --libs margo` -licc -Wl,--no-undefined
 
-$(libslurmjobmon_so) $(libslurmadhoccli_so): LDLIBS += -L. -licc -lslurm
-
-$(spawn_bin): CFLAGS += `$(PKG_CONFIG) --cflags mpich`
-$(spawn_bin): LDLIBS += `$(PKG_CONFIG) --libs mpich`
+spawn: CFLAGS += `$(PKG_CONFIG) --cflags mpich`
+spawn: LDLIBS += `$(PKG_CONFIG) --libs mpich margo` -L. -licc
 
 # $(testapp_bin): CFLAGS += `$(PKG_CONFIG) --cflags mpi`
 # $(testapp_bin): LDLIBS += `$(PKG_CONFIG) --libs mpi margo` -L. -licc
 
-lib%.so: CFLAGS += -fpic
-lib%.so: LDFLAGS += -shared
-lib%.so: %.o
-	$(LINK.o) $^ $(LDLIBS) -o $@
+$(libslurmjobmon_so) $(libslurmadhoccli_so): LDLIBS += -L. -licc -lslurm
 
 -include $(depends)

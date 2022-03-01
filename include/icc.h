@@ -40,17 +40,37 @@ enum icc_client_type {
 
 
 /**
+ * Expected signature of the function that libicc calls on receiving a
+ * reconfiguration RPC.
+ *
+ * MAXPROCS and HOSTLIST is provided by the IC, DATA is a pointer
+ * passed at registration by the caller, and passed back as-is to the
+ * function by libicc.
+ */
+typedef int (*icc_reconfigure_func_t)(int maxprocs, const char *hostlist, void *data);
+
+
+/**
  * Initialize an ICC client instance and returns the associated
+ * context in ICC_CONTEXT. TYPEID is the type of ICC client.
+ *
+ * Return ICC_SUCCESS or an error code.
+ */
+int icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_context **icc);
+
+
+/**
+ * Initialize an ICC MPI client instance and returns the associated
  * context in ICC_CONTEXT.
  *
- * TYPEID is the type of ICC client. NPROCS is the number of processes
- * in this client, such as can be returned by MPI_COMM_SIZE. Can be 0
- * for clients that are not applications.
+ * See icc_init. NPROCS is the number of processes in this client,
+ * returned for example by MPI_Comm_size. Also register FUNC to be
+ * called by libicc on receiving a reconfiguration RPC with DATA
+ * passed back as-is to FUNC.
  *
- * Return ICC_SUCCESS or error code.
+ * Return ICC_SUCCESS or an error code.
  */
-int icc_init(enum icc_log_level log_level, enum icc_client_type typeid, unsigned int nprocs,
-             struct icc_context **icc);
+int icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid, unsigned int nprocs, icc_reconfigure_func_t func, void *data, struct icc_context **icc);
 
 
 /**
@@ -68,6 +88,16 @@ int icc_fini(struct icc_context *icc);
  * Return ICC_SUCCESS or an error code.
  */
 int icc_sleep(struct icc_context *icc, double timeout_ms);
+
+
+/**
+ * Suspend (and don’t block) the calling thread until some other
+ * entity (e.g. another ULT, or a signal handler) invokes icc_fini().
+ *
+ * Return ICC_SUCCESS or an error code.
+ */
+int
+icc_wait_for_finalize(struct icc_context *icc);
 
 
 /**

@@ -207,9 +207,10 @@ jobclean_cb(hg_handle_t h)
 
   ret = icrm_jobstate(icrm, in.jobid, &state);
   if (ret != ICRM_SUCCESS) {
-    LOG_ERROR(mid, "Ressource manager failure: %s", icrm_errstr(icrm));
-    out.rc = ICC_FAILURE;
-    goto respond;
+    LOG_ERROR(mid, "Ressource manager error: %s", icrm_errstr(icrm));
+    /* keep going even if the RM does not recognize the job */
+    /* out.rc = ICC_FAILURE; */
+    /* goto respond; */
   }
 
   icrm_fini(&icrm);

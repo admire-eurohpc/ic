@@ -107,9 +107,9 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   rpc_ids[RPC_JOBMON_SUBMIT] = MARGO_REGISTER(mid, RPC_JOBMON_SUBMIT_NAME, jobmon_submit_in_t, rpc_out_t, jobmon_submit_cb);
   rpc_ids[RPC_JOBMON_EXIT] = MARGO_REGISTER(mid, RPC_JOBMON_EXIT_NAME, jobmon_exit_in_t, rpc_out_t, jobmon_exit_cb);
   rpc_ids[RPC_ADHOC_NODES] = MARGO_REGISTER(mid, RPC_ADHOC_NODES_NAME, adhoc_nodes_in_t, rpc_out_t, adhoc_nodes_cb);
+  rpc_ids[RPC_RECONFIGURE] = MARGO_REGISTER(mid, RPC_RECONFIGURE_NAME, reconfigure_in_t, rpc_out_t, NULL);
   rpc_ids[RPC_MALLEABILITY_AVAIL] = MARGO_REGISTER(mid, RPC_MALLEABILITY_AVAIL_NAME, malleability_avail_in_t, rpc_out_t, malleability_avail_cb);
   rpc_ids[RPC_MALLEABILITY_REGION] = MARGO_REGISTER(mid, RPC_MALLEABILITY_REGION_NAME, malleability_region_in_t, rpc_out_t, malleability_region_cb);
-  rpc_ids[RPC_FLEXMPI_MALLEABILITY] = MARGO_REGISTER(mid, RPC_FLEXMPI_MALLEABILITY_NAME, flexmpi_malleability_in_t, rpc_out_t, NULL);
 
   /* malleability thread from the pool of Margo ULTs */
   ABT_pool pool;
@@ -227,7 +227,7 @@ malleability_th(void *arg)
         return;
       }
       else if (ret != ICDB_SUCCESS) {
-        LOG_ERROR(data->mid, "IC database failure: %s", icdb_errstr(icdb));
+        LOG_ERROR(data->mid, "IC database: %s", icdb_errstr(icdb));
         free(clients);
         return;
       }
@@ -239,26 +239,24 @@ malleability_th(void *arg)
                data->jobid, nclients, nclients > 1 ? "s" : "");
 
     for (size_t i = 0; i < nclients; i++) {
-      char command[FLEXMPI_COMMAND_LEN];
-      int nbytes;
       long long dprocs;
 
       dprocs = job.ntasks / nclients - clients[i].nprocs;
 
-      nbytes = snprintf(command, FLEXMPI_COMMAND_LEN, "6:lhost:%lld", dprocs);
-      if (nbytes >= FLEXMPI_COMMAND_LEN || nbytes < 0) {
-        LOG_ERROR(data->mid, "Failed to prepare malleability command");
-        break;
+      if (dprocs < INT32_MIN || dprocs > INT32_MAX) {
+	LOG_ERROR(data->mid, "Reconfiguration: Job %"PRIu32": too many new processes");
+	break;
       }
 
-      margo_info(data->mid, "Malleability: Job %"PRIu32": passing command %s to client %s", clients[i].jobid, command, clients[i].clid);
+      margo_info(data->mid, "Malleability: Job %"PRIu32": client %s: %s%"PRId32" procs", clients[i].jobid, clients[i].clid, dprocs > 0 ? "+" : "", dprocs);
 
       /* make malleability RPC */
       hg_addr_t addr;
       hg_return_t hret;
       int rpcret;
 
-      flexmpi_malleability_in_t in = { .command = command };
+      /* XX number reconfiguration command, add hostlist */
+      reconfigure_in_t in = { .cmdidx = 0, .maxprocs = dprocs, .hostlist = "" };
 
       hret = margo_addr_lookup(data->mid, clients[i].addr, &addr);
       if (hret != HG_SUCCESS) {
@@ -266,11 +264,11 @@ malleability_th(void *arg)
         break;
       }
 
-      ret = rpc_send(data->mid, addr, data->rpcids[RPC_FLEXMPI_MALLEABILITY], &in, &rpcret);
+      ret = rpc_send(data->mid, addr, data->rpcids[RPC_RECONFIGURE], &in, &rpcret);
       if (ret) {
-        LOG_ERROR(data->mid, "RPC send failed %d", RPC_FLEXMPI_MALLEABILITY);
+        LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RECONFIGURE send failed ", clients[i].jobid, clients[i].clid);
       } else if (rpcret) {
-        LOG_ERROR(data->mid, "RPC %d returned with code %d", RPC_FLEXMPI_MALLEABILITY, rpcret);
+        LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RECONFIGURE returned with code %d", clients[i].jobid, clients[i].clid, rpcret);
       }
       else {
         /* XX generalize with a "writeclient" function? */

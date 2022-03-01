@@ -1,14 +1,18 @@
-#ifndef __ADMIRE_FLEXMPI_H
-#define __ADMIRE_FLEXMPI_H
+#ifndef __ADMIRE_RECONFIGURE_H
+#define __ADMIRE_RECONFIGURE_H
 
 #include <margo.h>
 
 
 typedef int (*flexmpi_reconfigure_t)(const char *); /* signature of the reconfigure func */
 
-struct flexmpi_cbdata {
-  int sock;
-  flexmpi_reconfigure_t func;
+struct reconfig_data {
+  icc_reconfigure_func_t func;
+  void                   *data;
+  enum icc_client_type   type;
+  /* XX TMP: flexmpi specific */
+  int                   flexmpisock;
+  flexmpi_reconfigure_t flexmpifunc;
 };
 
 
@@ -32,14 +36,14 @@ flexmpi_reconfigure_t flexmpi_func(margo_instance_id mid, void **handle);
 
 
 /**
- * Forward the  malleability command to the FlexMPI socket.
+ * Reconfigure callback.
  *
  * RPC answers:
  * RPC_OK if everything went fine
  * RPC_E2BIG if the command is too long to fit in the buffer.
  *
  */
-void flexmpi_malleability_cb(hg_handle_t h);
-DECLARE_MARGO_RPC_HANDLER(flexmpi_malleability_cb);
+void reconfigure_cb(hg_handle_t h);
+DECLARE_MARGO_RPC_HANDLER(reconfigure_cb);
 
 #endif

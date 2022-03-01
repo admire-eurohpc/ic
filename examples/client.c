@@ -50,7 +50,7 @@ main(int argc, char **argv)
   int rpcret;
 
   struct icc_context *icc;
-  icc_init(ICC_LOG_INFO, typeid, 0, &icc);
+  icc_init(ICC_LOG_INFO, typeid, &icc);
   assert(icc != NULL);
 
   ret = icc_rpc_test(icc, 32, typeid, &rpcret);
