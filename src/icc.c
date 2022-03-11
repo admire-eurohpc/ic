@@ -23,6 +23,7 @@ struct icc_context {
   hg_id_t           rpcids[RPC_COUNT];  /* RPCs ids */
   uint8_t           bidirectional;
   uint16_t          provider_id;        /* Margo provider ID (unused) */
+  uint32_t          jobid;              /* resource manager jobid */
   enum icc_client_type type;            /* client type */
   char              clid[UUID_STR_LEN]; /* client uuid */
   void              *flexhandle;        /* dlopen handle to FlexMPI library */
@@ -56,14 +57,16 @@ static int _register_reconfigure(struct icc_context *icc, icc_reconfigure_func_t
 /* public functions */
 
 int
-icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_context **icc_context) {
+icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_context **icc) {
   int rc;
   do {
-    rc = _init(log_level, typeid, icc_context);
+    rc = _init(log_level, typeid, icc);
     if (rc) break;
 
-    rc = _register_client(*icc_context, 0);
-    if (rc) break;
+    if ((*icc)->bidirectional) {
+      rc = _register_client(*icc, 0);
+      if (rc) break;
+    }
   } while (0);
 
   return rc;
@@ -85,8 +88,10 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
     rc = _register_reconfigure(*icc, func, data);
     if (rc) break;
 
-    rc = _register_client(*icc, nprocs);
-    if (rc) break;
+    if ((*icc)->bidirectional) {
+      rc = _register_client(*icc, nprocs);
+      if (rc) break;
+    }
 
   } while (0);
 
@@ -340,6 +345,22 @@ _init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_cont
     goto error;
   }
 
+  /* get resource manager jobid */
+  char *jobid;
+
+  icc->jobid = 0;
+
+  jobid = getenv("ADMIRE_JOB_ID");
+
+  if (!jobid) {
+    margo_info(icc->mid, "ICC INIT: missing ADMIRE_JOB_ID");
+  } else {
+    int rc = _strtouint32(jobid, &icc->jobid);
+    if (rc) {
+      margo_error(icc->mid, "ICC INIT: Error converting ADMIRE_JOB_ID \"%s\": %s", jobid, strerror(-rc));
+    }
+  }
+
   /* set client UUID */
   uuid_t uuid;
   uuid_generate(uuid);
@@ -437,7 +458,7 @@ _register_client(struct icc_context *icc, int nprocs)
   icc->provider_id = MARGO_PROVIDER_DEFAULT;
 
   if (get_hg_addr(icc->mid, addr_str, &addr_str_size)) {
-    margo_error(icc->mid, "Could not get Mercury self address");
+    margo_error(icc->mid, "ICC REGISTER: Error getting self address");
     rc = ICC_FAILURE;
     goto end;
   }
@@ -478,25 +499,12 @@ _register_client(struct icc_context *icc, int nprocs)
     fclose(f);
   }
 
-  char *jobid, *jobntasks, *jobnnodes;
-  jobid = getenv("ADMIRE_JOB_ID");
+  char *jobntasks, *jobnnodes;
   jobnnodes = getenv("ADMIRE_JOB_NNODES");
   jobntasks = getenv("ADMIRE_JOB_NTASKS");
 
-  if (!jobid) {
-    margo_error(icc->mid, "Missing ADMIRE_JOB_ID");
-    rc = ICC_FAILURE;
-    goto end;
-  }
   if (!jobnnodes) {
     margo_error(icc->mid, "Missing ADMIRE_JOB_NNODES");
-    rc = ICC_FAILURE;
-    goto end;
-  }
-
-  rc = _strtouint32(jobid, &rpc_in.jobid);
-  if (rc) {
-    margo_error(icc->mid, "Error converting job ID \"%s\": %s", jobid, strerror(-rc));
     rc = ICC_FAILURE;
     goto end;
   }
@@ -522,6 +530,7 @@ _register_client(struct icc_context *icc, int nprocs)
 
   rpc_in.nprocs = nprocs;
   rpc_in.addr_str = addr_str;
+  rpc_in.jobid = icc->jobid;
   rpc_in.provid = icc->provider_id;
   rpc_in.clid = icc->clid;
   rpc_in.type = _icc_type_str(icc->type);
