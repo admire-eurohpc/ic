@@ -236,6 +236,64 @@ DEFINE_MARGO_RPC_HANDLER(jobclean_cb);
 
 
 void
+jobalter_cb(hg_handle_t h)
+{
+  hg_return_t hret;
+  margo_instance_id mid;
+  jobalter_in_t in;
+  rpc_out_t out;
+  int ret;
+
+  mid = margo_hg_handle_get_instance(h);
+  assert(mid);
+
+  out.rc = ICC_SUCCESS;
+
+  const struct hg_info *info = margo_get_info(h);
+  struct cb_data *data = (struct cb_data *)margo_registered_data(mid, info->id);
+
+  if (!data) {
+    out.rc = ICC_FAILURE;
+    LOG_ERROR(mid, "No registered data");
+    goto respond;
+  }
+  assert(data->icdbs != NULL);
+
+  MARGO_GET_INPUT(h, in, hret);
+  if (hret != HG_SUCCESS) {
+    out.rc = ICC_FAILURE;
+    goto respond;
+  }
+
+  /* ask for new allocation */
+  struct icrm_context *icrm;
+
+  ret = icrm_init(&icrm);
+  if (ret != ICRM_SUCCESS) {
+    LOG_ERROR(mid, "Ressource manager init failure");
+    out.rc = ICC_FAILURE;
+    goto respond;
+  }
+
+  margo_info(mid, "IN JOBALTER");
+
+  ret = icrm_alloc(icrm, in.shrink, in.nnodes);
+  if (ret != ICRM_SUCCESS) {
+    LOG_ERROR(mid, "Ressource manager error: %s", icrm_errstr(icrm));
+  } else {
+    margo_info(mid, "JOBALTER: allocation sent");
+  }
+
+  icrm_fini(&icrm);
+
+ respond:
+  MARGO_RESPOND(h, out, hret)
+  MARGO_DESTROY_HANDLE(h, hret);
+}
+DEFINE_MARGO_RPC_HANDLER(jobalter_cb);
+
+
+void
 jobmon_submit_cb(hg_handle_t h)
 {
   hg_return_t hret;

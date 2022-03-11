@@ -190,6 +190,23 @@ icc_rpc_jobclean(struct icc_context *icc, uint32_t jobid, int *retcode)
 }
 
 int
+icc_rpc_jobalter(struct icc_context *icc, char shrink, uint32_t nnodes, int *retcode)
+{
+  int rc;
+  jobalter_in_t in;
+
+  CHECK_ICC(icc);
+
+  in.jobid = icc->jobid;
+  in.shrink = shrink;
+  in.nnodes = nnodes;
+
+  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_JOBALTER], &in, retcode);
+
+  return rc ? ICC_FAILURE : ICC_SUCCESS;
+}
+
+int
 icc_rpc_adhoc_nodes(struct icc_context *icc, uint32_t jobid, uint32_t nnodes, uint32_t adhoc_nnodes, int *retcode)
 {
   int rc;
@@ -376,6 +393,7 @@ _init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_cont
   }
 
   icc->rpcids[RPC_TEST] = MARGO_REGISTER(icc->mid, RPC_TEST_NAME, test_in_t, rpc_out_t, test_cb);
+  icc->rpcids[RPC_JOBALTER] = MARGO_REGISTER(icc->mid, RPC_JOBALTER_NAME, jobalter_in_t, rpc_out_t, NULL);
   icc->rpcids[RPC_JOBMON_SUBMIT] = MARGO_REGISTER(icc->mid, RPC_JOBMON_SUBMIT_NAME, jobmon_submit_in_t, rpc_out_t, NULL);
   icc->rpcids[RPC_JOBMON_EXIT] = MARGO_REGISTER(icc->mid, RPC_JOBMON_EXIT_NAME, jobmon_exit_in_t, rpc_out_t, NULL);
   icc->rpcids[RPC_ADHOC_NODES] = MARGO_REGISTER(icc->mid, RPC_ADHOC_NODES_NAME, adhoc_nodes_in_t, rpc_out_t, NULL);

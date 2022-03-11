@@ -50,12 +50,20 @@ char *icrm_errstr(icrm_context_t *icrm);
 
 
 /**
- * Query the ressource manager for the state of JOBID. The result is
+ * Query the resource manager for the state of JOBID. The result is
  * returned in JOBSTATE.
  *
  * Return ICRM_SUCCESS or an error code.
  */
 icrmerr_t icrm_jobstate(icrm_context_t *icrm, uint32_t jobid,
                         enum icrm_jobstate *jobstate);
+
+
+/**
+ * Request a new allocation of NNODES to the resource manager.
+ *
+ * Return ICRM_SUCCESS or an error code.
+ */
+icrmerr_t icrm_alloc(icrm_context_t *icrm, char shrink, uint32_t nnodes);
 
 #endif

@@ -118,8 +118,19 @@ int icc_rpc_test(struct icc_context *icc, uint8_t number, enum icc_client_type t
  *
  * Return ICC_SUCCESS or an error code.
  */
-
 int icc_rpc_jobclean(struct icc_context *icc, uint32_t jobid, int *retcode);
+
+
+/**
+ * RPC JOBALTER: Instruct the IC to remove (if SHRINK is true) or add
+ * (if SHRINK is false) NNODES to current job.
+ *
+ * RETCODE is filled with the RPC return status code on completion.
+ *
+ * Return ICC_SUCCESS or an error code.
+ */
+int icc_rpc_jobalter(struct icc_context *icc, char shrink, uint32_t nnodes,
+                     int *retcode);
 
 
 /**

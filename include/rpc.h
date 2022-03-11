@@ -94,6 +94,7 @@ enum icc_rpc_code {
   /* public RPCs */
   RPC_TEST = 128,
   RPC_JOBCLEAN,
+  RPC_JOBALTER,
   RPC_ADHOC_NODES,
   RPC_JOBMON_SUBMIT,
   RPC_JOBMON_EXIT,
@@ -142,6 +143,14 @@ MERCURY_GEN_PROC(test_in_t,
 #define RPC_JOBCLEAN_NAME  "icc_jobclean"
 
 MERCURY_GEN_PROC(jobclean_in_t, ((hg_uint32_t)(jobid)))
+
+
+#define RPC_JOBALTER_NAME  "icc_jobalter"
+
+MERCURY_GEN_PROC(jobalter_in_t,
+                 ((hg_uint32_t)(jobid))
+                 ((hg_bool_t)(shrink))
+                 ((hg_uint32_t)(nnodes)))
 
 
 #define RPC_JOBMON_SUBMIT_NAME  "icc_jobmon_submit"

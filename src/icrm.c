@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <stdlib.h>             /* calloc */
+#include <stdint.h>             /* uintXX_t */
 #include <string.h>             /* strncpy */
 #include <slurm/slurm.h>
 #include <slurm/slurm_errno.h>
@@ -92,6 +93,41 @@ icrm_jobstate(icrm_context_t *icrm, uint32_t jobid, enum icrm_jobstate *jobstate
     slurm_free_job_info_msg(buf);
   }
   return rc;
+}
+
+
+icrmerr_t
+icrm_alloc(icrm_context_t *icrm, char shrink, uint32_t nnodes)
+{
+  job_desc_msg_t jobreq;
+  resource_allocation_response_msg_t *resp;
+  int rc;
+
+  CHECK_ICRM(icrm);
+
+  if (shrink) {
+    _writerr(icrm, "Job shrinking is not implemented");
+    return ICRM_FAILURE;
+  }
+
+  slurm_init_job_desc_msg(&jobreq);
+  jobreq.min_nodes = nnodes;
+  jobreq.max_nodes = nnodes;
+  jobreq.user_id = getuid();
+  jobreq.group_id = getgid();
+
+  resp = NULL;
+
+  rc = slurm_allocate_resources(&jobreq, &resp);
+  if (rc != SLURM_SUCCESS) {
+    _writerr(icrm, slurm_strerror(errno));
+  } else {
+    assert(resp);
+  }
+
+  slurm_free_resource_allocation_response_msg(resp);
+
+  return rc != SLURM_SUCCESS ? ICRM_FAILURE : ICRM_SUCCESS;
 }
 
 

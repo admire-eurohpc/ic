@@ -2,10 +2,13 @@
 - systematic check for cleaner??
 - icc: jobntasks? ~universe_size in MPI?
 - icc: remove flexhandle, add a proper free function to register
-- jobcleaner: icrm_init/fini do not call every time
+- icc: get ntasks and nnodes from RM instead of env
 - server: prefix LOG_ERROR with jobid/clid?
-- spawn: wait for finalize? how?
+- server: create pool of icrm context
 - server: set hostlist
+- icrm: create comm socket in init
+- jobcleaner: pool of icrm context
+- spawn: wait for finalize? how?
 - spawn: use hostlist
 
 /* TODO
