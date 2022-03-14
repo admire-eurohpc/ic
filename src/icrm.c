@@ -25,8 +25,9 @@ static icrmerr_t _writerr(icrm_context_t *icrm,
                           const char *funcname, const char *format, ...);
 
 struct icrm_context {
-  char errstr[ICC_ERRSTR_LEN];
-  int  sock;                    /* Slurm communication socket */
+  char           errstr[ICC_ERRSTR_LEN];
+  int            sock;          /* Slurm communication socket */
+  unsigned short port;          /* Slurm communication port */
 };
 
 
@@ -60,6 +61,7 @@ icrm_fini(icrm_context_t **icrm)
 {
   if (icrm) {
     if (*icrm) {
+      close((*icrm)->sock);
       free(*icrm);
     }
     *icrm = NULL;
@@ -134,19 +136,63 @@ icrm_alloc(icrm_context_t *icrm, char shrink, uint32_t nnodes)
   jobreq.shared = 0;
   jobreq.user_id = getuid();
   jobreq.group_id = getgid();
+  jobreq.alloc_resp_port = icrm->port;
 
   resp = NULL;
 
   rc = slurm_allocate_resources(&jobreq, &resp);
   if (rc != SLURM_SUCCESS) {
-    WRITERR(icrm, "Slurm: %s", slurm_strerror(errno));
+    WRITERR(icrm, "slurm_allocate_resources: %s", slurm_strerror(slurm_get_errno()));
+    rc = ICRM_FAILURE;
   } else {
     assert(resp);
+    if ((!resp->node_list || strlen(resp->node_list) == 0)) {
+      fprintf(stderr, "WAITING FOR ALLOC\n");
+
+      struct sockaddr_storage sin;
+      socklen_t len = sizeof(sin);
+      int sock;
+
+      sock = accept(icrm->sock, (struct sockaddr *)&sin, &len);
+      if (sock == -1) {
+        WRITERR(icrm, "accept: %s", strerror(errno));
+        rc = ICRM_FAILURE;
+      } else {
+        /* technically, all the job information has already been sent
+           by slurmctld to the socket, but it is unparseable with
+           Slurm API, so we resort to a new RPC */
+        rc = slurm_allocation_lookup(resp->job_id, &resp);
+        if (rc != SLURM_SUCCESS) {
+          WRITERR(icrm, "slurm_allocation_lookup: %s", slurm_strerror(slurm_get_errno()));
+          rc = ICRM_FAILURE;
+        }
+      }
+
+      fprintf(stderr, "ALLOCED JOB %u! NODES %s\n", resp->job_id, resp->node_list);
+
+      /* total = 0; */
+      /* while ((n = recv(sock, resp + total, sizeof(*resp) - total, 0)) > 0) { */
+      /*   total += n; */
+      /*   fprintf(stderr, "RECVING\n"); */
+      /* } */
+      /* if (n == -1) { */
+      /*   WRITERR(icrm, "recv: %s", strerror(errno)); */
+      /*   rc = ICRM_FAILURE; */
+      /* } */
+
+      /* if (total == sizeof(*resp)) { */
+      /*   rc = ICRM_SUCCESS; */
+      /* } else { */
+      /*   WRITERR(icrm, "Incomplete Slurm answer"); */
+      /*   rc = ICRM_FAILURE; */
+      /* } */
+
+    }
   }
 
   slurm_free_resource_allocation_response_msg(resp);
 
-  return rc != SLURM_SUCCESS ? ICRM_FAILURE : ICRM_SUCCESS;
+  return rc;
 }
 
 
@@ -216,14 +262,34 @@ _slurm_socket(icrm_context_t *icrm)
     close(sock);
   }
 
-  freeaddrinfo(res);
-
   if (p == NULL) {
     WRITERR(icrm, "Slurm socket: Could not bind");
     return ICRM_FAILURE;
   }
 
+  freeaddrinfo(res);
+
+  struct sockaddr_storage sin;
+  socklen_t len = sizeof(sin);
+
+  rc = listen(sock, 8);         /* no backlog expected */
+  if (rc == -1) {
+    WRITERR(icrm, "listen: %s", strerror(errno));
+    return ICRM_FAILURE;
+  }
+
+  rc = getsockname(sock, (struct sockaddr *)&sin, &len);
+  if (rc == -1) {
+    WRITERR(icrm, "getsockname: %s", strerror(errno));
+    return ICRM_FAILURE;
+  }
+
   icrm->sock = sock;
+  if (sin.ss_family == AF_INET) {
+    icrm->port = ntohs(((struct sockaddr_in *)&sin)->sin_port);
+  } else {
+    icrm->port = ntohs(((struct sockaddr_in6 *)&sin)->sin6_port);
+  }
 
   return ICRM_SUCCESS;
 }
