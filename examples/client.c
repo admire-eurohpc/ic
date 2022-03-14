@@ -71,6 +71,9 @@ main(int argc, char **argv)
     assert(ret == ICC_SUCCESS && rpcret == ICC_SUCCESS);
   }
 
+  /* ask for 2 more nodes */
+  ret = icc_rpc_jobalter(icc, 0, 2, &rpcret);
+
   ret = icc_fini(icc);
   assert(ret == 0);
 

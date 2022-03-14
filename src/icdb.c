@@ -535,6 +535,7 @@ _icdb_set_status(struct icdb_context *icdb, int status,
   if (filename && lineno && funcname) {
     nbytes = snprintf(icdb->errstr, ICDB_ERRSTR_LEN, "%s (%s:%d): ", funcname, filename, lineno);
     if (nbytes < 0) {
+      icdb->errstr[0] = '\0';
       return ICDB_FAILURE;
     }
   }
@@ -544,8 +545,9 @@ _icdb_set_status(struct icdb_context *icdb, int status,
 
   if (nbytes < ICDB_ERRSTR_LEN) {
     vsnprintf(icdb->errstr + nbytes, ICDB_ERRSTR_LEN, format, ap);
-    icdb->errstr[ICDB_ERRSTR_LEN - 1] = '\0';
   }
+
+  icdb->errstr[ICDB_ERRSTR_LEN - 1] = '\0';
 
   va_end(ap);
 

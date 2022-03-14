@@ -6,7 +6,13 @@
 - server: prefix LOG_ERROR with jobid/clid?
 - server: create pool of icrm context
 - server: set hostlist
+- icdb: handle clients as a struct, commit func?
+- icdb: status in context redundant?
+- icdb: return icdberr_t from funcs + ERRSTR_LEN + context type _t
+- icdb: with icrm, factorize WRITERR func & macro
+- icdb: generally error string in context, yay or nay?
 - icrm: create comm socket in init
+- icrm: make request in client instead of server?
 - jobcleaner: pool of icrm context
 - spawn: wait for finalize? how?
 - spawn: use hostlist
@@ -28,10 +34,6 @@
  * icc: send timestamp in register RPC
  * icc: compute ntasks from SLURM_TASKS_PER_NODE?
  * handle crashing application (via Slurm?)
- * icdb: handle clients as a struct, commit func?
- * icdb: error string in context, yay or nay?
- * icdb: status in context redundant?
- * icdb: return icdberr_t from funcs + ERRSTR_LEN + context type _t
  * malleability: return from ULT, get retcode + finalize icc_server?
  * malleability: filter on FlexMPI/iMPI, separate
  * malleability: duplication in arg struct
