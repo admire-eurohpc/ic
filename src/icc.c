@@ -10,10 +10,13 @@
 
 #include "rpc.h"
 #include "cb.h"
+#include "cbcommon.h"
 #include "reconfig.h"
+#include "icrm.h"
 
 
 #define ADMIRE_JOB_ENV  "admire_job.env"
+#define NBLOCKING_ES  64
 #define CHECK_ICC(icc)  if (!(icc)) { return ICC_FAILURE; }
 
 
@@ -21,11 +24,17 @@ struct icc_context {
   margo_instance_id mid;
   hg_addr_t         addr;               /* server address */
   hg_id_t           rpcids[RPC_COUNT];  /* RPCs ids */
-  uint8_t           bidirectional;
   uint16_t          provider_id;        /* Margo provider ID (unused) */
+  uint8_t           bidirectional;
+  char              registered;         /* has the client been registered? */
   uint32_t          jobid;              /* resource manager jobid */
-  enum icc_client_type type;            /* client type */
   char              clid[UUID_STR_LEN]; /* client uuid */
+  enum icc_client_type type;            /* client type */
+
+  struct icrm_context *icrm;            /* resource manager comm */
+  ABT_xstream       icrm_xstream;       /* blocking execution stream */
+  ABT_pool          icrm_pool;
+
   void              *flexhandle;        /* dlopen handle to FlexMPI library */
 };
 
@@ -50,25 +59,30 @@ static int _strtouint32(const char *nptr, uint32_t *dest);
 
 
 static int _init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_context **icc_context);
+static int _setup_reconfigure(struct icc_context *icc, icc_reconfigure_func_t func, void *data);
+static int _setup_icrm(struct icc_context *icc);
 static int _register_client(struct icc_context *icc, int nprocs);
-static int _register_reconfigure(struct icc_context *icc, icc_reconfigure_func_t func, void *data);
-
 
 /* public functions */
 
 int
 icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_context **icc) {
   int rc;
-  do {
-    rc = _init(log_level, typeid, icc);
-    if (rc) break;
 
-    if ((*icc)->bidirectional) {
-      rc = _register_client(*icc, 0);
-      if (rc) break;
-    }
-  } while (0);
+  rc = _init(log_level, typeid, icc);
+  if (rc)
+    goto error;
 
+  if ((*icc)->bidirectional) {
+    rc = _register_client(*icc, 0);
+    if (rc)
+      goto error;
+  }
+  return ICC_SUCCESS;
+
+ error:
+  icc_fini(*icc);
+  *icc = NULL;
   return rc;
 }
 
@@ -78,23 +92,32 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
              struct icc_context **icc)
 {
   int rc;
-  do {
-    rc = _init(log_level, typeid, icc);
-    if (rc) break;
 
-    /* avoid race condition where the IC would send a malleability
-       command before the client has registered its reconfiguration
-       function */
-    rc = _register_reconfigure(*icc, func, data);
-    if (rc) break;
+  rc = _init(log_level, typeid, icc);
+  if (rc)
+    goto error;
 
-    if ((*icc)->bidirectional) {
-      rc = _register_client(*icc, nprocs);
-      if (rc) break;
-    }
+  /* register reconfiguration func first to avoid a race condition
+     where the IC would send a malleability command before the client
+     is set up */
+  rc = _setup_reconfigure(*icc, func, data);
+  if (rc)
+    goto error;
 
-  } while (0);
+  rc = _setup_icrm(*icc);
+  if (rc)
+    goto error;
 
+  if ((*icc)->bidirectional) {
+    rc = _register_client(*icc, nprocs);
+    if (rc)
+      goto error;
+  }
+  return ICC_SUCCESS;
+
+ error:
+  icc_fini(*icc);
+  *icc = NULL;
   return rc;
 }
 
@@ -126,8 +149,7 @@ icc_fini(struct icc_context *icc)
   if (!icc)
     return rc;
 
-
-  if (icc->bidirectional) {
+  if (icc->bidirectional && icc->registered) {
     client_deregister_in_t in;
     in.clid = icc->clid;
 
@@ -143,6 +165,15 @@ icc_fini(struct icc_context *icc)
     }
   }
 
+  if (icc->icrm) {
+      icrm_fini(&icc->icrm);
+  }
+
+  if (icc->icrm_xstream) {
+    ABT_xstream_join(icc->icrm_xstream);
+    ABT_xstream_free(&icc->icrm_xstream);
+  }
+
   if (icc->flexhandle) {
     rc = dlclose(icc->flexhandle);
     if (rc) {
@@ -153,6 +184,7 @@ icc_fini(struct icc_context *icc)
 
   margo_finalize(icc->mid);
   free(icc);
+
   return rc;
 }
 
@@ -189,22 +221,6 @@ icc_rpc_jobclean(struct icc_context *icc, uint32_t jobid, int *retcode)
   return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
 
-int
-icc_rpc_jobalter(struct icc_context *icc, char shrink, uint32_t nnodes, int *retcode)
-{
-  int rc;
-  jobalter_in_t in;
-
-  CHECK_ICC(icc);
-
-  in.jobid = icc->jobid;
-  in.shrink = shrink;
-  in.nnodes = nnodes;
-
-  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_JOBALTER], &in, retcode);
-
-  return rc ? ICC_FAILURE : ICC_SUCCESS;
-}
 
 int
 icc_rpc_adhoc_nodes(struct icc_context *icc, uint32_t jobid, uint32_t nnodes, uint32_t adhoc_nnodes, int *retcode)
@@ -313,6 +329,7 @@ _init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_cont
     return -errno;
 
   icc->bidirectional = 0;
+  icc->registered = 0;
   icc->type = typeid;
 
   /*  Apps that must be able to both receive AND send RPCs to the IC */
@@ -371,6 +388,8 @@ _init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_cont
 
   if (!jobid) {
     margo_info(icc->mid, "ICC INIT: missing ADMIRE_JOB_ID");
+    rc = ICC_FAILURE;
+    goto error;
   } else {
     int rc = _strtouint32(jobid, &icc->jobid);
     if (rc) {
@@ -393,7 +412,6 @@ _init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_cont
   }
 
   icc->rpcids[RPC_TEST] = MARGO_REGISTER(icc->mid, RPC_TEST_NAME, test_in_t, rpc_out_t, test_cb);
-  icc->rpcids[RPC_JOBALTER] = MARGO_REGISTER(icc->mid, RPC_JOBALTER_NAME, jobalter_in_t, rpc_out_t, NULL);
   icc->rpcids[RPC_JOBMON_SUBMIT] = MARGO_REGISTER(icc->mid, RPC_JOBMON_SUBMIT_NAME, jobmon_submit_in_t, rpc_out_t, NULL);
   icc->rpcids[RPC_JOBMON_EXIT] = MARGO_REGISTER(icc->mid, RPC_JOBMON_EXIT_NAME, jobmon_exit_in_t, rpc_out_t, NULL);
   icc->rpcids[RPC_ADHOC_NODES] = MARGO_REGISTER(icc->mid, RPC_ADHOC_NODES_NAME, adhoc_nodes_in_t, rpc_out_t, NULL);
@@ -410,6 +428,7 @@ _init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_cont
 
   if (icc->type == ICC_TYPE_MPI || icc->type == ICC_TYPE_FLEXMPI) {
     icc->rpcids[RPC_RECONFIGURE] = MARGO_REGISTER(icc->mid, RPC_RECONFIGURE_NAME, reconfigure_in_t, rpc_out_t, reconfigure_cb);
+    icc->rpcids[RPC_RESALTER] = MARGO_REGISTER(icc->mid, RPC_RESALTER_NAME, resalter_in_t, rpc_out_t, resalter_cb);
     icc->rpcids[RPC_MALLEABILITY_REGION] = MARGO_REGISTER(icc->mid, RPC_MALLEABILITY_REGION_NAME, malleability_region_in_t, rpc_out_t, NULL);
   }
 
@@ -426,14 +445,14 @@ _init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_cont
 }
 
 static int
-_register_reconfigure(struct icc_context *icc, icc_reconfigure_func_t func, void *data)
+_setup_reconfigure(struct icc_context *icc, icc_reconfigure_func_t func, void *data)
 {
   CHECK_ICC(icc);
 
   struct reconfig_data *d = malloc(sizeof(*d));
   if (!d) {
     margo_error(icc->mid, "%s: Malloc failure", __func__);
-    return ICC_FAILURE;
+    return ICC_ENOMEM;
   }
 
   if (icc->type == ICC_TYPE_FLEXMPI && !func) {
@@ -454,9 +473,9 @@ _register_reconfigure(struct icc_context *icc, icc_reconfigure_func_t func, void
     return ICC_FAILURE;
   }
 
-  d->type = icc->type;
   d->func = func;
   d->data = data;
+  d->type = icc->type;
 
   /* pass data to callback */
   margo_register_data(icc->mid, icc->rpcids[RPC_RECONFIGURE], d, free);
@@ -464,6 +483,48 @@ _register_reconfigure(struct icc_context *icc, icc_reconfigure_func_t func, void
   return ICC_SUCCESS;
 }
 
+static int
+_setup_icrm(struct icc_context *icc)
+{
+  int rc;
+
+  /* setup a blocking ES to handle communication with the RM */
+  rc = ABT_pool_create_basic(ABT_POOL_FIFO, ABT_POOL_ACCESS_MPMC, ABT_TRUE,
+                             &icc->icrm_pool);
+  if (rc != ABT_SUCCESS) {
+    margo_debug(icc->mid, "ABT_pool_create_basic error: ret=%d", rc);
+    return ICC_FAILURE;
+  }
+
+  rc = ABT_xstream_create_basic(ABT_SCHED_DEFAULT, 1, &icc->icrm_pool,
+                                ABT_SCHED_CONFIG_NULL, &icc->icrm_xstream);
+  if (rc != ABT_SUCCESS) {
+    margo_debug(icc->mid, "ABT_xstream_create_basic error: ret=%d", rc);
+    return ICC_FAILURE;
+  }
+
+  rc = icrm_init(&icc->icrm);
+  if (rc != ICRM_SUCCESS) {
+    if (icc->icrm)
+      margo_error(icc->mid, "icrm init: %s", icrm_errstr(icc->icrm));
+    else
+      margo_error(icc->mid, "icrm init failure (ret = %d)", rc);
+    return ICC_FAILURE;
+  }
+
+  struct cb_data *d = malloc(sizeof(*d));
+  if (!d) {
+    margo_error(icc->mid, "%s: malloc failure", __func__);
+    return ICC_ENOMEM;
+  }
+
+  d->icrm = icc->icrm;
+  d->icrm_pool = icc->icrm_pool;
+
+  margo_register_data(icc->mid, icc->rpcids[RPC_RESALTER], d, free);
+
+  return ICC_SUCCESS;
+}
 
 static int
 _register_client(struct icc_context *icc, int nprocs)
@@ -558,11 +619,14 @@ _register_client(struct icc_context *icc, int nprocs)
   if (rc || rpc_rc) {
     margo_error(icc->mid, "Failure registering bidirectional client to the IC (ret = %d, RPC ret = %d)", rc, rpc_rc);
     rc = ICC_FAILURE;
+  } else {
+    icc->registered = 1;
   }
 
  end:
   return rc;
 }
+
 
 static inline const char *
 _icc_type_str(enum icc_client_type type)

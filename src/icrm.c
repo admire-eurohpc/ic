@@ -6,6 +6,8 @@
 #include <string.h>             /* strncpy */
 #include <sys/types.h>          /* socket */
 #include <sys/socket.h>         /* socket */
+
+#include <abt.h>
 #include <slurm/slurm.h>
 #include <slurm/slurm_errno.h>
 
@@ -115,19 +117,17 @@ icrm_jobstate(icrm_context_t *icrm, uint32_t jobid, enum icrm_jobstate *jobstate
   return rc;
 }
 
-
 icrmerr_t
-icrm_alloc(icrm_context_t *icrm, char shrink, uint32_t nnodes)
+icrm_alloc(struct icrm_context *icrm, char shrink, uint32_t nnodes)
 {
+  icrmerr_t rc;
   job_desc_msg_t jobreq;
   resource_allocation_response_msg_t *resp;
-  int rc;
 
-  CHECK_ICRM(icrm);
+  rc = ICRM_SUCCESS;
 
   if (shrink) {
-    WRITERR(icrm, "Job shrinking is not implemented");
-    return ICRM_FAILURE;
+    return ICRM_ENOTIMPL;
   }
 
   slurm_init_job_desc_msg(&jobreq);
@@ -136,58 +136,13 @@ icrm_alloc(icrm_context_t *icrm, char shrink, uint32_t nnodes)
   jobreq.shared = 0;
   jobreq.user_id = getuid();
   jobreq.group_id = getgid();
-  jobreq.alloc_resp_port = icrm->port;
+  /* jobreq.alloc_resp_port = icrm->port; */
 
-  resp = NULL;
-
-  rc = slurm_allocate_resources(&jobreq, &resp);
-  if (rc != SLURM_SUCCESS) {
-    WRITERR(icrm, "slurm_allocate_resources: %s", slurm_strerror(slurm_get_errno()));
-    rc = ICRM_FAILURE;
-  } else {
-    assert(resp);
-    if ((!resp->node_list || strlen(resp->node_list) == 0)) {
-      fprintf(stderr, "WAITING FOR ALLOC\n");
-
-      struct sockaddr_storage sin;
-      socklen_t len = sizeof(sin);
-      int sock;
-
-      sock = accept(icrm->sock, (struct sockaddr *)&sin, &len);
-      if (sock == -1) {
-        WRITERR(icrm, "accept: %s", strerror(errno));
-        rc = ICRM_FAILURE;
-      } else {
-        /* technically, all the job information has already been sent
-           by slurmctld to the socket, but it is unparseable with
-           Slurm API, so we resort to a new RPC */
-        rc = slurm_allocation_lookup(resp->job_id, &resp);
-        if (rc != SLURM_SUCCESS) {
-          WRITERR(icrm, "slurm_allocation_lookup: %s", slurm_strerror(slurm_get_errno()));
-          rc = ICRM_FAILURE;
-        }
-      }
-
-      fprintf(stderr, "ALLOCED JOB %u! NODES %s\n", resp->job_id, resp->node_list);
-
-      /* total = 0; */
-      /* while ((n = recv(sock, resp + total, sizeof(*resp) - total, 0)) > 0) { */
-      /*   total += n; */
-      /*   fprintf(stderr, "RECVING\n"); */
-      /* } */
-      /* if (n == -1) { */
-      /*   WRITERR(icrm, "recv: %s", strerror(errno)); */
-      /*   rc = ICRM_FAILURE; */
-      /* } */
-
-      /* if (total == sizeof(*resp)) { */
-      /*   rc = ICRM_SUCCESS; */
-      /* } else { */
-      /*   WRITERR(icrm, "Incomplete Slurm answer"); */
-      /*   rc = ICRM_FAILURE; */
-      /* } */
-
-    }
+  /* wait indefinitely */
+  resp = slurm_allocate_resources_blocking(&jobreq, 0, NULL);
+  if (resp == NULL) {
+    WRITERR(icrm, "slurm_allocate_resources_blocking: %s\n", slurm_strerror(slurm_get_errno()));
+    rc = ICRM_ERESOURCEMAN;
   }
 
   slurm_free_resource_allocation_response_msg(resp);
@@ -195,6 +150,50 @@ icrm_alloc(icrm_context_t *icrm, char shrink, uint32_t nnodes)
   return rc;
 }
 
+
+icrmerr_t
+icrm_alloc_wait(icrm_context_t *icrm, uint32_t jobid)
+{
+  icrmerr_t rc;
+  struct sockaddr_storage sin;
+  socklen_t len = sizeof(sin);
+  int sock;
+
+  resource_allocation_response_msg_t *resp;
+
+  sock = accept(icrm->sock, (struct sockaddr *)&sin, &len);
+  if (sock == -1) {
+    WRITERR(icrm, "accept: %s", strerror(errno));
+    rc = ICRM_FAILURE;
+  } else {
+    /* technically, all the job information has already been sent
+       by slurmctld to the socket, but it is unparseable with
+       Slurm API, so we resort to a new RPC */
+    rc = slurm_allocation_lookup(jobid, &resp);
+    if (rc != SLURM_SUCCESS) {
+      WRITERR(icrm, "slurm_allocation_lookup: %s", slurm_strerror(slurm_get_errno()));
+      rc = ICRM_FAILURE;
+    }
+  }
+
+  fprintf(stderr, "ALLOCED JOB %u! NODES %s\n", resp->job_id, resp->node_list);
+  /* total = 0; */
+  /* while ((n = recv(sock, resp + total, sizeof(*resp) - total, 0)) > 0) { */
+  /*   total += n; */
+  /*   fprintf(stderr, "RECVING\n"); */
+  /* } */
+  /* if (n == -1) { */
+  /*   WRITERR(icrm, "recv: %s", strerror(errno)); */
+  /*   rc = ICRM_FAILURE; */
+  /* } */
+  /* if (total == sizeof(*resp)) { */
+  /*   rc = ICRM_SUCCESS; */
+  /* } else { */
+  /*   WRITERR(icrm, "Incomplete Slurm answer"); */
+  /*   rc = ICRM_FAILURE; */
+  /* } */
+  return ICRM_SUCCESS;
+}
 
 static icrmerr_t
 _writerr(icrm_context_t *icrm, const char *filename, int lineno,

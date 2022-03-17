@@ -9,8 +9,10 @@ enum icrm_error {
   ICRM_SUCCESS = 0,
   ICRM_FAILURE,
   ICRM_EPARAM,
+  ICRM_ENOTIMPL,                /* not implemented */
   ICRM_ENOMEM,
   ICRM_EJOBID,
+  ICRM_ERESOURCEMAN,            /* resource manager */
   ICRM_ECOUNT,
 };
 typedef enum icrm_error icrmerr_t;
@@ -60,7 +62,9 @@ icrmerr_t icrm_jobstate(icrm_context_t *icrm, uint32_t jobid,
 
 
 /**
- * Request a new allocation of NNODES to the resource manager.
+ * Request a new allocation of NNODES to the resource manager. If
+ * SHRINK is true, give back that many nodes (NOT IMPLEMENTED). Blocks
+ * until the allocation has been granted.
  *
  * Return ICRM_SUCCESS or an error code.
  */

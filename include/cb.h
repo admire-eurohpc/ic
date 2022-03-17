@@ -1,12 +1,16 @@
-#ifndef _ADMIRE_IC_CALLBACKS
-#define _ADMIRE_IC_CALLBACKS
+#ifndef _ADMIRE_IC_CALLBACKS_CLIENT
+#define _ADMIRE_IC_CALLBACKS_CLIENT
 
 /**
- * Common IC clients & server callbacks. Server specific callbacks are
- * defined in cbserver.h (q.v.).
+ * Clients callbacks.
  */
 
-void test_cb(hg_handle_t);
-DECLARE_MARGO_RPC_HANDLER(test_cb);
+void resalter_cb(hg_handle_t);
+DECLARE_MARGO_RPC_HANDLER(resalter_cb);
+
+struct cb_data {
+  struct icrm_context *icrm;
+  ABT_pool            icrm_pool;
+};
 
 #endif

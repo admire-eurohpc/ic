@@ -11,6 +11,7 @@ struct icc_context;
 
 #define ICC_SUCCESS  0
 #define ICC_FAILURE -1
+#define ICC_ENOMEM -1
 
 
 /* Log levels, lifted from Margo */
@@ -63,10 +64,10 @@ int icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct i
  * Initialize an ICC MPI client instance and returns the associated
  * context in ICC_CONTEXT.
  *
- * See icc_init. NPROCS is the number of processes in this client,
- * returned for example by MPI_Comm_size. Also register FUNC to be
- * called by libicc on receiving a reconfiguration RPC with DATA
- * passed back as-is to FUNC.
+ * See icc_init. In addition, NPROCS is the number of processes in
+ * this client, returned for example by MPI_Comm_size. Also register
+ * FUNC to be called by libicc on receiving a reconfiguration RPC with
+ * DATA passed back as-is to FUNC.
  *
  * Return ICC_SUCCESS or an error code.
  */
@@ -119,18 +120,6 @@ int icc_rpc_test(struct icc_context *icc, uint8_t number, enum icc_client_type t
  * Return ICC_SUCCESS or an error code.
  */
 int icc_rpc_jobclean(struct icc_context *icc, uint32_t jobid, int *retcode);
-
-
-/**
- * RPC JOBALTER: Instruct the IC to remove (if SHRINK is true) or add
- * (if SHRINK is false) NNODES to current job.
- *
- * RETCODE is filled with the RPC return status code on completion.
- *
- * Return ICC_SUCCESS or an error code.
- */
-int icc_rpc_jobalter(struct icc_context *icc, char shrink, uint32_t nnodes,
-                     int *retcode);
 
 
 /**

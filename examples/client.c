@@ -8,6 +8,8 @@
 #include "icc.h"
 
 
+int reconfig(int maxprocs, const char *hostlist, void *data);
+
 static enum icc_client_type
 _icc_typecode(const char *type);
 
@@ -50,7 +52,7 @@ main(int argc, char **argv)
   int rpcret;
 
   struct icc_context *icc;
-  icc_init(ICC_LOG_INFO, typeid, &icc);
+  icc_init_mpi(ICC_LOG_INFO, typeid, 12, reconfig, NULL, &icc);
   assert(icc != NULL);
 
   ret = icc_rpc_test(icc, 32, typeid, &rpcret);
@@ -71,15 +73,20 @@ main(int argc, char **argv)
     assert(ret == ICC_SUCCESS && rpcret == ICC_SUCCESS);
   }
 
-  /* ask for 2 more nodes */
-  ret = icc_rpc_jobalter(icc, 0, 2, &rpcret);
+  /* XX ask for more nodes */
 
+  puts("icc_client: Finishing");
   ret = icc_fini(icc);
   assert(ret == 0);
 
   return EXIT_SUCCESS;
 }
 
+int
+reconfig(int maxprocs, const char *hostlist, void *data){
+  fprintf(stderr, "IN RECONFIG");
+  return 0;
+}
 
 static enum icc_client_type
 _icc_typecode(const char *type)

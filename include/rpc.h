@@ -94,11 +94,12 @@ enum icc_rpc_code {
   /* public RPCs */
   RPC_TEST = 128,
   RPC_JOBCLEAN,
-  RPC_JOBALTER,
   RPC_ADHOC_NODES,
   RPC_JOBMON_SUBMIT,
   RPC_JOBMON_EXIT,
   RPC_RECONFIGURE,
+  RPC_RESALTER,                 /* resources alter */
+  RPC_RESALTERDONE,             /* resources alter done */
   RPC_MALLEABILITY_AVAIL,
   RPC_MALLEABILITY_REGION,
 
@@ -145,10 +146,9 @@ MERCURY_GEN_PROC(test_in_t,
 MERCURY_GEN_PROC(jobclean_in_t, ((hg_uint32_t)(jobid)))
 
 
-#define RPC_JOBALTER_NAME  "icc_jobalter"
+#define RPC_RESALTER_NAME  "icc_resalter"
 
-MERCURY_GEN_PROC(jobalter_in_t,
-                 ((hg_uint32_t)(jobid))
+MERCURY_GEN_PROC(resalter_in_t,
                  ((hg_bool_t)(shrink))
                  ((hg_uint32_t)(nnodes)))
 

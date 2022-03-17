@@ -6,11 +6,12 @@
 #include "rpc.h"
 #include "icc.h"
 #include "icdb.h"
-#include "cb.h"
+#include "icrm.h"
+#include "cbcommon.h"
 #include "cbserver.h"
 
 
-#define NTHREADS 3
+#define NTHREADS 8              /* threads set aside for RPC handling */
 
 /* malleability manager stub */
 #define NCLIENTS     4
@@ -104,16 +105,18 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   rpc_ids[RPC_CLIENT_DEREGISTER] = MARGO_REGISTER(mid, RPC_CLIENT_DEREGISTER_NAME, client_deregister_in_t, rpc_out_t, client_deregister_cb);
   rpc_ids[RPC_TEST] = MARGO_REGISTER(mid, RPC_TEST_NAME, test_in_t, rpc_out_t, test_cb);
   rpc_ids[RPC_JOBCLEAN] = MARGO_REGISTER(mid, RPC_JOBCLEAN_NAME, jobclean_in_t, rpc_out_t, jobclean_cb);
-  rpc_ids[RPC_JOBALTER] = MARGO_REGISTER(mid, RPC_JOBALTER_NAME, jobalter_in_t, rpc_out_t, jobalter_cb);
   rpc_ids[RPC_JOBMON_SUBMIT] = MARGO_REGISTER(mid, RPC_JOBMON_SUBMIT_NAME, jobmon_submit_in_t, rpc_out_t, jobmon_submit_cb);
   rpc_ids[RPC_JOBMON_EXIT] = MARGO_REGISTER(mid, RPC_JOBMON_EXIT_NAME, jobmon_exit_in_t, rpc_out_t, jobmon_exit_cb);
   rpc_ids[RPC_ADHOC_NODES] = MARGO_REGISTER(mid, RPC_ADHOC_NODES_NAME, adhoc_nodes_in_t, rpc_out_t, adhoc_nodes_cb);
+  rpc_ids[RPC_RESALTER] = MARGO_REGISTER(mid, RPC_RESALTER_NAME, resalter_in_t, rpc_out_t, NULL);
   rpc_ids[RPC_RECONFIGURE] = MARGO_REGISTER(mid, RPC_RECONFIGURE_NAME, reconfigure_in_t, rpc_out_t, NULL);
   rpc_ids[RPC_MALLEABILITY_AVAIL] = MARGO_REGISTER(mid, RPC_MALLEABILITY_AVAIL_NAME, malleability_avail_in_t, rpc_out_t, malleability_avail_cb);
   rpc_ids[RPC_MALLEABILITY_REGION] = MARGO_REGISTER(mid, RPC_MALLEABILITY_REGION_NAME, malleability_region_in_t, rpc_out_t, malleability_region_cb);
 
+  ABT_pool rpc_pool;
+  margo_get_handler_pool(mid, &rpc_pool);
+
   /* malleability thread from the pool of Margo ULTs */
-  ABT_pool pool;
   struct malleability_data malldat;
 
   ABT_mutex_create(&(malldat.mutex));
@@ -125,21 +128,17 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   malldat.icdbs = icdbs;
   malldat.jobid = 0;
 
-  /* XX return code from ULT? */
-  margo_get_handler_pool(mid, &pool);
-
-  rc = ABT_thread_create(pool, malleability_th, &malldat, ABT_THREAD_ATTR_NULL, NULL);
+  rc = ABT_thread_create(rpc_pool, malleability_th, &malldat, ABT_THREAD_ATTR_NULL, NULL);
   if (rc != 0) {
     LOG_ERROR(mid, "Could not create malleability ULT (ret = %d)", rc);
     goto error;
   }
 
-  /* attach data to RPCs  */
+  /* attach various pieces of data to RPCs  */
   struct cb_data d = { .icdbs = icdbs, .rpcids = rpc_ids, .malldat = &malldat };
   margo_register_data(mid, rpc_ids[RPC_CLIENT_REGISTER], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_CLIENT_DEREGISTER], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_JOBCLEAN], &d, NULL);
-  margo_register_data(mid, rpc_ids[RPC_JOBALTER], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_JOBMON_SUBMIT], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_MALLEABILITY_AVAIL], &d, NULL);
 
@@ -265,6 +264,20 @@ malleability_th(void *arg)
         LOG_ERROR(data->mid, "Failed getting Mercury address: %s", HG_Error_to_string(hret));
         break;
       }
+
+      /* XX TMP test alterjob */
+      resalter_in_t alterin;
+      alterin.shrink = 0;
+      alterin.nnodes = 8;
+
+      ret = rpc_send(data->mid, addr, data->rpcids[RPC_RESALTER], &alterin, &rpcret);
+      if (ret) {
+        LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RECONFIGURE send failed ", clients[i].jobid, clients[i].clid);
+      } else if (rpcret) {
+        LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RECONFIGURE returned with code %d", clients[i].jobid, clients[i].clid, rpcret);
+      }
+      data->sleep = 1;
+      continue;
 
       ret = rpc_send(data->mid, addr, data->rpcids[RPC_RECONFIGURE], &in, &rpcret);
       if (ret) {
