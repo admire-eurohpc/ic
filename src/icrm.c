@@ -127,9 +127,12 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid, char shrink,
            uint32_t *nnodes, char **hostlist)
 {
   icrmerr_t rc;
+  int sret;
+  size_t len;
   char buf[DEPEND_MAXLEN];
-  job_desc_msg_t jobreq;
+  job_desc_msg_t jobreq, jobreq2;
   resource_allocation_response_msg_t *resp;
+  job_array_resp_msg_t *resp2;
 
   assert(hostlist);
 
@@ -138,13 +141,17 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid, char shrink,
   }
 
   rc = ICRM_SUCCESS;
+  resp = NULL;
+  resp2 = NULL;
 
   slurm_init_job_desc_msg(&jobreq);
+
+  /* 1. get allocation, equivalent to:
+     "salloc -N$nnodes --dependency=expand:$jobid"
+     wait indefinitely */
   jobreq.min_nodes = *nnodes;
   jobreq.max_nodes = *nnodes;
   jobreq.shared = 0;
-  jobreq.user_id = getuid();
-  jobreq.group_id = getgid();
 
   snprintf(buf, DEPEND_MAXLEN, "expand:%"PRIu32, jobid);
   jobreq.dependency = buf;
@@ -152,15 +159,16 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid, char shrink,
   *nnodes = 0;
   *hostlist = NULL;
 
-  /* wait indefinitely */
   resp = slurm_allocate_resources_blocking(&jobreq, 0, NULL);
+
   if (resp == NULL) {
-    WRITERR(icrm, "slurm_allocate_resources_blocking: %s", slurm_strerror(slurm_get_errno()));
+    WRITERR(icrm, "slurm_allocate_resources_blocking: %s",
+            slurm_strerror(slurm_get_errno()));
     rc = ICRM_ERESOURCEMAN;
     goto end;
   }
 
-  size_t len = strnlen(resp->node_list, HOSTLIST_MAXLEN);
+  len = strnlen(resp->node_list, HOSTLIST_MAXLEN);
   if (len == HOSTLIST_MAXLEN) {
     rc = ICRM_ERESOURCEMAN;
     WRITERR(icrm, "slurm_allocate_resources_blocking: hostlist too long");
@@ -176,8 +184,25 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid, char shrink,
   *nnodes = resp->node_cnt;
   strcpy(*hostlist, resp->node_list);
 
+  /* 2. update allocation, equivalent to:
+     "scontrol update JobId=$JOBID NumNodes=0" */
+  slurm_init_job_desc_msg(&jobreq2);
+
+  /* according to Slurm update_job.c, for this only min_nodes should
+     be set */
+  jobreq2.min_nodes = 0;
+  jobreq2.job_id = resp->job_id;
+
+  sret = slurm_update_job2(&jobreq2, &resp2);
+
+  if (sret != SLURM_SUCCESS) {
+    WRITERR(icrm, "slurm_update_job2: %s", slurm_strerror(slurm_get_errno()));
+    rc = ICRM_ERESOURCEMAN;
+  }
+
  end:
-  slurm_free_resource_allocation_response_msg(resp);
+  if (resp) slurm_free_resource_allocation_response_msg(resp);
+  if (resp2) slurm_free_job_array_resp(resp2);
   return rc;
 }
 
