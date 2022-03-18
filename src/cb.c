@@ -5,6 +5,7 @@
 #include "cb.h"
 #include "rpc.h"                /* for RPC i/o structs */
 #include "icrm.h"
+#include "icc_priv.h"
 
 #define MARGO_GET_INPUT(h,in,hret)  hret = margo_get_input(h, &in);	\
   if (hret != HG_SUCCESS) {						\
@@ -23,7 +24,7 @@
 
 
 struct alloc_args {
-  struct icrm_context *icrm;
+  const struct icc_context *icc;
   char     shrink;
   uint32_t nnodes;
   int      retcode;
@@ -38,15 +39,15 @@ struct alloc_args {
  *
  * Return ICC_SUCCESS or an error code in ARGS.retcode.
  */
-static void _alloc(struct alloc_args *args);
+static void _alloc_th(struct alloc_args *args);
 
 
 void
-resalter_cb(hg_handle_t h)
+resalloc_cb(hg_handle_t h)
 {
   hg_return_t hret;
   margo_instance_id mid;
-  resalter_in_t in;
+  resalloc_in_t in;
   rpc_out_t out;
   int ret;
 
@@ -56,10 +57,10 @@ resalter_cb(hg_handle_t h)
   out.rc = ICC_SUCCESS;
 
   const struct hg_info *info;
-  const struct cb_data *data;
+  const struct icc_context *icc;
 
   info = margo_get_info(h);
-  data = (struct cb_data *)margo_registered_data(mid, info->id);
+  icc = (struct icc_context *)margo_registered_data(mid, info->id);
 
   MARGO_GET_INPUT(h, in, hret);
   if (hret != HG_SUCCESS) {
@@ -70,16 +71,17 @@ resalter_cb(hg_handle_t h)
   /* dispatch allocation to an Argobots tasklet that will block on the
      request */
   struct alloc_args args = {
-    .icrm = data->icrm,
+    .icc = icc,
     .shrink = in.shrink, .nnodes = in.nnodes,
     .retcode = ICC_SUCCESS
   };
 
-  ret = ABT_task_create(data->icrm_pool,
-                        (void (*)(void *))_alloc,
-                        (void *)&args, NULL);
+  /* a tasklet is more appropriate than an ULT here, but Argobots 1.x
+     does not allow tasklets to call eventuals, which RPC do */
+  ret = ABT_thread_create(icc->icrm_pool, (void (*)(void *))_alloc_th, &args,
+                          ABT_THREAD_ATTR_NULL, NULL);
   if (ret != ABT_SUCCESS) {
-    margo_error(mid, "ABT_task_create failure: ret=%d", ret);
+    margo_error(mid, "ABT_thread_create failure: ret=%d", ret);
     out.rc = ICC_FAILURE;
   }
 
@@ -87,22 +89,35 @@ resalter_cb(hg_handle_t h)
   MARGO_RESPOND(h, out, hret)
   MARGO_DESTROY_HANDLE(h, hret);
 }
-DEFINE_MARGO_RPC_HANDLER(resalter_cb);
+DEFINE_MARGO_RPC_HANDLER(resalloc_cb);
 
 
 static void
-_alloc(struct alloc_args *args)
+_alloc_th(struct alloc_args *args)
 {
   icrmerr_t rc;
+  const struct icc_context *icc;
 
-  rc = icrm_alloc(args->icrm, args->shrink, args->nnodes); /* will block */
+  icc = args->icc;
+
+  rc = icrm_alloc(icc->icrm, args->shrink, args->nnodes); /* will block */
 
   if (rc == ICRM_SUCCESS) {
     args->retcode = ICC_SUCCESS;
   } else {
     args->retcode = ICC_FAILURE;
-    fprintf(stderr, "RESALTER err: %s", icrm_errstr(args->icrm));
+    margo_error(icc->mid, "RPC_RESALLOC err: %s", icrm_errstr(icc->icrm));
   }
 
-  fprintf(stderr, "RESALTER: GOT ALLOCATION (ret = %d)\n", rc);
+  int retcode;
+  test_in_t in;
+  in.clid = "0";
+  in.number = 48;
+  in.type = "mpi";
+
+  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_TEST], &in, &retcode);
+  assert(rc == 0);
+  assert(retcode == 0);
+
+  fprintf(stderr, "RPC_RESALLOC: GOT ALLOCATION (ret = %d)\n", rc);
 }

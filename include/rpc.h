@@ -7,8 +7,8 @@
 #include <mercury_macros.h>
 #include <mercury_proc_string.h>
 
-#include "icc_priv.h"
 #include "icc.h"
+#include "icc_common.h"
 
 #define HG_PROTOCOL "ofi+tcp"     /* Mercury protocol */
 #define MARGO_PROVIDER_DEFAULT 0  /* for using multiple Argobots
@@ -98,8 +98,8 @@ enum icc_rpc_code {
   RPC_JOBMON_SUBMIT,
   RPC_JOBMON_EXIT,
   RPC_RECONFIGURE,
-  RPC_RESALTER,                 /* resources alter */
-  RPC_RESALTERDONE,             /* resources alter done */
+  RPC_RESALLOC,                 /* resources alloc/deallocation */
+  RPC_RESALLOCDONE,             /* resources alloc done */
   RPC_MALLEABILITY_AVAIL,
   RPC_MALLEABILITY_REGION,
 
@@ -146,9 +146,9 @@ MERCURY_GEN_PROC(test_in_t,
 MERCURY_GEN_PROC(jobclean_in_t, ((hg_uint32_t)(jobid)))
 
 
-#define RPC_RESALTER_NAME  "icc_resalter"
+#define RPC_RESALLOC_NAME  "icc_resalloc"
 
-MERCURY_GEN_PROC(resalter_in_t,
+MERCURY_GEN_PROC(resalloc_in_t,
                  ((hg_bool_t)(shrink))
                  ((hg_uint32_t)(nnodes)))
 

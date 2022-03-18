@@ -1,6 +1,7 @@
-#include <assert.h>              /* assert */
+#include <assert.h>             /* assert */
 #include <dlfcn.h>              /* dlopen/dlsym */
-#include <errno.h>
+#include <errno.h>              /* errno, strerror */
+#include <inttypes.h>           /* uintXX */
 #include <netdb.h>              /* addrinfo */
 #include <stdlib.h>             /* malloc, getenv, setenv, strtoxx */
 #include <stdio.h>              /* getline */
@@ -8,35 +9,16 @@
 #include <margo.h>
 #include "uuid_admire.h"
 
+#include "icc_priv.h"
 #include "rpc.h"
 #include "cb.h"
 #include "cbcommon.h"
 #include "reconfig.h"
-#include "icrm.h"
 
 
 #define ADMIRE_JOB_ENV  "admire_job.env"
 #define NBLOCKING_ES  64
 #define CHECK_ICC(icc)  if (!(icc)) { return ICC_FAILURE; }
-
-
-struct icc_context {
-  margo_instance_id mid;
-  hg_addr_t         addr;               /* server address */
-  hg_id_t           rpcids[RPC_COUNT];  /* RPCs ids */
-  uint16_t          provider_id;        /* Margo provider ID (unused) */
-  uint8_t           bidirectional;
-  char              registered;         /* has the client been registered? */
-  uint32_t          jobid;              /* resource manager jobid */
-  char              clid[UUID_STR_LEN]; /* client uuid */
-  enum icc_client_type type;            /* client type */
-
-  struct icrm_context *icrm;            /* resource manager comm */
-  ABT_xstream       icrm_xstream;       /* blocking execution stream */
-  ABT_pool          icrm_pool;
-
-  void              *flexhandle;        /* dlopen handle to FlexMPI library */
-};
 
 
 /* utils */
@@ -149,6 +131,11 @@ icc_fini(struct icc_context *icc)
   if (!icc)
     return rc;
 
+  if (icc->icrm_xstream) {
+    ABT_xstream_join(icc->icrm_xstream);
+    ABT_xstream_free(&icc->icrm_xstream);
+  }
+
   if (icc->bidirectional && icc->registered) {
     client_deregister_in_t in;
     in.clid = icc->clid;
@@ -167,11 +154,6 @@ icc_fini(struct icc_context *icc)
 
   if (icc->icrm) {
       icrm_fini(&icc->icrm);
-  }
-
-  if (icc->icrm_xstream) {
-    ABT_xstream_join(icc->icrm_xstream);
-    ABT_xstream_free(&icc->icrm_xstream);
   }
 
   if (icc->flexhandle) {
@@ -428,7 +410,7 @@ _init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_cont
 
   if (icc->type == ICC_TYPE_MPI || icc->type == ICC_TYPE_FLEXMPI) {
     icc->rpcids[RPC_RECONFIGURE] = MARGO_REGISTER(icc->mid, RPC_RECONFIGURE_NAME, reconfigure_in_t, rpc_out_t, reconfigure_cb);
-    icc->rpcids[RPC_RESALTER] = MARGO_REGISTER(icc->mid, RPC_RESALTER_NAME, resalter_in_t, rpc_out_t, resalter_cb);
+    icc->rpcids[RPC_RESALLOC] = MARGO_REGISTER(icc->mid, RPC_RESALLOC_NAME, resalloc_in_t, rpc_out_t, resalloc_cb);
     icc->rpcids[RPC_MALLEABILITY_REGION] = MARGO_REGISTER(icc->mid, RPC_MALLEABILITY_REGION_NAME, malleability_region_in_t, rpc_out_t, NULL);
   }
 
@@ -521,7 +503,7 @@ _setup_icrm(struct icc_context *icc)
   d->icrm = icc->icrm;
   d->icrm_pool = icc->icrm_pool;
 
-  margo_register_data(icc->mid, icc->rpcids[RPC_RESALTER], d, free);
+  margo_register_data(icc->mid, icc->rpcids[RPC_RESALLOC], icc, NULL);
 
   return ICC_SUCCESS;
 }

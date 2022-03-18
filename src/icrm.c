@@ -11,7 +11,7 @@
 #include <slurm/slurm.h>
 #include <slurm/slurm_errno.h>
 
-#include "icc_priv.h"
+#include "icc_common.h"
 #include "icrm.h"
 
 #define CHECK_NULL(p)  if (!(p)) { return ICRM_EPARAM; }

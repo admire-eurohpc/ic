@@ -2,7 +2,7 @@
 #define __ADMIRE_ICDB_H
 
 #include "uuid_admire.h"        /* UUID_STR_LEN */
-#include "icc_priv.h"           /* ICC_xx_LEN */
+#include "icc_common.h"         /* ICC_xx_LEN */
 
 
 #define ICDB_SUCCESS  0

@@ -73,8 +73,6 @@ main(int argc, char **argv)
     assert(ret == ICC_SUCCESS && rpcret == ICC_SUCCESS);
   }
 
-  /* XX ask for more nodes */
-
   puts("icc_client: Finishing");
   ret = icc_fini(icc);
   assert(ret == 0);

@@ -1,6 +1,8 @@
 #ifndef __ADMIRE_ICRM_H
 #define __ADMIRE_ICRM_H
 
+#include <stdint.h>
+
 /**
  * Resouce manager (RM) related functions, for use by the IC server.
  */

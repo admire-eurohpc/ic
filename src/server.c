@@ -108,7 +108,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   rpc_ids[RPC_JOBMON_SUBMIT] = MARGO_REGISTER(mid, RPC_JOBMON_SUBMIT_NAME, jobmon_submit_in_t, rpc_out_t, jobmon_submit_cb);
   rpc_ids[RPC_JOBMON_EXIT] = MARGO_REGISTER(mid, RPC_JOBMON_EXIT_NAME, jobmon_exit_in_t, rpc_out_t, jobmon_exit_cb);
   rpc_ids[RPC_ADHOC_NODES] = MARGO_REGISTER(mid, RPC_ADHOC_NODES_NAME, adhoc_nodes_in_t, rpc_out_t, adhoc_nodes_cb);
-  rpc_ids[RPC_RESALTER] = MARGO_REGISTER(mid, RPC_RESALTER_NAME, resalter_in_t, rpc_out_t, NULL);
+  rpc_ids[RPC_RESALLOC] = MARGO_REGISTER(mid, RPC_RESALLOC_NAME, resalloc_in_t, rpc_out_t, NULL);
   rpc_ids[RPC_RECONFIGURE] = MARGO_REGISTER(mid, RPC_RECONFIGURE_NAME, reconfigure_in_t, rpc_out_t, NULL);
   rpc_ids[RPC_MALLEABILITY_AVAIL] = MARGO_REGISTER(mid, RPC_MALLEABILITY_AVAIL_NAME, malleability_avail_in_t, rpc_out_t, malleability_avail_cb);
   rpc_ids[RPC_MALLEABILITY_REGION] = MARGO_REGISTER(mid, RPC_MALLEABILITY_REGION_NAME, malleability_region_in_t, rpc_out_t, malleability_region_cb);
@@ -129,7 +129,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   malldat.jobid = 0;
 
   rc = ABT_thread_create(rpc_pool, malleability_th, &malldat, ABT_THREAD_ATTR_NULL, NULL);
-  if (rc != 0) {
+  if (rc != ABT_SUCCESS) {
     LOG_ERROR(mid, "Could not create malleability ULT (ret = %d)", rc);
     goto error;
   }
@@ -266,15 +266,15 @@ malleability_th(void *arg)
       }
 
       /* XX TMP test alterjob */
-      resalter_in_t alterin;
-      alterin.shrink = 0;
-      alterin.nnodes = 8;
+      resalloc_in_t allocin;
+      allocin.shrink = 0;
+      allocin.nnodes = 8;
 
-      ret = rpc_send(data->mid, addr, data->rpcids[RPC_RESALTER], &alterin, &rpcret);
+      ret = rpc_send(data->mid, addr, data->rpcids[RPC_RESALLOC], &allocin, &rpcret);
       if (ret) {
-        LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RECONFIGURE send failed ", clients[i].jobid, clients[i].clid);
+        LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RESALLOC send failed ", clients[i].jobid, clients[i].clid);
       } else if (rpcret) {
-        LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RECONFIGURE returned with code %d", clients[i].jobid, clients[i].clid, rpcret);
+        LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RESALLOC returned with code %d", clients[i].jobid, clients[i].clid, rpcret);
       }
       data->sleep = 1;
       continue;
