@@ -158,6 +158,35 @@ DEFINE_MARGO_RPC_HANDLER(client_deregister_cb);
 
 
 void
+resallocdone_cb(hg_handle_t h)
+{
+  hg_return_t hret;
+  margo_instance_id mid;
+  resallocdone_in_t in;
+  rpc_out_t out;
+
+  mid = margo_hg_handle_get_instance(h);
+  assert(mid);
+
+  out.rc = ICC_SUCCESS;
+
+  MARGO_GET_INPUT(h,in,hret);
+  if (hret != HG_SUCCESS) {
+    out.rc = ICC_FAILURE;
+    goto respond;
+  }
+
+  margo_info(mid, "GOT RESALLOCDONE for %"PRIu32" nodes: %s",
+             in.nnodes, in.hostlist);
+
+ respond:
+  MARGO_RESPOND(h, out, hret)
+  MARGO_DESTROY_HANDLE(h, hret);
+}
+DEFINE_MARGO_RPC_HANDLER(resallocdone_cb);
+
+
+void
 jobclean_cb(hg_handle_t h)
 {
   hg_return_t hret;

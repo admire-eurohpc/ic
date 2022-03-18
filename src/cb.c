@@ -68,18 +68,19 @@ resalloc_cb(hg_handle_t h)
     goto respond;
   }
 
-  /* dispatch allocation to an Argobots tasklet that will block on the
-     request */
+  /* dispatch allocation to an Argobots ULT that will block on the
+     request. A tasklet would be more appropriate than an ULT here,
+     but Argobots 1.x does not allow tasklets to call eventuals, which
+     RPC do */
   struct alloc_args args = {
     .icc = icc,
     .shrink = in.shrink, .nnodes = in.nnodes,
     .retcode = ICC_SUCCESS
   };
 
-  /* a tasklet is more appropriate than an ULT here, but Argobots 1.x
-     does not allow tasklets to call eventuals, which RPC do */
   ret = ABT_thread_create(icc->icrm_pool, (void (*)(void *))_alloc_th, &args,
                           ABT_THREAD_ATTR_NULL, NULL);
+
   if (ret != ABT_SUCCESS) {
     margo_error(mid, "ABT_thread_create failure: ret=%d", ret);
     out.rc = ICC_FAILURE;
@@ -95,29 +96,29 @@ DEFINE_MARGO_RPC_HANDLER(resalloc_cb);
 static void
 _alloc_th(struct alloc_args *args)
 {
-  icrmerr_t rc;
-  const struct icc_context *icc;
+  int ret, rpcret;
+  resallocdone_in_t in;
+  const struct icc_context *icc = args->icc;
 
-  icc = args->icc;
+  in.jobid = icc->jobid;
+  in.shrink = args->shrink;
+  in.nnodes = args->nnodes;
+  in.hostlist = NULL;
 
-  rc = icrm_alloc(icc->icrm, args->shrink, args->nnodes); /* will block */
+  /* blocking call */
+  ret = icrm_alloc(icc->icrm, in.jobid, args->shrink, &in.nnodes, &in.hostlist);
 
-  if (rc == ICRM_SUCCESS) {
-    args->retcode = ICC_SUCCESS;
-  } else {
+  if (ret != ICRM_SUCCESS) {
     args->retcode = ICC_FAILURE;
-    margo_error(icc->mid, "RPC_RESALLOC err: %s", icrm_errstr(icc->icrm));
+    margo_error(icc->mid, "icrm_alloc error: %s", icrm_errstr(icc->icrm));
+    return;
   }
 
-  int retcode;
-  test_in_t in;
-  in.clid = "0";
-  in.number = 48;
-  in.type = "mpi";
+  ret = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_RESALLOCDONE],
+                 &in, &rpcret);
 
-  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_TEST], &in, &retcode);
-  assert(rc == 0);
-  assert(retcode == 0);
+  if (ret != ICC_SUCCESS)
+    args->retcode = ICC_FAILURE;
 
-  fprintf(stderr, "RPC_RESALLOC: GOT ALLOCATION (ret = %d)\n", rc);
+  free(in.hostlist);
 }

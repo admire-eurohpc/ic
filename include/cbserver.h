@@ -7,6 +7,7 @@
 
 void client_register_cb(hg_handle_t h);
 void client_deregister_cb(hg_handle_t h);
+void resallocdone_cb(hg_handle_t h);
 void jobclean_cb(hg_handle_t h);
 void jobmon_submit_cb(hg_handle_t h);
 void jobmon_exit_cb(hg_handle_t h);
@@ -16,6 +17,7 @@ void malleability_region_cb(hg_handle_t h);
 
 DECLARE_MARGO_RPC_HANDLER(client_register_cb);
 DECLARE_MARGO_RPC_HANDLER(client_deregister_cb);
+DECLARE_MARGO_RPC_HANDLER(resallocdone_cb);
 DECLARE_MARGO_RPC_HANDLER(jobclean_cb);
 DECLARE_MARGO_RPC_HANDLER(jobmon_submit_cb);
 DECLARE_MARGO_RPC_HANDLER(jobmon_exit_cb);

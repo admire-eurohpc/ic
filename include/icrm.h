@@ -68,8 +68,12 @@ icrmerr_t icrm_jobstate(icrm_context_t *icrm, uint32_t jobid,
  * SHRINK is true, give back that many nodes (NOT IMPLEMENTED). Blocks
  * until the allocation has been granted.
  *
+ * Return the actual number of nodes granted in NNODES, and the
+ * associated hosts in HOSTLIST. HOSTLIST must be freed by the caller.
+ *
  * Return ICRM_SUCCESS or an error code.
  */
-icrmerr_t icrm_alloc(icrm_context_t *icrm, char shrink, uint32_t nnodes);
+icrmerr_t icrm_alloc(icrm_context_t *icrm, uint32_t jobid, char shrink,
+                     uint32_t *nnodes, char **hostlist);
 
 #endif

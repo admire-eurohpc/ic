@@ -3,7 +3,8 @@
 #include <stdarg.h>             /* va_ stuff */
 #include <stdlib.h>             /* calloc */
 #include <stdint.h>             /* uintXX_t */
-#include <string.h>             /* strncpy */
+#include <stdio.h>              /* printf */
+#include <string.h>             /* strncpy, strnlen */
 #include <sys/types.h>          /* socket */
 #include <sys/socket.h>         /* socket */
 
@@ -13,6 +14,10 @@
 
 #include "icc_common.h"
 #include "icrm.h"
+
+#define HOSTLIST_MAXLEN 4096
+#define JOBID_MAXLEN  16                /* 9 is enough for an uint32 */
+#define DEPEND_MAXLEN JOBID_MAXLEN + 16 /* enough for dependency string */
 
 #define CHECK_NULL(p)  if (!(p)) { return ICRM_EPARAM; }
 #define CHECK_ICRM(icrm)  { CHECK_NULL(icrm); CHECK_NULL((icrm)->errstr); }
@@ -118,82 +123,64 @@ icrm_jobstate(icrm_context_t *icrm, uint32_t jobid, enum icrm_jobstate *jobstate
 }
 
 icrmerr_t
-icrm_alloc(struct icrm_context *icrm, char shrink, uint32_t nnodes)
+icrm_alloc(struct icrm_context *icrm, uint32_t jobid, char shrink,
+           uint32_t *nnodes, char **hostlist)
 {
   icrmerr_t rc;
+  char buf[DEPEND_MAXLEN];
   job_desc_msg_t jobreq;
   resource_allocation_response_msg_t *resp;
 
-  rc = ICRM_SUCCESS;
+  assert(hostlist);
 
   if (shrink) {
     return ICRM_ENOTIMPL;
   }
 
+  rc = ICRM_SUCCESS;
+
   slurm_init_job_desc_msg(&jobreq);
-  jobreq.min_nodes = nnodes;
-  jobreq.max_nodes = nnodes;
+  jobreq.min_nodes = *nnodes;
+  jobreq.max_nodes = *nnodes;
   jobreq.shared = 0;
   jobreq.user_id = getuid();
   jobreq.group_id = getgid();
-  /* jobreq.alloc_resp_port = icrm->port; */
+
+  snprintf(buf, DEPEND_MAXLEN, "expand:%"PRIu32, jobid);
+  jobreq.dependency = buf;
+
+  *nnodes = 0;
+  *hostlist = NULL;
 
   /* wait indefinitely */
   resp = slurm_allocate_resources_blocking(&jobreq, 0, NULL);
   if (resp == NULL) {
-    WRITERR(icrm, "slurm_allocate_resources_blocking: %s\n", slurm_strerror(slurm_get_errno()));
+    WRITERR(icrm, "slurm_allocate_resources_blocking: %s", slurm_strerror(slurm_get_errno()));
     rc = ICRM_ERESOURCEMAN;
+    goto end;
   }
 
-  slurm_free_resource_allocation_response_msg(resp);
+  size_t len = strnlen(resp->node_list, HOSTLIST_MAXLEN);
+  if (len == HOSTLIST_MAXLEN) {
+    rc = ICRM_ERESOURCEMAN;
+    WRITERR(icrm, "slurm_allocate_resources_blocking: hostlist too long");
+    goto end;
+  }
 
+  *hostlist = malloc(len);
+  if (!hostlist) {
+    rc = ICRM_ENOMEM;
+    goto end;
+  }
+
+  *nnodes = resp->node_cnt;
+  strcpy(*hostlist, resp->node_list);
+
+ end:
+  slurm_free_resource_allocation_response_msg(resp);
   return rc;
 }
 
-
-icrmerr_t
-icrm_alloc_wait(icrm_context_t *icrm, uint32_t jobid)
-{
-  icrmerr_t rc;
-  struct sockaddr_storage sin;
-  socklen_t len = sizeof(sin);
-  int sock;
-
-  resource_allocation_response_msg_t *resp;
-
-  sock = accept(icrm->sock, (struct sockaddr *)&sin, &len);
-  if (sock == -1) {
-    WRITERR(icrm, "accept: %s", strerror(errno));
-    rc = ICRM_FAILURE;
-  } else {
-    /* technically, all the job information has already been sent
-       by slurmctld to the socket, but it is unparseable with
-       Slurm API, so we resort to a new RPC */
-    rc = slurm_allocation_lookup(jobid, &resp);
-    if (rc != SLURM_SUCCESS) {
-      WRITERR(icrm, "slurm_allocation_lookup: %s", slurm_strerror(slurm_get_errno()));
-      rc = ICRM_FAILURE;
-    }
-  }
-
-  fprintf(stderr, "ALLOCED JOB %u! NODES %s\n", resp->job_id, resp->node_list);
-  /* total = 0; */
-  /* while ((n = recv(sock, resp + total, sizeof(*resp) - total, 0)) > 0) { */
-  /*   total += n; */
-  /*   fprintf(stderr, "RECVING\n"); */
-  /* } */
-  /* if (n == -1) { */
-  /*   WRITERR(icrm, "recv: %s", strerror(errno)); */
-  /*   rc = ICRM_FAILURE; */
-  /* } */
-  /* if (total == sizeof(*resp)) { */
-  /*   rc = ICRM_SUCCESS; */
-  /* } else { */
-  /*   WRITERR(icrm, "Incomplete Slurm answer"); */
-  /*   rc = ICRM_FAILURE; */
-  /* } */
-  return ICRM_SUCCESS;
-}
 
 static icrmerr_t
 _writerr(icrm_context_t *icrm, const char *filename, int lineno,

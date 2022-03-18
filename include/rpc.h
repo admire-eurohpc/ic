@@ -153,6 +153,15 @@ MERCURY_GEN_PROC(resalloc_in_t,
                  ((hg_uint32_t)(nnodes)))
 
 
+#define RPC_RESALLOCDONE_NAME  "icc_resallocdone"
+
+MERCURY_GEN_PROC(resallocdone_in_t,
+                 ((hg_uint32_t)(jobid))
+                 ((hg_bool_t)(shrink))
+                 ((hg_uint32_t)(nnodes))
+                 ((hg_string_t)(hostlist)))
+
+
 #define RPC_JOBMON_SUBMIT_NAME  "icc_jobmon_submit"
 #define RPC_JOBMON_EXIT_NAME  "icc_jobmon_exit"
 

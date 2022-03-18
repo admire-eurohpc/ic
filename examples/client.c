@@ -73,6 +73,9 @@ main(int argc, char **argv)
     assert(ret == ICC_SUCCESS && rpcret == ICC_SUCCESS);
   }
 
+  /* wait for allocation request */
+  icc_sleep(icc, 1000);
+
   puts("icc_client: Finishing");
   ret = icc_fini(icc);
   assert(ret == 0);
