@@ -40,7 +40,7 @@ static const char *_icc_type_str(enum icc_client_type type);
 static int _strtouint32(const char *nptr, uint32_t *dest);
 
 
-static int _init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_context **icc_context);
+static int _setup_margo(enum icc_log_level log_level, struct icc_context *icc);
 static int _setup_reconfigure(struct icc_context *icc, icc_reconfigure_func_t func, void *data);
 static int _setup_icrm(struct icc_context *icc);
 static int _register_client(struct icc_context *icc, int nprocs);
@@ -49,57 +49,77 @@ static int _register_client(struct icc_context *icc, int nprocs);
 
 int
 icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_context **icc) {
-  int rc;
-
-  rc = _init(log_level, typeid, icc);
-  if (rc)
-    goto error;
-
-  if ((*icc)->bidirectional) {
-    rc = _register_client(*icc, 0);
-    if (rc)
-      goto error;
-  }
-  return ICC_SUCCESS;
-
- error:
-  icc_fini(*icc);
-  *icc = NULL;
-  return rc;
+  return icc_init_mpi(log_level, typeid, 0, NULL, NULL, icc);
 }
 
 int
 icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
              unsigned int nprocs, icc_reconfigure_func_t func, void *data,
-             struct icc_context **icc)
+             struct icc_context **icc_context)
 {
   int rc;
 
-  rc = _init(log_level, typeid, icc);
+  *icc_context = NULL;
+
+  struct icc_context *icc = calloc(1, sizeof(struct icc_context));
+  if (!icc)
+    return ICC_ENOMEM;
+
+  icc->type = typeid;
+
+  /*  apps that must be able to both receive AND send RPCs to the IC */
+  if (typeid == ICC_TYPE_MPI || typeid == ICC_TYPE_FLEXMPI)
+    icc->bidirectional = 1;
+
+  /* resource manager jobid */
+  char *jobid;
+  jobid = getenv("ADMIRE_JOB_ID");
+  if (!jobid) {
+    margo_info(icc->mid, "icc (init): Missing ADMIRE_JOB_ID");
+    rc = ICC_FAILURE;
+    goto error;
+  } else {
+    int rc = _strtouint32(jobid, &icc->jobid);
+    if (rc) {
+      margo_error(icc->mid, "icc (init): Error converting ADMIRE_JOB_ID \"%s\": %s", jobid, strerror(-rc));
+    }
+  }
+
+  /* client UUID, XX could be replaced with jobid.jobstepid? */
+  uuid_t uuid;
+  uuid_generate(uuid);
+  uuid_unparse(uuid, icc->clid);
+
+  rc = _setup_margo(log_level, icc);
+  if (rc)
+    goto error;
+
+  /* icrm requires Argobots to be setup, so icrm goes after Margo */
+  rc = _setup_icrm(icc);
   if (rc)
     goto error;
 
   /* register reconfiguration func first to avoid a race condition
      where the IC would send a malleability command before the client
      is set up */
-  rc = _setup_reconfigure(*icc, func, data);
-  if (rc)
-    goto error;
-
-  rc = _setup_icrm(*icc);
-  if (rc)
-    goto error;
-
-  if ((*icc)->bidirectional) {
-    rc = _register_client(*icc, nprocs);
+  if (func) {
+    rc = _setup_reconfigure(icc, func, data);
     if (rc)
       goto error;
   }
+
+  if (icc->bidirectional) {
+    rc = _register_client(icc, nprocs);
+    if (rc)
+      goto error;
+  }
+
+  *icc_context = icc;
+
   return ICC_SUCCESS;
 
  error:
-  icc_fini(*icc);
-  *icc = NULL;
+  icc_fini(icc);
   return rc;
 }
 
@@ -299,24 +319,12 @@ icc_rpc_malleability_region(struct icc_context *icc, enum icc_malleability_regio
 
 
 static int
-_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_context **icc_context)
+_setup_margo(enum icc_log_level log_level, struct icc_context *icc)
 {
   hg_return_t hret;
   int rc = ICC_SUCCESS;
 
-  *icc_context = NULL;
-
-  struct icc_context *icc = calloc(1, sizeof(struct icc_context));
-  if (!icc)
-    return -errno;
-
-  icc->bidirectional = 0;
-  icc->registered = 0;
-  icc->type = typeid;
-
-  /*  Apps that must be able to both receive AND send RPCs to the IC */
-  if (typeid == ICC_TYPE_MPI || typeid == ICC_TYPE_FLEXMPI)
-    icc->bidirectional = 1;
+  assert(icc);
 
   /* use 2 extra threads: 1 for RPC network progress, 1 for background
      RPC callbacks */
@@ -324,7 +332,7 @@ _init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_cont
                         icc->bidirectional ? MARGO_SERVER_MODE : MARGO_CLIENT_MODE, 1, 1);
   if (!icc->mid) {
     rc = ICC_FAILURE;
-    goto error;
+    goto end;
   }
 
   margo_set_log_level(icc->mid, icc_to_margo_log_level(log_level));
@@ -333,7 +341,7 @@ _init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_cont
   if (!path) {
     margo_error(icc->mid, "Could not get ICC address file");
     rc = ICC_FAILURE;
-    goto error;
+    goto end;
   }
 
   FILE *f = fopen(path, "r");
@@ -341,7 +349,7 @@ _init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_cont
     margo_error(icc->mid, "Could not open IC address file \"%s\": %s", path ? path : "(NULL)", strerror(errno));
     free(path);
     rc = ICC_FAILURE;
-    goto error;
+    goto end;
   }
   free(path);
 
@@ -350,7 +358,7 @@ _init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_cont
     margo_error(icc->mid, "Could not read from IC address file: %s", strerror(errno));
     fclose(f);
     rc = ICC_FAILURE;
-    goto error;
+    goto end;
   }
   fclose(f);
 
@@ -358,34 +366,8 @@ _init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_cont
   if (hret != HG_SUCCESS) {
     margo_error(icc->mid, "Could not get Margo address from IC address file: %s", HG_Error_to_string(hret));
     rc = ICC_FAILURE;
-    goto error;
+    goto end;
   }
-
-  /* get resource manager jobid */
-  char *jobid;
-
-  icc->jobid = 0;
-
-  jobid = getenv("ADMIRE_JOB_ID");
-
-  if (!jobid) {
-    margo_info(icc->mid, "ICC INIT: missing ADMIRE_JOB_ID");
-    rc = ICC_FAILURE;
-    goto error;
-  } else {
-    int rc = _strtouint32(jobid, &icc->jobid);
-    if (rc) {
-      margo_error(icc->mid, "ICC INIT: Error converting ADMIRE_JOB_ID \"%s\": %s", jobid, strerror(-rc));
-    }
-  }
-
-  /* set client UUID */
-  uuid_t uuid;
-  uuid_generate(uuid);
-  uuid_unparse(uuid, icc->clid);
-
-  /* init reconfigure stuff */
-  icc->flexhandle = NULL;
 
   /* register RPCs. Note that if the callback is not NULL the client
      is able to send AND receive the RPC */
@@ -415,15 +397,7 @@ _init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_cont
     icc->rpcids[RPC_MALLEABILITY_REGION] = MARGO_REGISTER(icc->mid, RPC_MALLEABILITY_REGION_NAME, malleability_region_in_t, rpc_out_t, NULL);
   }
 
-  *icc_context = icc;
-  return ICC_SUCCESS;
-
- error:
-  if (icc) {
-    if (icc->mid)
-      margo_finalize(icc->mid);
-    free(icc);
-  }
+ end:
   return rc;
 }
 
@@ -437,6 +411,8 @@ _setup_reconfigure(struct icc_context *icc, icc_reconfigure_func_t func, void *d
     margo_error(icc->mid, "%s: Malloc failure", __func__);
     return ICC_ENOMEM;
   }
+
+  icc->flexhandle = NULL;
 
   if (icc->type == ICC_TYPE_FLEXMPI && !func) {
     /* XX TMP: dlsym FlexMPI reconfiguration function... */
@@ -520,75 +496,13 @@ _register_client(struct icc_context *icc, int nprocs)
   icc->provider_id = MARGO_PROVIDER_DEFAULT;
 
   if (get_hg_addr(icc->mid, addr_str, &addr_str_size)) {
-    margo_error(icc->mid, "ICC REGISTER: Error getting self address");
+    margo_error(icc->mid, "icc (register): Error getting self address");
     rc = ICC_FAILURE;
     goto end;
   }
 
-  /* get job information, either from the environment or from the
-     file ADMIRE_JOB_ENV. Environment variables take precedence over
-     values in the file */
-
-  FILE *f = NULL;
-  f = fopen(ADMIRE_JOB_ENV, "r");
-  if (!f) {
-    margo_info(icc->mid, "Ignoring environment file %s: %s", ADMIRE_JOB_ENV, strerror(errno));
-  }
-  else {
-    char *line = NULL;
-    char *val = NULL;
-    size_t len = 0;
-    ssize_t nread;
-
-    while ((nread = getline(&line, &len, f)) != -1) {
-      val = strchr(line, '=');
-      if (val == NULL) {
-        margo_error(icc->mid, "Invalid environment file %s", ADMIRE_JOB_ENV);
-        goto end;
-      }
-
-      /* line points to env key, val to env value */
-      *val = '\0';
-      val++;
-
-      rc = setenv(line, val, 0); /* do not overwrite environment */
-      if (rc) {
-        margo_error(icc->mid, "Could not set Admire environment variables: %s", strerror(errno));
-        goto end;
-      }
-      }
-    free(line);
-    fclose(f);
-  }
-
-  char *jobntasks, *jobnnodes;
-  jobnnodes = getenv("ADMIRE_JOB_NNODES");
-  jobntasks = getenv("ADMIRE_JOB_NTASKS");
-
-  if (!jobnnodes) {
-    margo_error(icc->mid, "Missing ADMIRE_JOB_NNODES");
-    rc = ICC_FAILURE;
-    goto end;
-  }
-
-  rc = _strtouint32(jobnnodes, &rpc_in.jobnnodes);
-  if (rc) {
-    margo_error(icc->mid, "Error converting job nnodes \"%s\": %s", jobnnodes, strerror(-rc));
-    rc = ICC_FAILURE;
-    goto end;
-  }
-
-  /* note: ntasks env is not set by SLURM without the --ntasks option */
-  if (jobntasks) {
-    rc = _strtouint32(jobntasks, &rpc_in.jobntasks);
-    if (rc) {
-      margo_error(icc->mid, "Error converting job ntasks \"%s\": %s", jobntasks, strerror(-rc));
-      rc = ICC_FAILURE;
-      goto end;
-    }
-  } else {
-    rpc_in.jobntasks = 0;
-  }
+  rpc_in.jobntasks = 0;
+  rpc_in.jobnnodes = 0;
 
   rpc_in.nprocs = nprocs;
   rpc_in.addr_str = addr_str;
@@ -600,7 +514,7 @@ _register_client(struct icc_context *icc, int nprocs)
   rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_CLIENT_REGISTER], &rpc_in, &rpc_rc);
 
   if (rc || rpc_rc) {
-    margo_error(icc->mid, "Failure registering bidirectional client to the IC (ret = %d, RPC ret = %d)", rc, rpc_rc);
+    margo_error(icc->mid, "icc (register): Cannot register client to the IC (ret = %d, RPC ret = %d)", rc, rpc_rc);
     rc = ICC_FAILURE;
   } else {
     icc->registered = 1;
