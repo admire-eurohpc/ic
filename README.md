@@ -225,4 +225,4 @@ follows is an effort to document the “schema” accessible to the intelligent 
   registered within the job `<jobid>`
 
 - `job:<jobid>` store the feature of a job as passed by the tasks
-  running in the allocation: number of associated nodes and tasks.
+  running in the allocation: number of associated cpus and nodes.

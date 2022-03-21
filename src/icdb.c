@@ -349,7 +349,7 @@ icdb_getclients(struct icdb_context *icdb, const char *type, uint32_t jobid,
 int
 icdb_setclient(struct icdb_context *icdb, const char *clid,
                const char *type, const char *addr, uint16_t provid,
-               uint32_t jobid, uint32_t jobntasks, uint32_t jobnnodes,
+               uint32_t jobid, uint32_t jobncpus, uint32_t jobnnodes,
                uint64_t nprocs)
 {
   CHECK_ICDB(icdb);
@@ -365,8 +365,8 @@ icdb_setclient(struct icdb_context *icdb, const char *clid,
   /* XX fixme: wrap in transaction */
 
   /* 1) Create or update job */
-  rep = redisCommand(ctx, "HSET job:%"PRIu32" jobid %"PRIu32" ntasks %"PRIu32" nnodes %"PRIu32,
-                     jobid, jobid, jobntasks, jobnnodes);
+  rep = redisCommand(ctx, "HSET job:%"PRIu32" jobid %"PRIu32" ncpus %"PRIu32" nnodes %"PRIu32,
+                     jobid, jobid, jobncpus, jobnnodes);
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
 
   /* 2) write client to hashmap */
@@ -508,8 +508,8 @@ icdb_getjob(struct icdb_context *icdb, uint32_t jobid, struct icdb_job *job)
     else if (!strcmp(key, "nnodes")) {
       ICDB_GET_UINT32(icdb, r, &job->nnodes, key);
     }
-    else if (!strcmp(key, "ntasks")) {
-      ICDB_GET_UINT32(icdb, r, &job->ntasks, key);
+    else if (!strcmp(key, "ncpus")) {
+      ICDB_GET_UINT32(icdb, r, &job->ncpus, key);
     }
 
     if (icdb->status != ICDB_SUCCESS)

@@ -244,7 +244,7 @@ malleability_th(void *arg)
       long long dprocs;
 
       /* share cpus fairly between all steps of a job */
-      dprocs = job.ntasks / nclients - clients[i].nprocs;
+      dprocs = job.ncpus / nclients - clients[i].nprocs;
 
       if (dprocs < INT32_MIN || dprocs > INT32_MAX) {
 	LOG_ERROR(data->mid, "Reconfiguration: Job %"PRIu32": too many new processes");

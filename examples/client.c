@@ -52,7 +52,7 @@ main(int argc, char **argv)
   int rpcret;
 
   struct icc_context *icc;
-  icc_init_mpi(ICC_LOG_INFO, typeid, 12, reconfig, NULL, &icc);
+  icc_init_mpi(ICC_LOG_INFO, typeid, 3, reconfig, NULL, &icc);
   assert(icc != NULL);
 
   ret = icc_rpc_test(icc, 32, typeid, &rpcret);

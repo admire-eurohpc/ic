@@ -6,6 +6,7 @@
 - icc: cleanup logic of registration (register_(flex)mpi?)
 - icc: cleanup context struct, keep icrm_stuff in, put flex stuff in?
 - icc: margo_register_data-ed struct needs to be made thread-safe??
+- icc: clid -> jobid.jobstepid?
 - server: prefix LOG_ERROR with jobid/clid?
 - server: create pool of icrm context
 - server: set hostlist

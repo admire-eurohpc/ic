@@ -16,7 +16,6 @@
 #include "reconfig.h"
 
 
-#define ADMIRE_JOB_ENV  "admire_job.env"
 #define NBLOCKING_ES  64
 #define CHECK_ICC(icc)  if (!(icc)) { return ICC_FAILURE; }
 
@@ -73,16 +72,19 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
 
   /* resource manager jobid */
   char *jobid;
-  jobid = getenv("ADMIRE_JOB_ID");
+  jobid = getenv("SLURM_JOB_ID");
   if (!jobid) {
-    margo_info(icc->mid, "icc (init): Missing ADMIRE_JOB_ID");
-    rc = ICC_FAILURE;
-    goto error;
-  } else {
-    int rc = _strtouint32(jobid, &icc->jobid);
-    if (rc) {
-      margo_error(icc->mid, "icc (init): Error converting ADMIRE_JOB_ID \"%s\": %s", jobid, strerror(-rc));
+    jobid = getenv("SLURM_JOBID");
+    if (!jobid) {
+      margo_info(icc->mid, "icc (init): No JOB_ID environment variable");
+      rc = ICC_FAILURE;
+      goto error;
     }
+  }
+
+  rc = _strtouint32(jobid, &icc->jobid);
+  if (rc) {
+    margo_error(icc->mid, "icc (init): Error converting job id \"%s\": %s", jobid, strerror(-rc));
   }
 
   /* client UUID, XX could be replaced with jobid.jobstepid? */
@@ -504,8 +506,8 @@ _register_client(struct icc_context *icc, int nprocs)
     goto end;
   }
 
-  /* get job info */
-  icrm_ncpus(icc->icrm, icc->jobid, &rpc_in.jobntasks, &rpc_in.jobnnodes);
+  /* get job info from resource manager */
+  icrm_ncpus(icc->icrm, icc->jobid, &rpc_in.jobncpus, &rpc_in.jobnnodes);
 
   rpc_in.nprocs = nprocs;
   rpc_in.addr_str = addr_str;
