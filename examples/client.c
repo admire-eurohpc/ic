@@ -85,7 +85,7 @@ main(int argc, char **argv)
 
 int
 reconfig(int maxprocs, const char *hostlist, void *data){
-  fprintf(stderr, "IN RECONFIG");
+  fputs("IN RECONFIG\n", stderr);
   return 0;
 }
 

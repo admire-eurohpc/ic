@@ -243,6 +243,7 @@ malleability_th(void *arg)
     for (size_t i = 0; i < nclients; i++) {
       long long dprocs;
 
+      /* share cpus fairly between all steps of a job */
       dprocs = job.ntasks / nclients - clients[i].nprocs;
 
       if (dprocs < INT32_MIN || dprocs > INT32_MAX) {

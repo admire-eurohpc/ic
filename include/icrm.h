@@ -62,6 +62,15 @@ char *icrm_errstr(icrm_context_t *icrm);
 icrmerr_t icrm_jobstate(icrm_context_t *icrm, uint32_t jobid,
                         enum icrm_jobstate *jobstate);
 
+/**
+ * Query the resource manager for the number of cpus and the number of
+ * nodes assocoated with JOBID. The result is returned in NCPUS and
+ * NNODES respectively.
+ *
+ * Return ICRM_SUCCESS or an error code.
+ */
+icrmerr_t icrm_ncpus(icrm_context_t *icrm, uint32_t jobid,
+                     uint32_t *ncpus, uint32_t *nnodes);
 
 /**
  * Request a new allocation of NNODES to the resource manager. If

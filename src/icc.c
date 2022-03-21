@@ -493,6 +493,9 @@ _register_client(struct icc_context *icc, int nprocs)
   client_register_in_t rpc_in;
   int rc, rpc_rc;
 
+  assert(icc);
+  assert(icc->icrm);
+
   icc->provider_id = MARGO_PROVIDER_DEFAULT;
 
   if (get_hg_addr(icc->mid, addr_str, &addr_str_size)) {
@@ -501,8 +504,8 @@ _register_client(struct icc_context *icc, int nprocs)
     goto end;
   }
 
-  rpc_in.jobntasks = 0;
-  rpc_in.jobnnodes = 0;
+  /* get job info */
+  icrm_ncpus(icc->icrm, icc->jobid, &rpc_in.jobntasks, &rpc_in.jobnnodes);
 
   rpc_in.nprocs = nprocs;
   rpc_in.addr_str = addr_str;

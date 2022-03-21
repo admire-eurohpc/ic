@@ -25,6 +25,14 @@
 #define WRITERR(icrm,...)  _writerr(icrm, __FILE__, __LINE__, __func__, __VA_ARGS__)
 
 
+/**
+ * Return info of job JOBID in buffer JOB.
+ *
+ * The caller is responsible for freeing job.
+ */
+static icrmerr_t _icrm_load_job(icrm_context_t *icrm, uint32_t jobid,
+                                job_info_msg_t **job);
+
 static enum icrm_jobstate _slurm2icrmstate(enum job_states slurm_state);
 static icrmerr_t _slurm_socket(icrm_context_t *icrm);
 static icrmerr_t _writerr(icrm_context_t *icrm,
@@ -93,34 +101,49 @@ icrm_jobstate(icrm_context_t *icrm, uint32_t jobid, enum icrm_jobstate *jobstate
   CHECK_NULL(jobstate);
 
   icrmerr_t rc;
-  int slurmrc;
   job_info_msg_t *buf = NULL;
 
-  rc = ICRM_SUCCESS;
+  rc = _icrm_load_job(icrm, jobid, &buf);
 
-  slurmrc = slurm_load_job(&buf, jobid, SHOW_ALL);
-
-  if (slurmrc != SLURM_SUCCESS) {
-    if (errno == ESLURM_INVALID_JOB_ID) {
-      rc = ICRM_EJOBID;
-    } else{
-      rc = ICRM_FAILURE;
-    }
-    WRITERR(icrm, "slurm: %s", slurm_strerror(errno));
-    goto end;
+  if (rc == ICRM_SUCCESS) {
+    *jobstate = _slurm2icrmstate(buf->job_array[0].job_state);
   }
 
-  /* only one job with a given jobid? */
-  assert(buf->record_count == 1);
-
-  *jobstate = _slurm2icrmstate(buf->job_array[0].job_state);
-
- end:
   if (buf) {
     slurm_free_job_info_msg(buf);
   }
+
   return rc;
 }
+
+
+icrmerr_t
+icrm_ncpus(icrm_context_t *icrm, uint32_t jobid,
+           uint32_t *ncpus, uint32_t *nnodes)
+{
+  CHECK_ICRM(icrm);
+  CHECK_NULL(ncpus);
+  CHECK_NULL(nnodes);
+
+  icrmerr_t rc;
+  job_info_msg_t *buf = NULL;
+
+  *ncpus = 0;
+  *nnodes = 0;
+
+  rc = _icrm_load_job(icrm, jobid, &buf);
+  if (rc == ICRM_SUCCESS) {
+    *ncpus = buf->job_array[0].num_cpus;
+    *nnodes = buf->job_array[0].num_nodes;
+  }
+
+  if (buf) {
+    slurm_free_job_info_msg(buf);
+  }
+
+  return rc;
+}
+
 
 icrmerr_t
 icrm_alloc(struct icrm_context *icrm, uint32_t jobid, char shrink,
@@ -327,4 +350,28 @@ _slurm2icrmstate(enum job_states slurm_jobstate)
     break;
   }
   return ICRM_JOB_OTHER;
+}
+
+static icrmerr_t
+_icrm_load_job(icrm_context_t *icrm, uint32_t jobid, job_info_msg_t **job)
+{
+  CHECK_ICRM(icrm);
+
+  icrmerr_t rc;
+  int slurmrc;
+
+  rc = ICRM_SUCCESS;
+
+  slurmrc = slurm_load_job(job, jobid, SHOW_ALL);
+
+  if (slurmrc != SLURM_SUCCESS) {
+    if (errno == ESLURM_INVALID_JOB_ID) {
+      rc = ICRM_EJOBID;
+    } else{
+      rc = ICRM_FAILURE;
+    }
+    WRITERR(icrm, "slurm: %s", slurm_strerror(errno));
+  }
+
+  return rc;
 }

@@ -14,7 +14,7 @@
 - icdb: return icdberr_t from funcs + ERRSTR_LEN + context type _t
 - icdb: with icrm, factorize WRITERR func & macro
 - icdb: generally error string in context, yay or nay?
-- icrm: create comm socket in init
+- icrm: remove socket stuff
 - icrm: make request in client instead of server?
 - jobcleaner: pool of icrm context
 - spawn: wait for finalize? how?
