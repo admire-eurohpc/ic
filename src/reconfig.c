@@ -33,11 +33,11 @@ reconfigure_cb(hg_handle_t h)
   mid = margo_hg_handle_get_instance(h);
   assert(mid);
 
-  out.rc = RPC_OK;
+  out.rc = RPC_SUCCESS;
 
   hret = margo_get_input(h, &in);
   if (hret != HG_SUCCESS) {
-    out.rc = RPC_ERR;
+    out.rc = RPC_FAILURE;
     margo_error(mid, "Input failure RPC_RECONFIGURE: %s", HG_Error_to_string(hret));
     goto respond;
   }
@@ -47,7 +47,7 @@ reconfigure_cb(hg_handle_t h)
 
   if (!d) {
     margo_error(mid, "RPC_RECONFIG: No reconfiguration data");
-    out.rc = RPC_ERR;
+    out.rc = RPC_FAILURE;
     goto respond;
   }
 
@@ -59,9 +59,9 @@ reconfigure_cb(hg_handle_t h)
     rc = flexmpi_reconfigure(mid, in.maxprocs, in.hostlist, d->flexmpifunc, d->flexmpisock);
     margo_error(mid, "OUT RECONFIGURE_CB");
   } else {
-    rc = RPC_ERR;
+    rc = RPC_FAILURE;
   }
-  out.rc = rc ? RPC_ERR : RPC_OK;
+  out.rc = rc ? RPC_FAILURE : RPC_SUCCESS;
 
  respond:
   hret = margo_respond(h, &out);

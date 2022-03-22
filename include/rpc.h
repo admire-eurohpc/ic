@@ -14,11 +14,11 @@
 #define MARGO_PROVIDER_DEFAULT 0  /* for using multiple Argobots
                                      pools, unused for now */
 
-#define RPC_OK  0
-#define RPC_ERR -1
-
-#define RPC_E2BIG 2
-
+enum rpc_errors {
+  RPC_FAILURE = -1,
+  RPC_SUCCESS = 0,
+  RPC_WAIT
+};
 
 #define LOG_ERROR(mid,fmt, ...)  margo_error(mid, "%s (%s:%d): "fmt, __func__, __FILE__, __LINE__, ##__VA_ARGS__)
 

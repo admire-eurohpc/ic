@@ -38,10 +38,8 @@ flexmpi_reconfigure_t flexmpi_func(margo_instance_id mid, void **handle);
 /**
  * Reconfigure callback.
  *
- * RPC answers:
- * RPC_OK if everything went fine
- * RPC_E2BIG if the command is too long to fit in the buffer.
- *
+ * RPC status code:
+ * RPC_SUCCESS or RPC_FAILURE in case of error.
  */
 void reconfigure_cb(hg_handle_t h);
 DECLARE_MARGO_RPC_HANDLER(reconfigure_cb);

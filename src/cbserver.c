@@ -42,17 +42,17 @@ client_register_cb(hg_handle_t h)
   mid = margo_hg_handle_get_instance(h);
   assert(mid);
 
-  out.rc = ICC_SUCCESS;
+  out.rc = RPC_SUCCESS;
 
   MARGO_GET_INPUT(h, in, hret);
   if (hret != HG_SUCCESS) {
-    out.rc = ICC_FAILURE;
+    out.rc = RPC_FAILURE;
     goto respond;
   }
 
   ABT_GET_XRANK(ret, xrank);
   if (ret != ABT_SUCCESS) {
-    out.rc = ICC_FAILURE;
+    out.rc = RPC_FAILURE;
     goto respond;
   }
 
@@ -66,7 +66,7 @@ client_register_cb(hg_handle_t h)
 
   /* can happen if RPC is received before data is registered */
   if (!data) {
-    out.rc = ICC_FAILURE;
+    out.rc = RPC_FAILURE;
     LOG_ERROR(mid, "No registered data");
     goto respond;
   }
@@ -79,7 +79,7 @@ client_register_cb(hg_handle_t h)
     if (data->icdbs[xrank]) {
       LOG_ERROR(mid, "Could not write client %s to database: %s", in.clid, icdb_errstr(data->icdbs[xrank]));
     }
-    out.rc = ICC_FAILURE;
+    out.rc = RPC_FAILURE;
   }
 
   /* wake up the malleability thread */
@@ -108,17 +108,17 @@ client_deregister_cb(hg_handle_t h)
   mid = margo_hg_handle_get_instance(h);
   assert(mid);
 
-  out.rc = ICC_SUCCESS;
+  out.rc = RPC_SUCCESS;
 
   MARGO_GET_INPUT(h, in, hret);
   if (hret != HG_SUCCESS) {
-    out.rc = ICC_FAILURE;
+    out.rc = RPC_FAILURE;
     goto respond;
   }
 
   ABT_GET_XRANK(ret, xrank);
   if (ret != ABT_SUCCESS) {
-    out.rc = ICC_FAILURE;
+    out.rc = RPC_FAILURE;
     goto respond;
   }
 
@@ -128,7 +128,7 @@ client_deregister_cb(hg_handle_t h)
   struct cb_data *data = (struct cb_data *)margo_registered_data(mid, info->id);
 
   if (!data) {
-    out.rc = ICC_FAILURE;
+    out.rc = RPC_FAILURE;
     LOG_ERROR(mid, "No registered data");
     goto respond;
   }
@@ -140,7 +140,7 @@ client_deregister_cb(hg_handle_t h)
 
   if (ret != ICDB_SUCCESS) {
     margo_error(mid, "%s: Could not delete client %s: %s", __func__, in.clid, icdb_errstr(data->icdbs[xrank]));
-    out.rc = ICC_FAILURE;
+    out.rc = RPC_FAILURE;
   }
 
   /* wake up the malleability thread */
@@ -168,11 +168,11 @@ resallocdone_cb(hg_handle_t h)
   mid = margo_hg_handle_get_instance(h);
   assert(mid);
 
-  out.rc = ICC_SUCCESS;
+  out.rc = RPC_SUCCESS;
 
   MARGO_GET_INPUT(h,in,hret);
   if (hret != HG_SUCCESS) {
-    out.rc = ICC_FAILURE;
+    out.rc = RPC_FAILURE;
     goto respond;
   }
 
@@ -199,14 +199,14 @@ jobclean_cb(hg_handle_t h)
   mid = margo_hg_handle_get_instance(h);
   assert(mid);
 
-  out.rc = ICC_SUCCESS;
+  out.rc = RPC_SUCCESS;
 
   /* XX macro? */
   const struct hg_info *info = margo_get_info(h);
   struct cb_data *data = (struct cb_data *)margo_registered_data(mid, info->id);
 
   if (!data) {
-    out.rc = ICC_FAILURE;
+    out.rc = RPC_FAILURE;
     LOG_ERROR(mid, "No registered data");
     goto respond;
   }
@@ -214,13 +214,13 @@ jobclean_cb(hg_handle_t h)
 
   ABT_GET_XRANK(ret, xrank);
   if (ret != ABT_SUCCESS) {
-    out.rc = ICC_FAILURE;
+    out.rc = RPC_FAILURE;
     goto respond;
   }
 
   MARGO_GET_INPUT(h,in,hret);
   if (hret != HG_SUCCESS) {
-    out.rc = ICC_FAILURE;
+    out.rc = RPC_FAILURE;
     goto respond;
   }
 
@@ -231,7 +231,7 @@ jobclean_cb(hg_handle_t h)
   ret = icrm_init(&icrm);
   if (ret != ICRM_SUCCESS) {
     LOG_ERROR(mid, "Ressource manager init failure");
-    out.rc = ICC_FAILURE;
+    out.rc = RPC_FAILURE;
     goto respond;
   }
 
@@ -239,7 +239,7 @@ jobclean_cb(hg_handle_t h)
   if (ret != ICRM_SUCCESS) {
     LOG_ERROR(mid, "Ressource manager error: %s", icrm_errstr(icrm));
     /* keep going even if the RM does not recognize the job */
-    /* out.rc = ICC_FAILURE; */
+    /* out.rc = RPC_FAILURE; */
     /* goto respond; */
   }
 
@@ -251,11 +251,11 @@ jobclean_cb(hg_handle_t h)
     ret = icdb_deljob(data->icdbs[xrank], in.jobid);
     if (ret != ICDB_SUCCESS) {
       LOG_ERROR(mid, "Cleanup failure job %"PRIu32": %s", in.jobid, icdb_errstr(data->icdbs[xrank]));
-      out.rc = ICC_FAILURE;
+      out.rc = RPC_FAILURE;
     }
   } else {
     margo_info(mid, "Job cleaner: ignoring running job %"PRIu32, in.jobid);
-    out.rc = ICC_FAILURE;
+    out.rc = RPC_FAILURE;
   }
 
  respond:
@@ -277,17 +277,17 @@ jobmon_submit_cb(hg_handle_t h)
   mid = margo_hg_handle_get_instance(h);
   assert(mid);
 
-  out.rc = ICC_SUCCESS;
+  out.rc = RPC_SUCCESS;
 
   MARGO_GET_INPUT(h,in,hret);
   if (hret != HG_SUCCESS) {
-    out.rc = ICC_FAILURE;
+    out.rc = RPC_FAILURE;
     goto respond;
   }
 
   ABT_GET_XRANK(ret, xrank);
   if (ret != ABT_SUCCESS) {
-    out.rc = ICC_FAILURE;
+    out.rc = RPC_FAILURE;
     goto respond;
   }
 
@@ -295,7 +295,7 @@ jobmon_submit_cb(hg_handle_t h)
   struct cb_data *data = (struct cb_data *)margo_registered_data(mid, info->id);
 
   if (!data) {
-    out.rc = ICC_FAILURE;
+    out.rc = RPC_FAILURE;
     LOG_ERROR(mid, "No registered data");
     goto respond;
   }
@@ -307,7 +307,7 @@ jobmon_submit_cb(hg_handle_t h)
   ret = icdb_command(data->icdbs[xrank], "SET nnodes:%"PRIu32".%"PRIu32" %"PRIu32,
                      in.jobid, in.jobstepid, in.nnodes);
   if (ret != ICDB_SUCCESS) {
-    out.rc = ICC_FAILURE;
+    out.rc = RPC_FAILURE;
     margo_error(mid, "%s: Could not write to IC database: %s", __func__, icdb_errstr(data->icdbs[xrank]));
   }
 
@@ -348,11 +348,11 @@ adhoc_nodes_cb(hg_handle_t h)
   mid = margo_hg_handle_get_instance(h);
   assert(mid);
 
-  out.rc = ICC_SUCCESS;
+  out.rc = RPC_SUCCESS;
 
   MARGO_GET_INPUT(h,in,hret);
   if (hret != HG_SUCCESS) {
-    out.rc = ICC_FAILURE;
+    out.rc = RPC_FAILURE;
   } else {
     margo_info(mid, "IC got adhoc_nodes request from job %"PRIu32": %"PRIu32" nodes (%"PRIu32" nodes assigned by Slurm)",
                in.jobid, in.nnodes, in.nnodes);
@@ -376,17 +376,17 @@ malleability_avail_cb(hg_handle_t h)
   mid = margo_hg_handle_get_instance(h);
   assert(mid);
 
-  out.rc = ICC_SUCCESS;
+  out.rc = RPC_SUCCESS;
 
   MARGO_GET_INPUT(h, in, hret);
   if (hret != HG_SUCCESS) {
-    out.rc = ICC_FAILURE;
+    out.rc = RPC_FAILURE;
     goto respond;
   }
 
   ABT_GET_XRANK(ret, xrank);
   if (ret != ABT_SUCCESS) {
-    out.rc = ICC_FAILURE;
+    out.rc = RPC_FAILURE;
     goto respond;
   }
 
@@ -394,7 +394,7 @@ malleability_avail_cb(hg_handle_t h)
   struct cb_data *data = (struct cb_data *)margo_registered_data(mid, info->id);
 
   if (!data) {
-    out.rc = ICC_FAILURE;
+    out.rc = RPC_FAILURE;
     LOG_ERROR(mid, "No registered data");
     goto respond;
   }
@@ -406,7 +406,7 @@ malleability_avail_cb(hg_handle_t h)
 
   if (ret != ICDB_SUCCESS) {
     margo_error(mid, "%s: Could not write to IC database: %s", __func__, icdb_errstr(data->icdbs[xrank]));
-    out.rc = ICC_FAILURE;
+    out.rc = RPC_FAILURE;
   }
 
  respond:
@@ -428,11 +428,11 @@ malleability_region_cb(hg_handle_t h)
   mid = margo_hg_handle_get_instance(h);
   assert(mid);
 
-  out.rc = ICC_SUCCESS;
+  out.rc = RPC_SUCCESS;
 
   MARGO_GET_INPUT(h, in, hret);
   if (hret != HG_SUCCESS) {
-    out.rc = ICC_FAILURE;
+    out.rc = RPC_FAILURE;
     goto respond;
   }
 
