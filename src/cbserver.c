@@ -176,8 +176,9 @@ resallocdone_cb(hg_handle_t h)
     goto respond;
   }
 
-  margo_info(mid, "GOT RESALLOCDONE for %"PRIu32" nodes: %s",
-             in.nnodes, in.hostlist);
+  /* XX write to DB */
+  margo_info(mid, "Job %"PRIu32": allocated %"PRIu32" CPUs (%s)",
+             in.jobid, in.ncpus, in.hostlist);
 
  respond:
   MARGO_RESPOND(h, out, hret)
@@ -245,7 +246,7 @@ jobclean_cb(hg_handle_t h)
   icrm_fini(&icrm);
 
   if (state != ICRM_JOB_PENDING && state != ICRM_JOB_RUNNING) {
-    margo_info(mid, "Job cleaner: Will cleanup job %"PRIu32"\n", in.jobid);
+    margo_info(mid, "Job cleaner: Will cleanup job %"PRIu32, in.jobid);
 
     ret = icdb_deljob(data->icdbs[xrank], in.jobid);
     if (ret != ICDB_SUCCESS) {

@@ -26,7 +26,7 @@
 struct alloc_args {
   const struct icc_context *icc;
   char     shrink;
-  uint32_t nnodes;
+  uint32_t ncpus;
   int      retcode;
 };
 
@@ -74,7 +74,8 @@ resalloc_cb(hg_handle_t h)
      RPC do */
   struct alloc_args args = {
     .icc = icc,
-    .shrink = in.shrink, .nnodes = in.nnodes,
+    .shrink = in.shrink,
+    .ncpus = in.ncpus,
     .retcode = ICC_SUCCESS
   };
 
@@ -102,11 +103,13 @@ _alloc_th(struct alloc_args *args)
 
   in.jobid = icc->jobid;
   in.shrink = args->shrink;
-  in.nnodes = args->nnodes;
+  in.ncpus = args->ncpus;
   in.hostlist = NULL;
 
   /* blocking call */
-  ret = icrm_alloc(icc->icrm, in.jobid, args->shrink, &in.nnodes, &in.hostlist);
+  ret = icrm_alloc(icc->icrm, in.jobid, args->shrink, &in.ncpus, &in.hostlist);
+
+  margo_debug(icc->mid, "Job %"PRIu32" got resource allocation of %"PRIu32" CPUs (%s)", in.jobid, in.ncpus, in.hostlist);
 
   if (ret != ICRM_SUCCESS) {
     args->retcode = ICC_FAILURE;

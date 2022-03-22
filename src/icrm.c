@@ -147,7 +147,7 @@ icrm_ncpus(icrm_context_t *icrm, uint32_t jobid,
 
 icrmerr_t
 icrm_alloc(struct icrm_context *icrm, uint32_t jobid, char shrink,
-           uint32_t *nnodes, char **hostlist)
+           uint32_t *ncpus, char **hostlist)
 {
   icrmerr_t rc;
   int sret;
@@ -170,16 +170,16 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid, char shrink,
   slurm_init_job_desc_msg(&jobreq);
 
   /* 1. get allocation, equivalent to:
-     "salloc -N$nnodes --dependency=expand:$jobid"
+     "salloc -n$ncpus --dependency=expand:$jobid"
      wait indefinitely */
-  jobreq.min_nodes = *nnodes;
-  jobreq.max_nodes = *nnodes;
+  jobreq.min_cpus = *ncpus;
+  jobreq.max_cpus = *ncpus;
   jobreq.shared = 0;
 
   snprintf(buf, DEPEND_MAXLEN, "expand:%"PRIu32, jobid);
   jobreq.dependency = buf;
 
-  *nnodes = 0;
+  *ncpus = 0;
   *hostlist = NULL;
 
   resp = slurm_allocate_resources_blocking(&jobreq, 0, NULL);
@@ -204,7 +204,10 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid, char shrink,
     goto end;
   }
 
-  *nnodes = resp->node_cnt;
+  for (uint32_t i = 0; i < resp->num_cpu_groups; i++) {
+    *ncpus += resp->cpus_per_node[i] * resp->cpu_count_reps[i];
+  }
+
   strcpy(*hostlist, resp->node_list);
 
   /* 2. update allocation, equivalent to:

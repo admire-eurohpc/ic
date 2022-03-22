@@ -179,7 +179,7 @@ malleability_th(void *arg)
     void *tmp;
 
     if (!data->icdbs) {
-      LOG_ERROR(data->mid, "ICDB context is NULL");
+      LOG_ERROR(data->mid, "Null ICDB context");
       return;
     }
 
@@ -240,10 +240,10 @@ malleability_th(void *arg)
     margo_info(data->mid, "Malleability: Job %"PRIu32": got %zu client%s",
                data->jobid, nclients, nclients > 1 ? "s" : "");
 
+    /* reconfigure to share cpus fairly between all steps of a job */
     for (size_t i = 0; i < nclients; i++) {
       long long dprocs;
 
-      /* share cpus fairly between all steps of a job */
       dprocs = job.ncpus / nclients - clients[i].nprocs;
 
       if (dprocs < INT32_MIN || dprocs > INT32_MAX) {
@@ -267,10 +267,10 @@ malleability_th(void *arg)
         break;
       }
 
-      /* XX TMP test alterjob */
+      /* XX TMP test resalloc */
       resalloc_in_t allocin;
       allocin.shrink = 0;
-      allocin.nnodes = 4;
+      allocin.ncpus = 5;
 
       ret = rpc_send(data->mid, addr, data->rpcids[RPC_RESALLOC], &allocin, &rpcret);
       if (ret) {

@@ -83,6 +83,6 @@ icrmerr_t icrm_ncpus(icrm_context_t *icrm, uint32_t jobid,
  * Return ICRM_SUCCESS or an error code.
  */
 icrmerr_t icrm_alloc(icrm_context_t *icrm, uint32_t jobid, char shrink,
-                     uint32_t *nnodes, char **hostlist);
+                     uint32_t *ncpus, char **hostlist);
 
 #endif

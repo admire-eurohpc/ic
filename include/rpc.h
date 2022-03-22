@@ -150,7 +150,7 @@ MERCURY_GEN_PROC(jobclean_in_t, ((hg_uint32_t)(jobid)))
 
 MERCURY_GEN_PROC(resalloc_in_t,
                  ((hg_bool_t)(shrink))
-                 ((hg_uint32_t)(nnodes)))
+                 ((hg_uint32_t)(ncpus)))
 
 
 #define RPC_RESALLOCDONE_NAME  "icc_resallocdone"
@@ -158,7 +158,7 @@ MERCURY_GEN_PROC(resalloc_in_t,
 MERCURY_GEN_PROC(resallocdone_in_t,
                  ((hg_uint32_t)(jobid))
                  ((hg_bool_t)(shrink))
-                 ((hg_uint32_t)(nnodes))
+                 ((hg_uint32_t)(ncpus))
                  ((hg_string_t)(hostlist)))
 
 
