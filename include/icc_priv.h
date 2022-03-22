@@ -8,7 +8,7 @@
 #include "icc.h"
 #include "rpc.h"
 #include "icrm.h"
-
+#include "flexmpi.h"           /* flexmpi function signature */
 
 struct icc_context {
   margo_instance_id mid;
@@ -25,7 +25,13 @@ struct icc_context {
   ABT_xstream       icrm_xstream;       /* blocking execution stream */
   ABT_pool          icrm_pool;
 
-  void              *flexhandle;        /* dlopen handle to FlexMPI library */
+  icc_reconfigure_func_t reconfig_func;
+  void                   *reconfig_data;
+  /* XX TMP: flexmpi specific */
+  void                   *flexhandle;   /* dlopen handle to FlexMPI lib */
+  int                   flexmpi_sock;
+  flexmpi_reconfigure_t flexmpi_func;
+
 };
 
 #endif

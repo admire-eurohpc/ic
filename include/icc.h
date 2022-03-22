@@ -11,7 +11,7 @@ struct icc_context;
 
 #define ICC_SUCCESS  0
 #define ICC_FAILURE -1
-#define ICC_ENOMEM -1
+#define ICC_ENOMEM   1
 
 
 /* Log levels, lifted from Margo */

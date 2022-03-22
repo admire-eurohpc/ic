@@ -4,8 +4,8 @@
 #include <inttypes.h>           /* uintXX */
 #include <netdb.h>              /* addrinfo */
 #include <stdlib.h>             /* malloc, getenv, setenv, strtoxx */
-#include <stdio.h>              /* getline */
-#include <string.h>             /* strerror, strchr */
+#include <string.h>             /* strerror */
+#include <unistd.h>             /* close */
 #include <margo.h>
 #include "uuid_admire.h"
 
@@ -13,7 +13,7 @@
 #include "rpc.h"
 #include "cb.h"
 #include "cbcommon.h"
-#include "reconfig.h"
+#include "flexmpi.h"
 
 
 #define NBLOCKING_ES  64
@@ -60,7 +60,7 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
 
   *icc_context = NULL;
 
-  struct icc_context *icc = calloc(1, sizeof(struct icc_context));
+  struct icc_context *icc = calloc(1, sizeof(*icc));
   if (!icc)
     return ICC_ENOMEM;
 
@@ -110,15 +110,19 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
   if (rc)
     goto error;
 
-  /* register reconfiguration func first to avoid a race condition
-     where the IC would send a malleability command before the client
-     is set up */
+  /* register reconfiguration func */
   if (func) {
     rc = _setup_reconfigure(icc, func, data);
     if (rc)
       goto error;
   }
 
+  /* pass some data to callbacks that need it */
+  margo_register_data(icc->mid, icc->rpcids[RPC_RECONFIGURE], icc, NULL);
+  margo_register_data(icc->mid, icc->rpcids[RPC_RESALLOC], icc, NULL);
+
+  /* register client last to avoid race conditions where the IC would
+     send a RPC command before the client is fully set up */
   if (icc->bidirectional) {
     rc = _register_client(icc, nprocs);
     if (rc)
@@ -193,6 +197,10 @@ icc_fini(struct icc_context *icc)
       margo_error(icc->mid, "%s", dlerror());
       rc = ICC_FAILURE;
     }
+  }
+
+  if (icc->flexmpi_sock != -1) {
+    close(icc->flexmpi_sock);
   }
 
   if (icc->mid)
@@ -419,23 +427,17 @@ _setup_reconfigure(struct icc_context *icc, icc_reconfigure_func_t func, void *d
 {
   CHECK_ICC(icc);
 
-  struct reconfig_data *d = malloc(sizeof(*d));
-  if (!d) {
-    margo_error(icc->mid, "%s: Malloc failure", __func__);
-    return ICC_ENOMEM;
-  }
-
   icc->flexhandle = NULL;
 
   if (icc->type == ICC_TYPE_FLEXMPI && !func) {
     /* XX TMP: dlsym FlexMPI reconfiguration function... */
-    d->flexmpifunc = flexmpi_func(icc->mid, &icc->flexhandle);
-    if (!d->flexmpifunc) {
+    icc->flexmpi_func = flexmpi_func(icc->mid, &icc->flexhandle);
+    if (!icc->flexmpi_func) {
       margo_info(icc->mid, "No FlexMPI reconfigure function, falling back to socket");
       /* ...or init socket to FlexMPI app */
-      d->flexmpisock = -1;
-      d->flexmpisock = flexmpi_socket(icc->mid, "localhost", "6666");
-      if (d->flexmpisock == -1) {
+      icc->flexmpi_sock = -1;
+      icc->flexmpi_sock = flexmpi_socket(icc->mid, "localhost", "6666");
+      if (icc->flexmpi_sock == -1) {
         margo_error(icc->mid, "%s: Could not initialize FlexMPI socket", __func__);
         return ICC_FAILURE;
       }
@@ -445,12 +447,8 @@ _setup_reconfigure(struct icc_context *icc, icc_reconfigure_func_t func, void *d
     return ICC_FAILURE;
   }
 
-  d->func = func;
-  d->data = data;
-  d->type = icc->type;
-
-  /* pass data to callback */
-  margo_register_data(icc->mid, icc->rpcids[RPC_RECONFIGURE], d, free);
+  icc->reconfig_func = func;
+  icc->reconfig_data = data;
 
   return ICC_SUCCESS;
 }

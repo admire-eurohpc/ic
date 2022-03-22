@@ -37,7 +37,7 @@ test_cb(hg_handle_t h)
   MARGO_GET_INPUT(h,in,hret);
 
   if (hret == HG_SUCCESS) {
-    margo_info(mid, "Got \""RPC_TEST_NAME"\" RPC with argument %u\n", in.number);
+    margo_info(mid, "Got \""RPC_TEST_NAME"\" RPC with argument %u", in.number);
   } else {
     out.rc = ICC_FAILURE;
   }

@@ -277,7 +277,10 @@ malleability_th(void *arg)
         LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RESALLOC send failed ", clients[i].jobid, clients[i].clid);
       } else if (rpcret) {
         LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RESALLOC returned with code %d", clients[i].jobid, clients[i].clid, rpcret);
+      } else {
+        margo_info(data->mid, "Malleability: Job %"PRIu32" RPC_RESALLOC for %"PRIu32" CPUs", clients[i].jobid, allocin.ncpus);
       }
+
       data->sleep = 1;
       continue;
 

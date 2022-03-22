@@ -29,7 +29,7 @@ libslurmadhoccli_so := libslurmadhoccli.so
 libslurmjobmon_so := libslurmjobmon.so
 testapp_bin := testapp
 
-sources := server.c rpc.c cb.c cbcommon.c icdb.c icrm.c icc.c adhoccli.c cbserver.c reconfig.c
+sources := server.c rpc.c cb.c cbcommon.c icdb.c icrm.c icc.c adhoccli.c cbserver.c flexmpi.c
 sources += slurmjobmon.c slurmadhoccli.c client.c testapp.c spawn.c jobcleaner.c
 
 # keep libicc in front
@@ -93,7 +93,7 @@ server: icdb.o icrm.o rpc.o cbcommon.o cbserver.o
 server: CFLAGS += `$(PKG_CONFIG) --cflags margo uuid`
 server: LDLIBS += `$(PKG_CONFIG) --libs margo hiredis` -lslurm -Wl,--no-undefined
 
-$(libicc_so): rpc.o cb.o cbcommon.o reconfig.o icrm.o
+$(libicc_so): rpc.o cb.o cbcommon.o flexmpi.o icrm.o
 $(libicc_so): CFLAGS += `$(PKG_CONFIG) --cflags margo uuid`
 $(libicc_so): LDLIBS += `$(PKG_CONFIG) --libs margo uuid` -lslurm -ldl -Wl,--no-undefined,-h$(libicc_soname)
 

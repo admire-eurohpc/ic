@@ -1,5 +1,3 @@
-- Test FlexMPI after modif
-- systematic check for cleaner??
 - icc: jobntasks? ~universe_size in MPI?
 - icc: remove flexhandle, add a proper free function to register
 - icc: get ntasks and nnodes from RM instead of env
@@ -7,6 +5,8 @@
 - icc: cleanup context struct, keep icrm_stuff in, put flex stuff in?
 - icc: margo_register_data-ed struct needs to be made thread-safe??
 - icc: clid -> jobid.jobstepid?
+- icc:resallocdone: no way to get the status code of the alloc ULT
+- flexmpi: simplify func handling, private sock + func enough
 - server: prefix LOG_ERROR with jobid/clid?
 - server: create pool of icrm context
 - server: set hostlist

@@ -1,19 +1,10 @@
-#ifndef __ADMIRE_RECONFIGURE_H
-#define __ADMIRE_RECONFIGURE_H
+#ifndef __ADMIRE_FLEXMPI_H
+#define __ADMIRE_FLEXMPI_H
 
 #include <margo.h>
 
 
 typedef int (*flexmpi_reconfigure_t)(const char *); /* signature of the reconfigure func */
-
-struct reconfig_data {
-  icc_reconfigure_func_t func;
-  void                   *data;
-  enum icc_client_type   type;
-  /* XX TMP: flexmpi specific */
-  int                   flexmpisock;
-  flexmpi_reconfigure_t flexmpifunc;
-};
 
 
 /**
@@ -34,14 +25,14 @@ int flexmpi_socket(margo_instance_id mid, const char *node, const char *service)
  */
 flexmpi_reconfigure_t flexmpi_func(margo_instance_id mid, void **handle);
 
-
 /**
- * Reconfigure callback.
+ * Reconfigure a FlexMPI application by adding or removing MAXPROCS,
+ * depending on whether this number is positive, by using FLEXMPIFUNC
+ * or FLEXMPISOCK is this function is NULL. HOSTLIST is unused.
  *
- * RPC status code:
- * RPC_SUCCESS or RPC_FAILURE in case of error.
+ * Return the result of FLEXMPIFUNC or -1. XX no difference between a
+ * socket use and an error.
  */
-void reconfigure_cb(hg_handle_t h);
-DECLARE_MARGO_RPC_HANDLER(reconfigure_cb);
+int flexmpi_reconfigure(margo_instance_id mid, uint32_t maxprocs, const char *hostlist, flexmpi_reconfigure_t flexmpifunc, int flexmpisock);
 
 #endif

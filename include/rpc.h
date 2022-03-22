@@ -75,12 +75,21 @@ icc_to_margo_log_level(enum icc_log_level icc_log_level)
  * RPC codes. Codes 1 to 127 are reserved for
  * internal use.
  *
- * RPC_CLIENT_REGISTER: Register an IC client as a Margo
+ * RPC_RECONFIGURE (ic): Request that a client reconfigure (i.e update
+ * the resources on which it is running).
+ *
+ * RPC_RESALLOC (ic): Request that a client make a request to the
+ * resource manager.
+ *
+ * RPC_CLIENT_REGISTER (client): Register an IC client as a Margo
  * "target". Once registered, and IC client can both send and receive
  * RPC server. The client needs to be started in MARGO_SERVER_MODE to
  * have an address.
  *
- * RPC_CLIENT_DEREGISTER: Deregister an IC client.
+ * RPC_CLIENT_DEREGISTER (client): Deregister an IC client.
+ *
+ * RPC_RESALLOCDONE (client): Inform the IC that a resource allocation
+ * has been granted.
  *
  * For the public RPCs, see the functions documentation in icc.h.
  */

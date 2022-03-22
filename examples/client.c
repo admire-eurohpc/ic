@@ -52,7 +52,7 @@ main(int argc, char **argv)
   int rpcret;
 
   struct icc_context *icc;
-  icc_init_mpi(ICC_LOG_INFO, typeid, 3, reconfig, NULL, &icc);
+  icc_init_mpi(ICC_LOG_DEBUG, typeid, 3, reconfig, NULL, &icc);
   assert(icc != NULL);
 
   ret = icc_rpc_test(icc, 32, typeid, &rpcret);
@@ -84,8 +84,9 @@ main(int argc, char **argv)
 }
 
 int
-reconfig(int maxprocs, const char *hostlist, void *data){
-  fputs("IN RECONFIG\n", stderr);
+reconfig(int maxprocs, const char *hostlist,
+         void *data __attribute__((unused))) {
+  fprintf(stdout, "IN RECONFIG: %d processes on %s\n", maxprocs, hostlist);
   return 0;
 }
 
