@@ -64,7 +64,6 @@ install: all
 	$(INSTALL) -m 755 jobcleaner $(INSTALL_PATH_BIN)/$(icc_jobcleaner_bin)
 	$(INSTALL) -m 755 scripts/icc_server.sh $(INSTALL_PATH_BIN)/icc_server.sh
 	$(INSTALL) -m 755 scripts/icc_client.sh $(INSTALL_PATH_BIN)/icc_client.sh
-	$(INSTALL) -m 755 scripts/icc_prolog.sh $(INSTALL_PATH_BIN)/icc_prolog.sh
 	# $(INSTALL) -m 755 $(testapp_bin) $(INSTALL_PATH_BIN)
 
 uninstall:
@@ -76,7 +75,6 @@ uninstall:
 	$(RM) $(INSTALL_PATH_BIN)/$(icc_jobcleaner_bin)
 	$(RM) $(INSTALL_PATH_BIN)/icc_server.sh
 	$(RM) $(INSTALL_PATH_BIN)/icc_client.sh
-	$(RM) $(INSTALL_PATH_BIN)/icc_prolog.sh
 	# $(RM) $(INSTALL_PATH_BIN)/$(testapp_bin)
 
 

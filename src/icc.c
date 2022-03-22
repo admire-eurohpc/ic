@@ -64,6 +64,9 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
   if (!icc)
     return ICC_ENOMEM;
 
+  /* note the use of calloc here, all icc members are initialized to
+     zero: jobid, bidirectional, registered, etc. */
+
   icc->type = typeid;
 
   /*  apps that must be able to both receive AND send RPCs to the IC */
@@ -75,16 +78,22 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
   jobid = getenv("SLURM_JOB_ID");
   if (!jobid) {
     jobid = getenv("SLURM_JOBID");
-    if (!jobid) {
-      margo_info(icc->mid, "icc (init): No JOB_ID environment variable");
+  }
+
+  /* jobid is only required for registered clients */
+  if (icc->bidirectional && !jobid) {
+      margo_error(icc->mid, "icc (init): No JOB_ID found");
+      rc = ICC_FAILURE;
+      goto error;
+  }
+
+  if (jobid) {
+    rc = _strtouint32(jobid, &icc->jobid);
+    if (rc) {
+      margo_error(icc->mid, "icc (init): Error converting job id \"%s\": %s", jobid, strerror(-rc));
       rc = ICC_FAILURE;
       goto error;
     }
-  }
-
-  rc = _strtouint32(jobid, &icc->jobid);
-  if (rc) {
-    margo_error(icc->mid, "icc (init): Error converting job id \"%s\": %s", jobid, strerror(-rc));
   }
 
   /* client UUID, XX could be replaced with jobid.jobstepid? */
@@ -186,7 +195,9 @@ icc_fini(struct icc_context *icc)
     }
   }
 
-  margo_finalize(icc->mid);
+  if (icc->mid)
+    margo_finalize(icc->mid);
+
   free(icc);
 
   return rc;
@@ -497,6 +508,7 @@ _register_client(struct icc_context *icc, int nprocs)
 
   assert(icc);
   assert(icc->icrm);
+  assert(icc->jobid);
 
   icc->provider_id = MARGO_PROVIDER_DEFAULT;
 
