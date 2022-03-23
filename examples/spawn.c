@@ -40,7 +40,7 @@ main(int argc, char **argv)
   isparent = data.intercomm == MPI_COMM_NULL ? 1 : 0;
 
   if (rank == 0 && isparent) {
-    icc_init_mpi(ICC_LOG_INFO, ICC_TYPE_MPI, size, reconfigure, &data, &icc);
+    icc_init_mpi(ICC_LOG_DEBUG, ICC_TYPE_MPI, size, reconfigure, &data, &icc);
     assert(icc);
   }
 
@@ -64,6 +64,8 @@ int
 reconfigure(int maxprocs, const char *hostlist, void *data)
 {
   MPI_Info hostinfo;
+
+  fprintf(stderr, "IN RECONFIG: %d procs on %s\n", maxprocs, hostlist);
 
   MPI_Info_create(&hostinfo);
   MPI_Info_set(hostinfo, "host", hostlist);

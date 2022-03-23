@@ -246,7 +246,10 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid, char shrink,
   if (sret != SLURM_SUCCESS) {
     WRITERR(icrm, "slurm_update_job2: %s", slurm_strerror(slurm_get_errno()));
     rc = ICRM_ERESOURCEMAN;
+    goto end;
   }
+
+  /* XX maybe update Slurm environment? (see Slurm update_job.c)*/
 
  end:
   if (resp) slurm_free_resource_allocation_response_msg(resp);
