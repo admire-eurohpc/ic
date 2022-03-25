@@ -17,6 +17,21 @@ icc_header := icc.h
 ICC_MAJOR := $(shell grep ICC_MAJOR $(includedir)/$(icc_header) | awk '{print $$3}')
 ICC_MINOR := $(shell grep ICC_MINOR $(includedir)/$(icc_header) | awk '{print $$3}')
 
+# Use Slurm .pc if possible, fallback to default include/lib dirs
+PKG_CONFIG_SLURM != PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) $(PKG_CONFIG) --exists slurm
+
+ifeq ($(.SHELLSTATUS),0)
+CFLAGS_I_SLURM != PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) $(PKG_CONFIG) --cflags-only-I slurm
+CFLAGS_OTHER_SLURM != PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) $(PKG_CONFIG) --cflags-only-other slurm
+LIBS_SLURM != PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) $(PKG_CONFIG) --libs slurm
+else
+CFLAGS_I_SLURM :=
+CFLAGS_OTHER_SLURM :=
+LIBS_SLURM := -lslurm
+endif
+CFLAGS_SLURM := $(CFLAGS_I_SLURM) $(CFLAGS_OTHER_SLURM)
+
+
 libicc_so := libicc.so
 libicc_soname :=  $(libicc_so).$(ICC_MAJOR)
 libicc_realname := $(libicc_soname).$(ICC_MINOR)
@@ -90,25 +105,31 @@ lib%.so: %.o
 	$(LINK.o) $^ $(LDLIBS) -o $@
 
 icdb.o: CFLAGS += `$(PKG_CONFIG) --cflags hiredis uuid`
+icrm.o: CFLAGS += $(CFLAGS_SLURM)
 
 server: icdb.o icrm.o rpc.o cbcommon.o cbserver.o
 server: CFLAGS += `$(PKG_CONFIG) --cflags margo uuid`
-server: LDLIBS += `$(PKG_CONFIG) --libs margo hiredis` -lslurm -Wl,--no-undefined
+server: LDLIBS += `$(PKG_CONFIG) --libs margo hiredis` $(LIBS_SLURM) -Wl,--no-undefined
 
 $(libicc_so): rpc.o cb.o cbcommon.o flexmpi.o icrm.o
 $(libicc_so): CFLAGS += `$(PKG_CONFIG) --cflags margo uuid`
-$(libicc_so): LDLIBS += `$(PKG_CONFIG) --libs margo uuid` -lslurm -ldl -Wl,--no-undefined,-h$(libicc_soname)
+$(libicc_so): LDLIBS += `$(PKG_CONFIG) --libs margo uuid` $(LIBS_SLURM) -ldl -Wl,--no-undefined,-h$(libicc_soname)
 
-client: LDLIBS += -L. `$(PKG_CONFIG) --libs margo` -licc -Wl,--no-undefined
+client: LDLIBS += -L. -licc -Wl,--no-undefined,-rpath-link=${PREFIX}/lib
 
-jobcleaner: LDLIBS += -L. `$(PKG_CONFIG) --libs margo` -licc -Wl,--no-undefined
+jobcleaner: LDLIBS += `$(PKG_CONFIG) --libs` -L. -licc -Wl,--no-undefined,-rpath-link=${PREFIX}/lib
 
 spawn: CFLAGS += `$(PKG_CONFIG) --cflags mpich`
-spawn: LDLIBS += `$(PKG_CONFIG) --libs mpich margo` -L. -licc
+spawn: LDLIBS += `$(PKG_CONFIG) --libs mpich` -L. -licc -Wl,--no-undefined,-rpath-link=${PREFIX}/lib
 
 # $(testapp_bin): CFLAGS += `$(PKG_CONFIG) --cflags mpi`
 # $(testapp_bin): LDLIBS += `$(PKG_CONFIG) --libs mpi margo` -L. -licc
 
-$(libslurmjobmon_so) $(libslurmadhoccli_so): LDLIBS += -L. -licc -lslurm
+slurmjobmon.o slurmadhoccli.o: CPPFLAGS += $(CFLAGS_I_SLURM)
+slurmjobmon.o slurmadhoccli.o: CFLAGS += $(CFLAGS_OTHER_SLURM)
+
+# cannot use -Wl,--no-undefined here because some Spank symbols in
+# libslurm have LOCAL binding
+$(libslurmjobmon_so) $(libslurmadhoccli_so): LDLIBS += $(LIBS_SLURM) -L. -licc
 
 -include $(depends)

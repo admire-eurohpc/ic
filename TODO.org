@@ -1,3 +1,4 @@
+- Makefile: define vars for all pkg-config calls
 - icc: jobntasks? ~universe_size in MPI?
 - icc: remove flexhandle, add a proper free function to register
 - icc: cleanup logic of registration (register_(flex)mpi?)
