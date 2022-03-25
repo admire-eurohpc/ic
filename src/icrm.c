@@ -1,10 +1,12 @@
 #include <assert.h>
 #include <netdb.h>              /* socket */
+#include <signal.h>             /* SIG */
 #include <stdarg.h>             /* va_ stuff */
 #include <stdlib.h>             /* calloc */
 #include <stdint.h>             /* uintXX_t */
 #include <stdio.h>              /* printf */
 #include <string.h>             /* strncpy, strnlen */
+#include <unistd.h>             /* sleep */
 #include <sys/types.h>          /* socket */
 #include <sys/socket.h>         /* socket */
 
@@ -19,6 +21,7 @@
 #define HOSTLIST_MAXLEN 4096            /* reject hostlist that are too long */
 #define JOBID_MAXLEN  16                /* 9 is enough for an uint32 */
 #define DEPEND_MAXLEN JOBID_MAXLEN + 16 /* enough for dependency string */
+#define JOBSTEP_CANCEL_MAXWAIT  60      /* do not wait for jobstep forever */
 
 #define CHECK_NULL(p)  if (!(p)) { return ICRM_EPARAM; }
 #define CHECK_ICRM(icrm)  { CHECK_NULL(icrm); CHECK_NULL((icrm)->errstr); }
@@ -164,11 +167,13 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid, char shrink,
 {
   icrmerr_t rc;
   int sret;
+  unsigned int wait;
   size_t len;
   char buf[DEPEND_MAXLEN];
   job_desc_msg_t jobreq, jobreq2;
   resource_allocation_response_msg_t *resp;
   job_array_resp_msg_t *resp2;
+  job_step_info_response_msg_t *stepinfo;
 
   assert(hostlist);
 
@@ -188,6 +193,8 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid, char shrink,
   jobreq.min_cpus = *ncpus;
   jobreq.max_cpus = *ncpus;
   jobreq.shared = 0;
+  jobreq.user_id = getuid();    /* necessary on PlaFRIM... */
+  jobreq.group_id = getgid();   /* idem */
 
   snprintf(buf, DEPEND_MAXLEN, "expand:%"PRIu32, jobid);
   jobreq.dependency = buf;
@@ -232,6 +239,61 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid, char shrink,
     *ncpus += resp->cpus_per_node[i] * resp->cpu_count_reps[i];
   }
 
+  /* this pause makes the upcoming kill much faster than sending the
+     signal immediately for some reason */
+  sleep(1);
+
+  /* 2. kill external process container .extern. It is a job step that
+     is launched automatically by Slurm if PrologFlags=Contain (see
+     slurm.conf(5)). The kill procedure is copied from Slurm scancel.c */
+
+  for (int i = 0; i < 10; i++) {
+    sret = slurm_kill_job_step(resp->job_id, SLURM_EXTERN_CONT, SIGKILL);
+
+    if (sret == SLURM_SUCCESS || ((errno != ESLURM_TRANSITION_STATE_NO_UPDATE) &&
+                                  (errno != ESLURM_JOB_PENDING))) {
+      break;
+    }
+    sleep(5 + i);
+  }
+
+  if (sret != SLURM_SUCCESS) {
+    sret = slurm_get_errno();
+    /* invalid job step = no .extern step, ignore error  */
+    if (sret != ESLURM_ALREADY_DONE && sret != ESLURM_INVALID_JOB_ID) {
+      WRITERR(icrm, "slurm_terminate_job_step: %s", slurm_strerror(slurm_get_errno()));
+      rc = ICRM_ERESOURCEMAN;
+      goto end;
+    }
+  }
+
+  /* wait for the jobstep to finish (no more than JOBSTEP_CANCEL_MAXWAIT) */
+  /* XX fixme: this can be avoided for jobs that don’t have any step */
+  stepinfo = NULL;
+  wait = 1;
+
+  while (1) {
+    sleep(wait);
+    wait *= 2;
+
+    sret = slurm_get_job_steps(0, resp->job_id, NO_VAL, &stepinfo, SHOW_ALL);
+    if (sret != SLURM_SUCCESS) {
+      rc = ICRM_FAILURE;
+      WRITERR(icrm, "slurm_get_job_steps: %s", slurm_strerror(errno));
+      goto end;
+    }
+
+    if (stepinfo->job_step_count == 0) {
+      break;                    /* step has been killed */
+    }
+
+    if (wait > 60) {
+      rc = ICRM_FAILURE;
+      WRITERR(icrm, "Job step did not terminate");
+      goto end;
+    }
+  }
+
   /* 2. update allocation, equivalent to:
      "scontrol update JobId=$JOBID NumNodes=0" */
   slurm_init_job_desc_msg(&jobreq2);
@@ -254,6 +316,8 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid, char shrink,
  end:
   if (resp) slurm_free_resource_allocation_response_msg(resp);
   if (resp2) slurm_free_job_array_resp(resp2);
+  if (stepinfo) slurm_free_job_step_info_response_msg(stepinfo);
+
   return rc;
 }
 
