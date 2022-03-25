@@ -2,10 +2,9 @@
 # Run Redis server and the ICC server for 10 minutes. The ICC address
 # file will be written in the ADMIRE_DIR directory.
 
-#SBATCH --job-name=admire_icc_server
+#SBATCH --job-name=admire_ic
 #SBATCH --output=icc_server_out.txt
-#SBATCH --time=00:10:00
-#SBATCH --ntasks=1
+#SBATCH --ntasks=2
 
 case `hostname` in
     *"plafrim.cluster")
@@ -28,6 +27,6 @@ export PATH LD_LIBRARY_PATH ADMIRE_DIR
 
 mkdir -p $ADMIRE_DIR
 
-srun --time=00:10:00 redis-server &
+srun redis-server &
 sleep 2				# give some time to Redis to start
-srun --time=00:10:00 icc_server
+srun icc_server

@@ -74,7 +74,7 @@ main(int argc, char **argv)
   }
 
   /* wait for allocation request */
-  icc_sleep(icc, 1000);
+  icc_sleep(icc, 2000);
 
   puts("icc_client: Finishing");
   ret = icc_fini(icc);
