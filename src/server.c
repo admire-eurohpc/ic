@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <inttypes.h>           /* PRIdxx */
+#include <unistd.h>             /* sleep */
 #include <margo.h>
 
 #include "rpc.h"
@@ -280,6 +281,14 @@ malleability_th(void *arg)
       } else {
         margo_info(data->mid, "Malleability: Job %"PRIu32" RPC_RESALLOC for %"PRIu32" CPUs", clients[i].jobid, allocin.ncpus);
       }
+
+
+      sleep(8);
+      allocin.shrink = 1;
+      ret = rpc_send(data->mid, addr, data->rpcids[RPC_RESALLOC], &allocin, &rpcret);
+      if (ret)
+      margo_info(data->mid, "Malleability: Job %"PRIu32" RPC_RESALLOC for -%"PRIu32" CPUs", clients[i].jobid, allocin.ncpus);
+
 
       data->sleep = 1;
       continue;

@@ -8,7 +8,7 @@
 #include "icc.h"
 
 
-int reconfig(int maxprocs, const char *hostlist, void *data);
+int reconfig(int shrink, uint32_t maxprocs, const char *hostlist, void *data);
 
 static enum icc_client_type
 _icc_typecode(const char *type);
@@ -84,9 +84,10 @@ main(int argc, char **argv)
 }
 
 int
-reconfig(int maxprocs, const char *hostlist,
+reconfig(int shrink, uint32_t maxprocs, const char *hostlist,
          void *data __attribute__((unused))) {
-  fprintf(stdout, "IN RECONFIG: %d processes on %s\n", maxprocs, hostlist);
+  fprintf(stdout, "IN RECONFIG: %s%d processes on %s\n",
+          shrink ? "-" : "", maxprocs, hostlist);
   return 0;
 }
 

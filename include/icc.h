@@ -44,11 +44,12 @@ enum icc_client_type {
  * Expected signature of the function that libicc calls on receiving a
  * reconfiguration RPC.
  *
- * MAXPROCS and HOSTLIST is provided by the IC, DATA is a pointer
- * passed at registration by the caller, and passed back as-is to the
- * function by libicc.
+ * SHRINK will be set if the IC requests a reduction in the number of
+ * resources. SHRINK, MAXPROCS and HOSTLIST are provided by the IC,
+ * DATA is a pointer passed at registration by the caller, and passed
+ * back as-is to the function by libicc.
  */
-typedef int (*icc_reconfigure_func_t)(int maxprocs, const char *hostlist, void *data);
+typedef int (*icc_reconfigure_func_t)(int shrink, uint32_t maxprocs, const char *hostlist, void *data);
 
 
 /**

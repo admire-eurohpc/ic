@@ -6,6 +6,7 @@
 - icc: margo_register_data-ed struct needs to be made thread-safe??
 - icc: clid -> jobid.jobstepid?
 - icc:resallocdone: no way to get the status code of the alloc ULT
+- icc:reconfigure: cleanup int/int32_t use
 - flexmpi: simplify func handling, private sock + func enough
 - server: prefix LOG_ERROR with jobid/clid?
 - server: create pool of icrm context

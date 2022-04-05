@@ -25,7 +25,6 @@
 
 struct alloc_args {
   const struct icc_context *icc;
-  char     shrink;
   uint32_t ncpus;
   int      retcode;
 };
@@ -74,7 +73,7 @@ reconfigure_cb(hg_handle_t h)
 
   /* call registered function */
   if (icc->reconfig_func) {
-    rc = icc->reconfig_func(in.maxprocs, in.hostlist, icc->reconfig_data);
+    rc = icc->reconfig_func(0, in.maxprocs, in.hostlist, icc->reconfig_data);
   } else if (icc->type == ICC_TYPE_FLEXMPI ) {
     rc = flexmpi_reconfigure(mid, in.maxprocs, in.hostlist, icc->flexmpi_func, icc->flexmpi_sock);
   } else {
@@ -117,10 +116,17 @@ resalloc_cb(hg_handle_t h)
     goto respond;
   }
 
-  /* dispatch allocation to an Argobots ULT that will block on the
-     request. A tasklet would be more appropriate than an ULT here,
-     but Argobots 1.x does not allow tasklets to call eventuals, which
-     RPC do */
+  /* shrinking request can be dealt with immediately */
+  if (in.shrink) {
+    ret = icc->reconfig_func(in.shrink, in.ncpus, NULL, icc->reconfig_data);
+    out.rc = ret ? RPC_FAILURE : RPC_SUCCESS;
+    goto respond;
+  }
+
+  /* expand request: dispatch allocation to an Argobots ULT that will
+     block on the request. A tasklet would be more appropriate than an
+     ULT here, but Argobots 1.x does not allow tasklets to call
+     eventuals, which RPC do */
   struct alloc_args *args = malloc(sizeof(*args));
 
   if (args == NULL) {
@@ -129,7 +135,6 @@ resalloc_cb(hg_handle_t h)
   }
 
   args->icc = icc;
-  args->shrink = in.shrink;
   args->ncpus = in.ncpus;
   args->retcode = ICC_SUCCESS;
 
@@ -158,12 +163,13 @@ _alloc_th(struct alloc_args *args)
   const struct icc_context *icc = args->icc;
 
   in.jobid = icc->jobid;
-  in.shrink = args->shrink;
   in.ncpus = args->ncpus;
   in.hostlist = NULL;
 
+  rpcret = 0;
+
   /* blocking call */
-  ret = icrm_alloc(icc->icrm, in.jobid, args->shrink, &in.ncpus, &in.hostlist);
+  ret = icrm_alloc(icc->icrm, in.jobid, 0, &in.ncpus, &in.hostlist);
   if (ret != ICRM_SUCCESS) {
     margo_error(icc->mid, "icrm_alloc error: %s", icrm_errstr(icc->icrm));
     goto end;
@@ -172,7 +178,6 @@ _alloc_th(struct alloc_args *args)
   margo_debug(icc->mid, "Job %"PRIu32" got resource allocation of %"PRIu32" CPUs (%s)", in.jobid, in.ncpus, in.hostlist);
 
   ret = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_RESALLOCDONE], &in, &rpcret);
-
   if (ret != ICC_SUCCESS) {
     margo_error(icc->mid, "Error sending RPC_RESALLOCDONE");
     goto end;
@@ -184,7 +189,7 @@ _alloc_th(struct alloc_args *args)
   } else if (rpcret == RPC_SUCCESS) {
     /* reconfigure */
     margo_debug(icc->mid, "Job %"PRIu32": reconfiguring", in.jobid);
-    ret = icc->reconfig_func(in.ncpus, in.hostlist, icc->reconfig_data);
+    ret = icc->reconfig_func(in.shrink, in.ncpus, in.hostlist, icc->reconfig_data);
   } else {
     margo_error(icc->mid, "Error in RPC_RESALLOCDONE");
   }
