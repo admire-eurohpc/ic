@@ -13,8 +13,8 @@
 #define INITIAL_NSLOTS 32       /* initial capacity of the hashmap */
 
 typedef struct {
-    const char *key;            /* NULL if slot is empty */
-    void       *value;
+  const char *key;              /* NULL if slot is empty */
+  void       *value;
 } hm_item;
 
 struct hashmap {
@@ -51,13 +51,18 @@ hm_create(void)
 
 
 void
-hm_destroy(struct hashmap *map)
+hm_free(struct hashmap *map)
 {
+  hm_item item;
+
   for (size_t i = 0; i < map->nslots; i++) {
-    if (map->items[i].key != NULL) {
-      free((char *)map->items[i].key);
+    item = map->items[i];
+    if (item.key) {
+      free((char *)item.key);
+      free(item.value);
     }
   }
+
   free(map->items);
   free(map);
 }
@@ -77,10 +82,7 @@ hm_get(struct hashmap* map, const char *key)
       return map->items[index].value;     /* key found */
     }
 
-    index++;                              /* key not found, linear probe */
-    if (index >= map->nslots) {
-      index = 0;                          /* wrap around */
-    }
+    index = (index + 1) % map->nslots;    /* key not found, linear probe + wrap */
   }
 
   /* warning: the loop is only exited on reaching the rigth key or
@@ -92,9 +94,10 @@ hm_get(struct hashmap* map, const char *key)
 
 
 int
-hm_set(struct hashmap *map, const char *key, void *value)
+hm_set(struct hashmap *map, const char *key, void *value, size_t size)
 {
   int rc;
+  void *val;
 
   if (value == NULL) {
     return -1;
@@ -105,7 +108,13 @@ hm_set(struct hashmap *map, const char *key, void *value)
       return -1;
   }
 
-  rc = hm_set_internal(map->items, map->nslots, key, value);
+  val = malloc(size);
+  if (val == NULL) {
+    return -1;
+  }
+  memcpy(val, value, size);
+
+  rc = hm_set_internal(map->items, map->nslots, key, val);
   if (rc != -1) {
     map->nitems += rc;
   }
@@ -115,9 +124,25 @@ hm_set(struct hashmap *map, const char *key, void *value)
 
 
 size_t
-hm_length(hm_t *map)
+hm_length(struct hashmap *map)
 {
     return map->nitems;
+}
+
+
+size_t
+hm_next(struct hashmap *map, size_t cursor, const char **key, void **value)
+{
+  for (size_t i = cursor; i < map->nslots; i++) {
+    if (map->items[i].key) {
+      *key = map->items[i].key;
+      *value = map->items[i].value;
+      return (i + 1) % map->nslots;
+    }
+  }
+
+  /* we reached the end of the map */
+  return 0;
 }
 
 
@@ -160,15 +185,13 @@ hm_set_internal(hm_item *items, size_t size, const char *key, void *value)
   index = hash % size;
 
   while (items[index].key != NULL) {
-    if (!strcmp(key, items[index].key)) {
-      items[index].value = value;  /* key found */
+    if (!strcmp(key, items[index].key)) {  /* key found */
+      free(items[index].value);
+      items[index].value = value;
       return 0;
     }
 
-    index++;                              /* key not found, linear probe */
-    if (index >= size) {
-      index = 0;                          /* wrap around */
-    }
+    index = (index + 1) % size;            /* key not found, linear probe + wrap */
   }
 
   /* XX FIXME: the following alloc could be avoided when expanding the
@@ -200,6 +223,9 @@ hm_expand(struct hashmap *map)
   hm_item *newitems;
 
   newsize = map->nslots * 2;
+  if (newsize < map->nslots) {  /* overflow */
+    return NULL;
+  }
 
   newitems = calloc(newsize, sizeof(*newitems));
   if (newitems == NULL) {

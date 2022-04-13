@@ -1,5 +1,5 @@
-#ifndef _ADMIRE_HASHMAP_H
-#define _ADMIRE_HASHMAP_H
+#ifndef ADMIRE_HASHMAP_H
+#define ADMIRE_HASHMAP_H
 
 #include <stddef.h>
 
@@ -12,9 +12,9 @@ hm_t *hm_create(void);
 
 
 /**
- * Deallocate MAP.
+ * Free MAP.
  */
-void hm_destroy(hm_t *map);
+void hm_free(hm_t *map);
 
 
 /**
@@ -25,13 +25,25 @@ void *hm_get(hm_t *map, const char *key);
 
 
 /**
- * Associate VALUE to NULL-terminated string KEY in MAP. VALUE cannot
- * be NULL. KEY is copied and allocated as necessary.
+ * Associate VALUE of size SIZE to NULL-terminated string KEY in
+ * MAP. VALUE cannot be NULL. KEY and VALUE are copied and allocated
+ * as necessary.
  *
  * Return 0 if an item was updated, 1 if a new item was created or -1
  * in case of error.
  */
-int hm_set(hm_t *map, const char *key, void* value);
+int hm_set(hm_t *map, const char *key, void *value, size_t size);
+
+
+/**
+ * Set KEY and VALUE from the next item in MAP. This is a cursor based
+ * iterator. The caller passes a 0 cursor at initialization and the
+ * function returns an updated cursor. The iteration is over when the
+ * returned cursor is 0.
+ *
+ * Return the updated cursor.
+ */
+size_t hm_next(hm_t *map, size_t cursor, const char **key, void **value);
 
 
 /**
