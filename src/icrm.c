@@ -14,6 +14,7 @@
 #include <slurm/slurm.h>
 #include <slurm/slurm_errno.h>
 
+#include "hashmap.h"
 #include "icc_common.h"
 #include "icrm.h"
 
@@ -29,6 +30,10 @@
 #define WRITERR(icrm,...)  _writerr(icrm, __FILE__, __LINE__, __func__, __VA_ARGS__)
 
 
+/* memory for the icrm lock */
+static ABT_mutex_memory icrmlockmem = ABT_MUTEX_INITIALIZER;
+
+
 /**
  * Return info of job JOBID in buffer JOB.
  *
@@ -38,16 +43,14 @@ static icrmerr_t _icrm_load_job(icrm_context_t *icrm, uint32_t jobid,
                                 job_info_msg_t **job);
 
 /**
- * Format HOSTLIST as returned by Slurm into a comma-separated list of
- * host:ncpus. Uses the Slurm values CPUS_PER_NODE, the
- * CPUS_COUNT_REPS repetition count.
+ * Fill hashmap HOSTMAP with host:ncpus pairs. Uses the Slurm values
+ * HOSTS (node_list), NCPUS (cpus_per_node) and the REPS CPUs repetition count
+ * (cpus_count_reps).
  *
- * Return the formatted hostlist or NULL in case of error. The caller
- * is responsible for freeing the hostlist.
+ * Return ICRM_SUCCESS or ICRM_FAILURE in case of error.
  */
-static char *_format_slurm_hostlist(const char *hostlist,
-                                    uint16_t *cpus_per_node,
-                                    uint32_t *cpus_count_reps);
+static icrmerr_t set_hostmap(const char *hosts, uint16_t ncpus[], uint32_t reps[],
+                             hm_t *hostmap);
 
 static enum icrm_jobstate _slurm2icrmstate(enum job_states slurm_state);
 static icrmerr_t _slurm_socket(icrm_context_t *icrm);
@@ -162,24 +165,20 @@ icrm_ncpus(icrm_context_t *icrm, uint32_t jobid,
 
 
 icrmerr_t
-icrm_alloc(struct icrm_context *icrm, uint32_t jobid, char shrink,
-           uint32_t *ncpus, char **hostlist)
+icrm_alloc(struct icrm_context *icrm, uint32_t jobid,
+           uint32_t *ncpus, hm_t *hostmap)
 {
   icrmerr_t rc;
   int sret;
   unsigned int wait;
-  size_t len;
   char buf[DEPEND_MAXLEN];
+  ABT_mutex mutex;
   job_desc_msg_t jobreq, jobreq2;
   resource_allocation_response_msg_t *resp;
   job_array_resp_msg_t *resp2;
   job_step_info_response_msg_t *stepinfo;
 
-  assert(hostlist);
-
-  if (shrink) {
-    return ICRM_ENOTIMPL;
-  }
+  assert(hostmap);
 
   rc = ICRM_SUCCESS;
   resp = NULL;
@@ -200,7 +199,6 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid, char shrink,
   jobreq.dependency = buf;
 
   *ncpus = 0;
-  *hostlist = NULL;
 
   resp = slurm_allocate_resources_blocking(&jobreq, 0, NULL);
 
@@ -216,22 +214,10 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid, char shrink,
   assert(resp->cpus_per_node);
   assert(resp->cpu_count_reps);
 
-  /* Slurm returns the CPU counts grouped. There is num_cpu_groups
-     groups. For each group i cpus_per_node[i] is the CPU count,
-     repeated cpus_count_reps[i] time */
-
-  len = strnlen(resp->node_list, HOSTLIST_MAXLEN);
-  if (len == HOSTLIST_MAXLEN) {
-    rc = ICRM_ERESOURCEMAN;
-    WRITERR(icrm, "slurm_allocate_resources_blocking: hostlist too long");
-    goto end;
-  }
-
-  *hostlist = _format_slurm_hostlist(resp->node_list,
-                                     resp->cpus_per_node, resp->cpu_count_reps);
-  if (!*hostlist) {
-    rc = ICRM_ERESOURCEMAN;
-    WRITERR(icrm, "Could not format Slurm hostlist");
+  rc = set_hostmap(resp->node_list, resp->cpus_per_node, resp->cpu_count_reps,
+                   hostmap);
+  if (rc != ICRM_SUCCESS) {
+    WRITERR(icrm, "Could not set Slurm hostmap");
     goto end;
   }
 
@@ -298,12 +284,18 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid, char shrink,
      "scontrol update JobId=$JOBID NumNodes=0" */
   slurm_init_job_desc_msg(&jobreq2);
 
-  /* according to Slurm update_job.c, for this only min_nodes should
-     be set */
+  /* according to Slurm update_job.c, only min_nodes should be set there */
   jobreq2.min_nodes = 0;
   jobreq2.job_id = resp->job_id;
 
+  /* CRITICAL SECTION: because node could be deallocated at the same
+     time */
+  mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&icrmlockmem);
+  ABT_mutex_lock(mutex);
+
   sret = slurm_update_job2(&jobreq2, &resp2);
+
+  ABT_mutex_unlock(mutex);
 
   if (sret != SLURM_SUCCESS) {
     WRITERR(icrm, "slurm_update_job2: %s", slurm_strerror(slurm_get_errno()));
@@ -468,32 +460,30 @@ _icrm_load_job(icrm_context_t *icrm, uint32_t jobid, job_info_msg_t **job)
   return rc;
 }
 
-static char *
-_format_slurm_hostlist(const char *hostlist,
-                       uint16_t *cpus_per_node, uint32_t *cpus_count_reps)
+static icrmerr_t
+set_hostmap(const char *hostlist,
+            uint16_t cpus_per_node[], uint32_t cpus_count_reps[], hm_t *hostmap)
 {
   assert(hostlist);
   assert(cpus_per_node);
   assert(cpus_count_reps);
+  assert(hostmap);
 
   hostlist_t hl;
   uint16_t ncpus;
   uint32_t reps;
-  char *host, *res, *tmp;
-  size_t len, ntotal, n, icpu;
-
-  len = HOSTLIST_BASLEN;
-
-  res = malloc(len);
-  if (!res)
-    return NULL;
+  char *host;
+  size_t icpu;
 
   hl = slurm_hostlist_create(hostlist);
   if (!hl) {
-    return NULL;
+    return ICRM_ENOMEM;
   }
 
-  ntotal = n = 0;
+  /* Slurm returns the CPU counts grouped. There is num_cpu_groups
+     groups. For each group i cpus_per_node[i] is the CPU count,
+     repeated cpus_count_reps[i] time */
+
   icpu = 0;
   reps = cpus_count_reps[icpu];
 
@@ -503,32 +493,12 @@ _format_slurm_hostlist(const char *hostlist,
     if (reps == 0)
       icpu++;
 
-    n = snprintf(NULL, 0, "%s:%"PRIu16",", host, ncpus);
+    hm_set(hostmap, host, &ncpus, sizeof(ncpus));
 
-    while (ntotal + n >= len) {
-      len *= 2;
-      tmp = realloc(res, len);
-      if (!tmp) {
-        free(res);
-        break;
-      }
-      res = tmp;
-    }
-    if (!res) {
-      free(host);
-      break;
-    }
-
-    sprintf(res + ntotal, "%s:%"PRIu16",", host, ncpus);
-    ntotal += n;
     free(host);
   }
 
-  /* remove last comma */
-  if (res)
-    res[ntotal - 1] = '\0';
-
   slurm_hostlist_destroy(hl);
 
-  return res;
+  return ICRM_SUCCESS;
 }

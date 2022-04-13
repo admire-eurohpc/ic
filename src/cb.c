@@ -41,6 +41,13 @@ struct alloc_args {
 static void _alloc_th(struct alloc_args *args);
 
 
+/**
+ * Generate a comma-separated host:ncpus list from hashmap
+ * HOSTMAP. The values of the hashmap must be pointers to uint16_t.
+ */
+static char *hostmap2hostlist(hm_t *hostmap);
+
+
 void
 reconfigure_cb(hg_handle_t h)
 {
@@ -160,34 +167,35 @@ _alloc_th(struct alloc_args *args)
 {
   int ret, rpcret;
   resallocdone_in_t in;
+  hm_t *hostmap;
   const struct icc_context *icc = args->icc;
 
-  in.jobid = icc->jobid;
   in.ncpus = args->ncpus;
-  in.hostlist = NULL;
+  in.jobid = icc->jobid;
 
-  rpcret = 0;
+  hostmap = hm_create();
 
   /* blocking call */
-  ret = icrm_alloc(icc->icrm, in.jobid, 0, &in.ncpus, &in.hostlist);
+  ret = icrm_alloc(icc->icrm, icc->jobid, &in.ncpus, hostmap);
   if (ret != ICRM_SUCCESS) {
     margo_error(icc->mid, "icrm_alloc error: %s", icrm_errstr(icc->icrm));
     goto end;
   }
 
+  in.hostlist = hostmap2hostlist(hostmap);
+
   margo_debug(icc->mid, "Job %"PRIu32" got resource allocation of %"PRIu32" CPUs (%s)", in.jobid, in.ncpus, in.hostlist);
 
+  rpcret = 0;
   ret = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_RESALLOCDONE], &in, &rpcret);
   if (ret != ICC_SUCCESS) {
     margo_error(icc->mid, "Error sending RPC_RESALLOCDONE");
     goto end;
   }
 
-  if (rpcret == RPC_WAIT) {
-    /* do not do reconfigure */
+  if (rpcret == RPC_WAIT) {            /* do not do reconfigure */
     margo_debug(icc->mid, "Job %"PRIu32": not reconfiguring", in.jobid);
-  } else if (rpcret == RPC_SUCCESS) {
-    /* reconfigure */
+  } else if (rpcret == RPC_SUCCESS) {  /* reconfigure */
     margo_debug(icc->mid, "Job %"PRIu32": reconfiguring", in.jobid);
     ret = icc->reconfig_func(in.shrink, in.ncpus, in.hostlist, icc->reconfig_data);
   } else {
@@ -196,6 +204,49 @@ _alloc_th(struct alloc_args *args)
 
  end:
   free(args);
+  if (hostmap)
+    hm_free(hostmap);
   if (in.hostlist != NULL)
     free(in.hostlist);
+}
+
+
+static char *
+hostmap2hostlist(hm_t *hostmap)
+{
+  char *buf, *tmp;
+  size_t bufsize, nwritten, n, cursor;
+  const char *host;
+  uint16_t *ncpus;
+
+  bufsize = 512;            /* start with a reasonably sized buffer */
+
+  buf = malloc(bufsize);
+  if (!buf) {
+    return NULL;
+  }
+  buf[0] = '\0';
+
+  nwritten = n = 0;
+  cursor = 0;
+
+  while ((cursor = hm_next(hostmap, cursor, &host, (void **)&ncpus)) != 0) {
+
+    n = snprintf(buf + nwritten, bufsize - nwritten, "%s%s:%"PRIu16,
+                 nwritten > 0 ? "," : "", host, *ncpus);
+
+    if (n < bufsize - nwritten) {
+      nwritten += n;
+    } else {
+      tmp = reallocarray(buf, 2, bufsize);
+      if (!tmp) {
+        free(buf);
+        return NULL;
+      }
+      buf = tmp;
+      bufsize *= 2;             /* potential overlow catched by reallocarray */
+    }
+  }
+
+  return buf;
 }

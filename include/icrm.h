@@ -2,6 +2,7 @@
 #define __ADMIRE_ICRM_H
 
 #include <stdint.h>
+#include "hashmap.h"
 
 /**
  * Resouce manager (RM) related functions, for use by the IC server.
@@ -73,16 +74,15 @@ icrmerr_t icrm_ncpus(icrm_context_t *icrm, uint32_t jobid,
                      uint32_t *ncpus, uint32_t *nnodes);
 
 /**
- * Request a new allocation of NNODES to the resource manager. If
- * SHRINK is true, give back that many nodes (NOT IMPLEMENTED). Blocks
+ * Request a new allocation of NCPUS to the resource manager. Blocks
  * until the allocation has been granted.
  *
- * Return the actual number of nodes granted in NNODES, and the
- * associated hosts in HOSTLIST. HOSTLIST must be freed by the caller.
+ * Return the actual number of CPUs granted in NCPUS, and a
+ * host(char *):ncpus(uint16_t) map in HOSTMAP.
  *
  * Return ICRM_SUCCESS or an error code.
  */
-icrmerr_t icrm_alloc(icrm_context_t *icrm, uint32_t jobid, char shrink,
-                     uint32_t *ncpus, char **hostlist);
+icrmerr_t icrm_alloc(icrm_context_t *icrm, uint32_t jobid, uint32_t *ncpus,
+                     hm_t *hostmap);
 
 #endif
