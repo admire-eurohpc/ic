@@ -176,15 +176,16 @@ icc_fini(struct icc_context *icc)
     in.clid = icc->clid;
 
     rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_CLIENT_DEREGISTER], &in, &rpcrc);
-
     if (rc || rpcrc) {
       margo_error(icc->mid, "Could not deregister target to IC");
     }
+  }
 
-    if (margo_addr_free(icc->mid, icc->addr) != HG_SUCCESS) {
-      margo_error(icc->mid, "Could not free Margo address");
-      rc = ICC_FAILURE;
-    }
+  if (margo_addr_free(icc->mid, icc->addr) != HG_SUCCESS) {
+    margo_error(icc->mid, "Could not free Margo address");
+    rc = ICC_FAILURE;
+  }
+
   }
 
   if (icc->icrm) {
@@ -481,17 +482,6 @@ _setup_icrm(struct icc_context *icc)
       margo_error(icc->mid, "icrm init failure (ret = %d)", rc);
     return ICC_FAILURE;
   }
-
-  struct cb_data *d = malloc(sizeof(*d));
-  if (!d) {
-    margo_error(icc->mid, "%s: malloc failure", __func__);
-    return ICC_ENOMEM;
-  }
-
-  d->icrm = icc->icrm;
-  d->icrm_pool = icc->icrm_pool;
-
-  margo_register_data(icc->mid, icc->rpcids[RPC_RESALLOC], icc, NULL);
 
   return ICC_SUCCESS;
 }

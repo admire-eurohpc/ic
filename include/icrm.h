@@ -1,5 +1,5 @@
-#ifndef __ADMIRE_ICRM_H
-#define __ADMIRE_ICRM_H
+#ifndef ADMIRE_ICRM_H
+#define ADMIRE_ICRM_H
 
 #include <stdint.h>
 #include "hashmap.h"
@@ -31,6 +31,7 @@ enum icrm_jobstate {
  * Context passed to ICRM functions. NOT thread-safe.
  */
 typedef struct icrm_context icrm_context_t;
+
 
 /**
  * Initialize an ICRM context.

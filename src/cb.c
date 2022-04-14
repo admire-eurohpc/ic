@@ -38,7 +38,7 @@ struct alloc_args {
  *
  * Return ICC_SUCCESS or an error code in ARGS.retcode.
  */
-static void _alloc_th(struct alloc_args *args);
+static void alloc_th(struct alloc_args *args);
 
 
 /**
@@ -147,7 +147,7 @@ resalloc_cb(hg_handle_t h)
 
   /* note: args must be freed in the ULT */
 
-  ret = ABT_thread_create(icc->icrm_pool, (void (*)(void *))_alloc_th, args,
+  ret = ABT_thread_create(icc->icrm_pool, (void (*)(void *))alloc_th, args,
                           ABT_THREAD_ATTR_NULL, NULL);
 
   if (ret != ABT_SUCCESS) {
@@ -163,20 +163,18 @@ DEFINE_MARGO_RPC_HANDLER(resalloc_cb);
 
 
 static void
-_alloc_th(struct alloc_args *args)
+alloc_th(struct alloc_args *args)
 {
-  int ret, rpcret;
-  resallocdone_in_t in;
-  hm_t *hostmap;
   const struct icc_context *icc = args->icc;
 
+  resallocdone_in_t in = { 0 };
   in.ncpus = args->ncpus;
   in.jobid = icc->jobid;
 
-  hostmap = hm_create();
+  hm_t *hostmap = hm_create();
 
-  /* blocking call */
-  ret = icrm_alloc(icc->icrm, icc->jobid, &in.ncpus, hostmap);
+  /* allocation request: blocking call */
+  icrmerr_t ret = icrm_alloc(icc->icrm, icc->jobid, &in.ncpus, hostmap);
   if (ret != ICRM_SUCCESS) {
     margo_error(icc->mid, "icrm_alloc error: %s", icrm_errstr(icc->icrm));
     goto end;
@@ -184,9 +182,11 @@ _alloc_th(struct alloc_args *args)
 
   in.hostlist = hostmap2hostlist(hostmap);
 
-  margo_debug(icc->mid, "Job %"PRIu32" got resource allocation of %"PRIu32" CPUs (%s)", in.jobid, in.ncpus, in.hostlist);
+  margo_debug(icc->mid, "Job %"PRIu32" resource allocation of %"PRIu32" CPUs (%s)", in.jobid, in.ncpus, in.hostlist);
 
-  rpcret = 0;
+  int rpcret = RPC_SUCCESS;
+
+  /* inform the IC that the allocation succeeded */
   ret = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_RESALLOCDONE], &in, &rpcret);
   if (ret != ICC_SUCCESS) {
     margo_error(icc->mid, "Error sending RPC_RESALLOCDONE");

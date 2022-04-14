@@ -1,5 +1,5 @@
-#ifndef _ADMIRE_ICC_PRIV_H
-#define _ADMIRE_ICC_PRIV_H
+#ifndef ADMIRE_ICC_PRIV_H
+#define ADMIRE_ICC_PRIV_H
 
 #include <stdint.h>
 #include <margo.h>
@@ -11,6 +11,7 @@
 #include "flexmpi.h"           /* flexmpi function signature */
 
 struct icc_context {
+  /* read-only after initialization */
   margo_instance_id mid;
   hg_addr_t         addr;               /* server address */
   hg_id_t           rpcids[RPC_COUNT];  /* RPCs ids */
@@ -21,7 +22,8 @@ struct icc_context {
   char              clid[UUID_STR_LEN]; /* client uuid */
   enum icc_client_type type;            /* client type */
 
-  struct icrm_context *icrm;            /* resource manager comm */
+  /* XX fixme icrm not thread-safe */
+  icrm_context_t    *icrm;              /* resource manager comm */
   ABT_xstream       icrm_xstream;       /* blocking execution stream */
   ABT_pool          icrm_pool;
 
@@ -31,7 +33,6 @@ struct icc_context {
   void                   *flexhandle;   /* dlopen handle to FlexMPI lib */
   int                   flexmpi_sock;
   flexmpi_reconfigure_t flexmpi_func;
-
 };
 
 #endif

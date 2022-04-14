@@ -1,6 +1,8 @@
 /**
  * Small hashmap implementation, inspired from
- * https://benhoyt.com/writings/hash-table-in-c/
+ * https://benhoyt.com/writings/hash-table-in-c/.
+ *
+ * Definitely NOT thread-safe.
  */
 
 #include "hashmap.h"

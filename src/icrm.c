@@ -214,13 +214,6 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid,
   assert(resp->cpus_per_node);
   assert(resp->cpu_count_reps);
 
-  rc = set_hostmap(resp->node_list, resp->cpus_per_node, resp->cpu_count_reps,
-                   hostmap);
-  if (rc != ICRM_SUCCESS) {
-    WRITERR(icrm, "Could not set Slurm hostmap");
-    goto end;
-  }
-
   for (uint32_t i = 0; i < resp->num_cpu_groups; i++) {
     *ncpus += resp->cpus_per_node[i] * resp->cpu_count_reps[i];
   }
@@ -288,18 +281,25 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid,
   jobreq2.min_nodes = 0;
   jobreq2.job_id = resp->job_id;
 
-  /* CRITICAL SECTION: because node could be deallocated at the same
-     time */
+  /* CRITICAL SECTION: nodes can be deallocated at the same time */
   mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&icrmlockmem);
   ABT_mutex_lock(mutex);
 
   sret = slurm_update_job2(&jobreq2, &resp2);
+  if (sret != SLURM_SUCCESS) {
+    WRITERR(icrm, "slurm_update_job2: %s", slurm_strerror(slurm_get_errno()));
+    ABT_mutex_unlock(mutex);
+    rc = ICRM_ERESOURCEMAN;
+    goto end;
+  }
 
   ABT_mutex_unlock(mutex);
 
-  if (sret != SLURM_SUCCESS) {
-    WRITERR(icrm, "slurm_update_job2: %s", slurm_strerror(slurm_get_errno()));
-    rc = ICRM_ERESOURCEMAN;
+  rc = set_hostmap(resp->node_list, resp->cpus_per_node, resp->cpu_count_reps,
+                   hostmap);
+  if (rc != ICRM_SUCCESS) {
+    ABT_mutex_unlock(mutex);
+    WRITERR(icrm, "Could not set Slurm hostmap");
     goto end;
   }
 
