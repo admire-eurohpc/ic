@@ -319,11 +319,11 @@ icrm_update_hostmap(hm_t *hostmap, hm_t *newalloc)
   assert(newalloc);
 
   const char *host;
-  uint16_t *nalloc;
+  const uint16_t *nalloc;
   size_t curs = 0;
 
-  while ((curs = hm_next(newalloc, curs, &host, (void **)&nalloc)) != 0) {
-    uint16_t *ncpus = hm_get(hostmap, host);
+  while ((curs = hm_next(newalloc, curs, &host, (const void **)&nalloc)) != 0) {
+    const uint16_t *ncpus = hm_get(hostmap, host);
     if (ncpus && UINT16_MAX - *ncpus < *nalloc) {         /* would overflow */
       return ICRM_EOVERFLOW;
     }

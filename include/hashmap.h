@@ -18,10 +18,10 @@ void hm_free(hm_t *map);
 
 
 /**
- * Return value associated with NULL-terminated string KEY in MAP, or
- * NULL if not present.
+ * Return the value associated with NULL-terminated string KEY in MAP,
+ * or NULL if not present.
  */
-void *hm_get(hm_t *map, const char *key);
+const void *hm_get(hm_t *map, const char *key);
 
 
 /**
@@ -36,14 +36,14 @@ int hm_set(hm_t *map, const char *key, void *value, size_t size);
 
 
 /**
- * Set KEY and VALUE from the next item in MAP. This is a cursor based
+ * Get KEY and VALUE from the next item in MAP. This is a cursor based
  * iterator. The caller passes a 0 cursor at initialization and the
  * function returns an updated cursor. The iteration is over when the
  * returned cursor is 0.
  *
  * Return the updated cursor.
  */
-size_t hm_next(hm_t *map, size_t cursor, const char **key, void **value);
+size_t hm_next(hm_t *map, size_t cursor, const char **key, const void **value);
 
 
 /**

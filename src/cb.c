@@ -237,7 +237,7 @@ hostmap2hostlist(hm_t *hostmap)
   char *buf, *tmp;
   size_t bufsize, nwritten, n, cursor;
   const char *host;
-  uint16_t *ncpus;
+  const uint16_t *ncpus;
 
   bufsize = 512;            /* start with a reasonably sized buffer */
 
@@ -250,7 +250,7 @@ hostmap2hostlist(hm_t *hostmap)
   nwritten = n = 0;
   cursor = 0;
 
-  while ((cursor = hm_next(hostmap, cursor, &host, (void **)&ncpus)) != 0) {
+  while ((cursor = hm_next(hostmap, cursor, &host, (const void **)&ncpus)) != 0) {
 
     n = snprintf(buf + nwritten, bufsize - nwritten, "%s%s:%"PRIu16,
                  nwritten > 0 ? "," : "", host, *ncpus);

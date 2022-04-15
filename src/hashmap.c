@@ -70,7 +70,7 @@ hm_free(struct hashmap *map)
 }
 
 
-void *
+const void *
 hm_get(struct hashmap* map, const char *key)
 {
   uint64_t hash;
@@ -133,7 +133,7 @@ hm_length(struct hashmap *map)
 
 
 size_t
-hm_next(struct hashmap *map, size_t cursor, const char **key, void **value)
+hm_next(struct hashmap *map, size_t cursor, const char **key, const void **value)
 {
   for (size_t i = cursor; i < map->nslots; i++) {
     if (map->items[i].key) {
