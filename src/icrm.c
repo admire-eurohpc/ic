@@ -39,14 +39,15 @@ static icrmerr_t _icrm_load_job(icrm_context_t *icrm, uint32_t jobid,
                                 job_info_msg_t **job);
 
 /**
- * Fill hashmap HOSTMAP with host:ncpus pairs. Uses the Slurm values
- * HOSTS (node_list), NCPUS (cpus_per_node) and the REPS CPUs repetition count
- * (cpus_count_reps).
+ * Return a hashmap with host:ncpus pairs. Uses the Slurm values HOSTS
+ * (node_list), NCPUS (cpus_per_node) and the REPS CPUs repetition
+ * count (cpus_count_reps).
  *
- * Return ICRM_SUCCESS or ICRM_FAILURE in case of error.
+ * Return a pointer to the hashmap or NULL in case of memory error.
+ *
+ * The caller is responsible for freeing the hashmap.
  */
-static icrmerr_t set_hostmap(const char *hosts, uint16_t ncpus[], uint32_t reps[],
-                             hm_t *hostmap);
+static hm_t *get_hostmap(const char *hosts, uint16_t ncpus[], uint32_t reps[]);
 
 static enum icrm_jobstate _slurm2icrmstate(enum job_states slurm_state);
 static icrmerr_t _slurm_socket(icrm_context_t *icrm);
@@ -161,21 +162,18 @@ icrm_ncpus(icrm_context_t *icrm, uint32_t jobid,
 
 
 icrmerr_t
-icrm_alloc(struct icrm_context *icrm, uint32_t jobid,
-           uint32_t *newjobid, uint32_t *ncpus, hm_t *hostmap)
+icrm_alloc(struct icrm_context *icrm, uint32_t jobid, uint32_t *newjobid,
+           uint32_t *ncpus, hm_t **hostmap)
 {
   icrmerr_t rc;
   int sret;
   unsigned int wait;
   char buf[DEPEND_MAXLEN];
   job_desc_msg_t jobreq;
-  resource_allocation_response_msg_t *resp;
-  job_step_info_response_msg_t *stepinfo;
-
-  assert(hostmap);
+  resource_allocation_response_msg_t *resp = NULL;
+  job_step_info_response_msg_t *stepinfo = NULL;
 
   rc = ICRM_SUCCESS;
-  resp = NULL;
 
   slurm_init_job_desc_msg(&jobreq);
 
@@ -214,10 +212,11 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid,
     *ncpus += resp->cpus_per_node[i] * resp->cpu_count_reps[i];
   }
 
-  rc = set_hostmap(resp->node_list, resp->cpus_per_node, resp->cpu_count_reps,
-                   hostmap);
-  if (rc != ICRM_SUCCESS) {
-    WRITERR(icrm, "Could not set Slurm hostmap");
+  *hostmap = get_hostmap(resp->node_list, resp->cpus_per_node,
+                         resp->cpu_count_reps);
+  if (*hostmap == NULL) {
+    WRITERR(icrm, "Out of memory");
+    rc = ICRM_ENOMEM;
     goto end;
   }
 
@@ -313,6 +312,82 @@ icrm_merge(struct icrm_context *icrm, uint32_t jobid)
 
 
 icrmerr_t
+icrm_release_node(struct icrm_context *icrm, const char *nodename, uint32_t jobid,
+                  uint32_t ncpus)
+{
+  assert(jobid);
+  assert(nodename);
+  assert(ncpus > 0);
+
+  resource_allocation_response_msg_t *allocinfo = NULL;
+  job_array_resp_msg_t *jobresp = NULL;
+
+  icrmerr_t ret = ICRM_SUCCESS;
+
+  int sret = slurm_allocation_lookup(jobid, &allocinfo);
+  if (sret != SLURM_SUCCESS) {
+    WRITERR(icrm, "slurm_allocation_lookup: %s", slurm_strerror(slurm_get_errno()));
+    ret = ICRM_ERESOURCEMAN;
+    goto end;
+  }
+
+  hm_t *hostmap = get_hostmap(allocinfo->node_list, allocinfo->cpus_per_node,
+                              allocinfo->cpu_count_reps);
+  if (!hostmap) {
+    ret = ICRM_ENOMEM;
+    goto end;
+  }
+
+  const uint16_t *nalloced = hm_get(hostmap, nodename);
+  if (!nalloced || *nalloced != ncpus) {
+    WRITERR(icrm, "Cannot release node %s:%"PRIu16", %"PRIu16" CPUs allocated",
+            nodename, ncpus, nalloced ? *nalloced : 0);
+    if (*nalloced > ncpus)
+      ret = ICRM_EAGAIN;
+    else
+      ret = ICRM_FAILURE;
+    goto end;
+  }
+
+  /* generate new hostlist with the node removed */
+  uint16_t nocpus = 0;
+  int rc = hm_set(hostmap, nodename, &nocpus, sizeof(nocpus));
+  if (rc == -1) {
+    ret = ICRM_ENOMEM;
+    goto end;
+  }
+
+  char *newlist = icrm_hostlist(hostmap, 0);
+  if(!newlist) {
+    ret = ICRM_ENOMEM;
+    goto end;
+  }
+
+  /* update job, equivalent to:
+     "scontrol update JobId=$JOBID NodeList=$HOSTLIST" */
+  job_desc_msg_t jobreq;
+
+  slurm_init_job_desc_msg(&jobreq);
+  jobreq.job_id = jobid;
+  jobreq.req_nodes = newlist;
+
+  sret = slurm_update_job2(&jobreq, &jobresp);
+  if (sret != SLURM_SUCCESS) {
+    WRITERR(icrm, "slurm_update_job2: %s", slurm_strerror(slurm_get_errno()));
+    ret = ICRM_ERESOURCEMAN;
+  }
+
+ end:
+  if (allocinfo)
+    slurm_free_resource_allocation_response_msg(allocinfo);
+  if (jobresp)
+    slurm_free_job_array_resp(jobresp);
+
+  return ret;
+}
+
+
+icrmerr_t
 icrm_update_hostmap(hm_t *hostmap, hm_t *newalloc)
 {
   assert(hostmap);
@@ -332,6 +407,55 @@ icrm_update_hostmap(hm_t *hostmap, hm_t *newalloc)
   }
 
   return ICRM_SUCCESS;
+}
+
+
+char *
+icrm_hostlist(hm_t *hostmap, char withcpus)
+{
+  char *buf, *tmp;
+  size_t bufsize, nwritten, n, cursor;
+  const char *host;
+  const uint16_t *ncpus;
+
+  bufsize = 512;            /* start with a reasonably sized buffer */
+
+  buf = malloc(bufsize);
+  if (!buf) {
+    return NULL;
+  }
+  buf[0] = '\0';
+
+  nwritten = n = 0;
+  cursor = 0;
+
+  while ((cursor = hm_next(hostmap, cursor, &host, (const void **)&ncpus)) != 0) {
+    assert(ncpus);
+
+    if (*ncpus == 0) {          /* ignore node with no CPUs */
+      continue;
+    } else if (withcpus) {
+      n = snprintf(buf + nwritten, bufsize - nwritten, "%s%s:%"PRIu16,
+                   nwritten > 0 ? "," : "", host, *ncpus);
+    } else {
+      n = snprintf(buf + nwritten, bufsize - nwritten, "%s%s",
+                   nwritten > 0 ? "," : "", host);
+    }
+
+    if (n < bufsize - nwritten) {
+      nwritten += n;
+    } else {
+      tmp = reallocarray(buf, 2, bufsize);
+      if (!tmp) {
+        free(buf);
+        return NULL;
+      }
+      buf = tmp;
+      bufsize *= 2;             /* potential overlow catched by reallocarray */
+    }
+  }
+
+  return buf;
 }
 
 
@@ -481,14 +605,13 @@ _icrm_load_job(icrm_context_t *icrm, uint32_t jobid, job_info_msg_t **job)
   return rc;
 }
 
-static icrmerr_t
-set_hostmap(const char *hostlist,
-            uint16_t cpus_per_node[], uint32_t cpus_count_reps[], hm_t *hostmap)
+static hm_t *
+get_hostmap(const char *hostlist, uint16_t cpus_per_node[],
+            uint32_t cpus_count_reps[])
 {
   assert(hostlist);
   assert(cpus_per_node);
   assert(cpus_count_reps);
-  assert(hostmap);
 
   hostlist_t hl;
   uint16_t ncpus;
@@ -496,9 +619,14 @@ set_hostmap(const char *hostlist,
   char *host;
   size_t icpu;
 
+  hm_t *hostmap = hm_create();
+  if (!hostmap) {               /* out of memory */
+    return NULL;
+  }
+
   hl = slurm_hostlist_create(hostlist);
   if (!hl) {
-    return ICRM_ENOMEM;
+    return NULL;
   }
 
   /* Slurm returns the CPU counts grouped. There is num_cpu_groups
@@ -521,5 +649,5 @@ set_hostmap(const char *hostlist,
 
   slurm_hostlist_destroy(hl);
 
-  return ICRM_SUCCESS;
+  return hostmap;
 }

@@ -9,9 +9,10 @@
 
 struct icc_context;
 
-#define ICC_SUCCESS  0
-#define ICC_FAILURE -1
-#define ICC_ENOMEM   1
+#define ICC_SUCCESS    0
+#define ICC_FAILURE   -1
+#define ICC_ENOMEM     1
+#define ICC_EINVAL     2        /* invalid argument */
 
 
 /* Log levels, lifted from Margo */
@@ -98,8 +99,17 @@ int icc_sleep(struct icc_context *icc, double timeout_ms);
  *
  * Return ICC_SUCCESS or an error code.
  */
+int icc_wait_for_finalize(struct icc_context *icc);
+
+
+/**
+ * Release NCPUS on HOST. The resource wil be actually released to the
+ * resource manager once all CPUs of a node have been released.
+ *
+ * Return ICC_SUCCESS or an error code.
+ */
 int
-icc_wait_for_finalize(struct icc_context *icc);
+icc_release_resource(struct icc_context *icc, const char *host, uint16_t ncpus);
 
 
 /**

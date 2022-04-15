@@ -41,12 +41,6 @@ struct alloc_args {
 static void alloc_th(struct alloc_args *args);
 
 
-/**
- * Generate a comma-separated host:ncpus list from hashmap
- * HOSTMAP. The values of the hashmap must be pointers to uint16_t.
- */
-static char *hostmap2hostlist(hm_t *hostmap);
-
 
 void
 reconfigure_cb(hg_handle_t h)
@@ -171,17 +165,18 @@ alloc_th(struct alloc_args *args)
   in.ncpus = args->ncpus;
   in.jobid = icc->jobid;
 
-  hm_t *newalloc = hm_create();
   uint32_t newjobid;
 
   /* allocation request: blocking call */
-  icrmerr_t ret = icrm_alloc(icc->icrm, icc->jobid, &newjobid, &in.ncpus, newalloc);
+  hm_t *newalloc;
+  icrmerr_t ret = icrm_alloc(icc->icrm, icc->jobid, &newjobid, &in.ncpus,
+                             &newalloc);
   if (ret != ICRM_SUCCESS) {
     margo_error(icc->mid, "icrm_alloc error: %s", icrm_errstr(icc->icrm));
     goto end;
   }
 
-  in.hostlist = hostmap2hostlist(newalloc);
+  in.hostlist = icrm_hostlist(newalloc, 1);
 
   margo_debug(icc->mid, "Job %"PRIu32" resource allocation of %"PRIu32" CPUs (%s)", in.jobid, in.ncpus, in.hostlist);
 
@@ -228,45 +223,4 @@ alloc_th(struct alloc_args *args)
     hm_free(newalloc);
   if (in.hostlist != NULL)
     free(in.hostlist);
-}
-
-
-static char *
-hostmap2hostlist(hm_t *hostmap)
-{
-  char *buf, *tmp;
-  size_t bufsize, nwritten, n, cursor;
-  const char *host;
-  const uint16_t *ncpus;
-
-  bufsize = 512;            /* start with a reasonably sized buffer */
-
-  buf = malloc(bufsize);
-  if (!buf) {
-    return NULL;
-  }
-  buf[0] = '\0';
-
-  nwritten = n = 0;
-  cursor = 0;
-
-  while ((cursor = hm_next(hostmap, cursor, &host, (const void **)&ncpus)) != 0) {
-
-    n = snprintf(buf + nwritten, bufsize - nwritten, "%s%s:%"PRIu16,
-                 nwritten > 0 ? "," : "", host, *ncpus);
-
-    if (n < bufsize - nwritten) {
-      nwritten += n;
-    } else {
-      tmp = reallocarray(buf, 2, bufsize);
-      if (!tmp) {
-        free(buf);
-        return NULL;
-      }
-      buf = tmp;
-      bufsize *= 2;             /* potential overlow catched by reallocarray */
-    }
-  }
-
-  return buf;
 }

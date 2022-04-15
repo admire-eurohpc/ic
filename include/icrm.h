@@ -17,6 +17,7 @@ enum icrm_error {
   ICRM_EJOBID,
   ICRM_ERESOURCEMAN,            /* resource manager */
   ICRM_EOVERFLOW,
+  ICRM_EAGAIN,
   ICRM_ECOUNT,
 };
 typedef enum icrm_error icrmerr_t;
@@ -85,9 +86,11 @@ icrmerr_t icrm_ncpus(icrm_context_t *icrm, uint32_t jobid,
  * in NCPUS and a host(char *):ncpus(uint16_t) map in HOSTMAP.
  *
  * Return ICRM_SUCCESS or an error code.
+ *
+ * The caller is responsible for freeing HOSTMAP.
  */
 icrmerr_t icrm_alloc(icrm_context_t *icrm, uint32_t jobid,
-                     uint32_t *newjobid, uint32_t *ncpus, hm_t *hostmap);
+                     uint32_t *newjobid, uint32_t *ncpus, hm_t **hostmap);
 
 /**
  * Renounce the resources of job JOBID and merge them with the job for
@@ -100,7 +103,19 @@ icrmerr_t icrm_merge(icrm_context_t *icrm, uint32_t jobid);
 
 
 /**
- * Update existing HOSTMAP with the resources in NEWALLOC.
+ * Release node NODENAME to the resource manager, after checking that
+ * JOBID indeed used NCPUS from this node.
+ *
+ * Return ICRM_SUCCESS or an error code. If ICRM_EAGAIN is returned it
+ * means that the node cannot be released because more CPUs have been
+ * allocated on it.
+ */
+icrmerr_t icrm_release_node(icrm_context_t *icrm, const char *nodename,
+                            uint32_t jobid, uint32_t ncpus);
+
+
+/**
+ * Augment existing HOSTMAP with the resources in NEWALLOC.
  *
  * Return ICRM_SUCCESS or ICRM_EOVERFLOW if the resulting number of
  * CPUs would be too big.
@@ -108,5 +123,16 @@ icrmerr_t icrm_merge(icrm_context_t *icrm, uint32_t jobid);
 icrmerr_t icrm_update_hostmap(hm_t *hostmap, hm_t *newalloc);
 
 
+/**
+ * Return a comma-separated list of hostname from hashmap HOSTMAP. If
+ * WITHCPUS is true, add the number of CPUs associated with the node:
+ * host:ncpus.  The values of the hashmap must be pointers to
+ * uint16_t.
+ *
+ * Return the hostlist or NULL in case of a memory error.
+ *
+ * The caller is responsible for freeing the hostlist.
+ */
+char *icrm_hostlist(hm_t *hostmap, char withcpus);
 
 #endif
