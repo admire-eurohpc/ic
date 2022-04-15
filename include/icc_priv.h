@@ -22,6 +22,11 @@ struct icc_context {
   char              clid[UUID_STR_LEN]; /* client uuid */
   enum icc_client_type type;            /* client type */
 
+  /* modified on alloc/release, use lock to access */
+  ABT_rwlock hostlock;
+  hm_t       *hostalloc;                /* map of host:ncpus allocated */
+  hm_t       *hostrelease;              /* map of host:ncpus released */
+
   /* XX fixme icrm not thread-safe */
   icrm_context_t    *icrm;              /* resource manager comm */
   ABT_xstream       icrm_xstream;       /* blocking execution stream */

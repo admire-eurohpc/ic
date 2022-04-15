@@ -16,6 +16,7 @@ enum icrm_error {
   ICRM_ENOMEM,
   ICRM_EJOBID,
   ICRM_ERESOURCEMAN,            /* resource manager */
+  ICRM_EOVERFLOW,
   ICRM_ECOUNT,
 };
 typedef enum icrm_error icrmerr_t;
@@ -76,14 +77,36 @@ icrmerr_t icrm_ncpus(icrm_context_t *icrm, uint32_t jobid,
 
 /**
  * Request a new allocation of NCPUS to the resource manager. Blocks
- * until the allocation has been granted.
+ * until the allocation has been granted. This will generate a new job
+ * NEWJOBID with the resources requested, call icrm_merge to merge
+ * them in job JOBID.
  *
- * Return the actual number of CPUs granted in NCPUS, and a
- * host(char *):ncpus(uint16_t) map in HOSTMAP.
+ * Return the new jobid in NEWJOBID, the actual number of CPUs granted
+ * in NCPUS and a host(char *):ncpus(uint16_t) map in HOSTMAP.
  *
  * Return ICRM_SUCCESS or an error code.
  */
-icrmerr_t icrm_alloc(icrm_context_t *icrm, uint32_t jobid, uint32_t *ncpus,
-                     hm_t *hostmap);
+icrmerr_t icrm_alloc(icrm_context_t *icrm, uint32_t jobid,
+                     uint32_t *newjobid, uint32_t *ncpus, hm_t *hostmap);
+
+/**
+ * Renounce the resources of job JOBID and merge them with the job for
+ * which they had been requested. This is equivalent to calling
+ * "scontrol update JobId=$JOBID NumNodes=0"
+ *
+ * Return ICRM_SUCCESS or an error code.
+ */
+icrmerr_t icrm_merge(icrm_context_t *icrm, uint32_t jobid);
+
+
+/**
+ * Update existing HOSTMAP with the resources in NEWALLOC.
+ *
+ * Return ICRM_SUCCESS or ICRM_EOVERFLOW if the resulting number of
+ * CPUs would be too big.
+ */
+icrmerr_t icrm_update_hostmap(hm_t *hostmap, hm_t *newalloc);
+
+
 
 #endif

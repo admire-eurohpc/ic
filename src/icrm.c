@@ -30,10 +30,6 @@
 #define WRITERR(icrm,...)  _writerr(icrm, __FILE__, __LINE__, __func__, __VA_ARGS__)
 
 
-/* memory for the icrm lock */
-static ABT_mutex_memory icrmlockmem = ABT_MUTEX_INITIALIZER;
-
-
 /**
  * Return info of job JOBID in buffer JOB.
  *
@@ -166,23 +162,20 @@ icrm_ncpus(icrm_context_t *icrm, uint32_t jobid,
 
 icrmerr_t
 icrm_alloc(struct icrm_context *icrm, uint32_t jobid,
-           uint32_t *ncpus, hm_t *hostmap)
+           uint32_t *newjobid, uint32_t *ncpus, hm_t *hostmap)
 {
   icrmerr_t rc;
   int sret;
   unsigned int wait;
   char buf[DEPEND_MAXLEN];
-  ABT_mutex mutex;
-  job_desc_msg_t jobreq, jobreq2;
+  job_desc_msg_t jobreq;
   resource_allocation_response_msg_t *resp;
-  job_array_resp_msg_t *resp2;
   job_step_info_response_msg_t *stepinfo;
 
   assert(hostmap);
 
   rc = ICRM_SUCCESS;
   resp = NULL;
-  resp2 = NULL;
 
   slurm_init_job_desc_msg(&jobreq);
 
@@ -198,6 +191,7 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid,
   snprintf(buf, DEPEND_MAXLEN, "expand:%"PRIu32, jobid);
   jobreq.dependency = buf;
 
+  *newjobid = 0;
   *ncpus = 0;
 
   resp = slurm_allocate_resources_blocking(&jobreq, 0, NULL);
@@ -209,6 +203,8 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid,
     goto end;
   }
 
+  *newjobid = resp->job_id;
+
   /* Slurm should always fill these */
   assert(resp->num_cpu_groups >= 1);
   assert(resp->cpus_per_node);
@@ -216,6 +212,13 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid,
 
   for (uint32_t i = 0; i < resp->num_cpu_groups; i++) {
     *ncpus += resp->cpus_per_node[i] * resp->cpu_count_reps[i];
+  }
+
+  rc = set_hostmap(resp->node_list, resp->cpus_per_node, resp->cpu_count_reps,
+                   hostmap);
+  if (rc != ICRM_SUCCESS) {
+    WRITERR(icrm, "Could not set Slurm hostmap");
+    goto end;
   }
 
   /* this pause makes the upcoming kill much faster than sending the
@@ -273,44 +276,62 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid,
     }
   }
 
-  /* 2. update allocation, equivalent to:
-     "scontrol update JobId=$JOBID NumNodes=0" */
-  slurm_init_job_desc_msg(&jobreq2);
+ end:
+  if (resp) slurm_free_resource_allocation_response_msg(resp);
+  if (stepinfo) slurm_free_job_step_info_response_msg(stepinfo);
+
+  return rc;
+}
+
+icrmerr_t
+icrm_merge(struct icrm_context *icrm, uint32_t jobid)
+{
+  icrmerr_t rc = ICRM_SUCCESS;
+
+  job_desc_msg_t jobdesc;
+  job_array_resp_msg_t *resp = NULL;
+
+  slurm_init_job_desc_msg(&jobdesc);
 
   /* according to Slurm update_job.c, only min_nodes should be set there */
-  jobreq2.min_nodes = 0;
-  jobreq2.job_id = resp->job_id;
+  jobdesc.min_nodes = 0;
+  jobdesc.job_id = jobid;
 
-  /* CRITICAL SECTION: nodes can be deallocated at the same time */
-  mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&icrmlockmem);
-  ABT_mutex_lock(mutex);
-
-  sret = slurm_update_job2(&jobreq2, &resp2);
+  int sret = slurm_update_job2(&jobdesc, &resp);
   if (sret != SLURM_SUCCESS) {
     WRITERR(icrm, "slurm_update_job2: %s", slurm_strerror(slurm_get_errno()));
-    ABT_mutex_unlock(mutex);
     rc = ICRM_ERESOURCEMAN;
-    goto end;
-  }
-
-  ABT_mutex_unlock(mutex);
-
-  rc = set_hostmap(resp->node_list, resp->cpus_per_node, resp->cpu_count_reps,
-                   hostmap);
-  if (rc != ICRM_SUCCESS) {
-    ABT_mutex_unlock(mutex);
-    WRITERR(icrm, "Could not set Slurm hostmap");
-    goto end;
   }
 
   /* XX maybe update Slurm environment? (see Slurm update_job.c)*/
 
- end:
-  if (resp) slurm_free_resource_allocation_response_msg(resp);
-  if (resp2) slurm_free_job_array_resp(resp2);
-  if (stepinfo) slurm_free_job_step_info_response_msg(stepinfo);
-
+  if (resp) {
+    slurm_free_job_array_resp(resp);
+  }
   return rc;
+}
+
+
+icrmerr_t
+icrm_update_hostmap(hm_t *hostmap, hm_t *newalloc)
+{
+  assert(hostmap);
+  assert(newalloc);
+
+  const char *host;
+  uint16_t *nalloc;
+  size_t curs = 0;
+
+  while ((curs = hm_next(newalloc, curs, &host, (void **)&nalloc)) != 0) {
+    uint16_t *ncpus = hm_get(hostmap, host);
+    if (ncpus && UINT16_MAX - *ncpus < *nalloc) {         /* would overflow */
+      return ICRM_EOVERFLOW;
+    }
+    uint16_t ntotal = *nalloc + (ncpus ? *ncpus : 0);
+    hm_set(hostmap, host, &ntotal, sizeof(ntotal));
+  }
+
+  return ICRM_SUCCESS;
 }
 
 

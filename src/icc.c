@@ -9,6 +9,7 @@
 #include <margo.h>
 #include "uuid_admire.h"
 
+#include "hashmap.h"
 #include "icc_priv.h"
 #include "rpc.h"
 #include "cb.h"
@@ -42,6 +43,7 @@ static int _strtouint32(const char *nptr, uint32_t *dest);
 static int _setup_margo(enum icc_log_level log_level, struct icc_context *icc);
 static int _setup_reconfigure(struct icc_context *icc, icc_reconfigure_func_t func, void *data);
 static int _setup_icrm(struct icc_context *icc);
+static int _setup_hostmaps(struct icc_context *icc);
 static int _register_client(struct icc_context *icc, int nprocs);
 
 /* public functions */
@@ -107,6 +109,10 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
 
   /* icrm requires Argobots to be setup, so icrm goes after Margo */
   rc = _setup_icrm(icc);
+  if (rc)
+    goto error;
+
+  rc = _setup_hostmaps(icc);
   if (rc)
     goto error;
 
@@ -186,6 +192,16 @@ icc_fini(struct icc_context *icc)
     rc = ICC_FAILURE;
   }
 
+  if (icc->hostlock) {
+    ABT_rwlock_free(&icc->hostlock);
+  }
+
+  if (icc->hostalloc) {
+    hm_free(icc->hostalloc);
+  }
+
+  if (icc->hostrelease) {
+    hm_free(icc->hostrelease);
   }
 
   if (icc->icrm) {
@@ -482,6 +498,24 @@ _setup_icrm(struct icc_context *icc)
       margo_error(icc->mid, "icrm init failure (ret = %d)", rc);
     return ICC_FAILURE;
   }
+
+  return ICC_SUCCESS;
+}
+
+static int
+_setup_hostmaps(struct icc_context *icc)
+{
+  int rc = ABT_rwlock_create(&icc->hostlock);
+  if (rc != ABT_SUCCESS)
+    return ICC_FAILURE;
+
+  icc->hostalloc = hm_create();
+  if (!icc->hostalloc)
+    return ICC_FAILURE;
+
+  icc->hostrelease = hm_create();
+  if (!icc->hostrelease)
+    return ICC_FAILURE;
 
   return ICC_SUCCESS;
 }
