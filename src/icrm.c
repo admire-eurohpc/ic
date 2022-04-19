@@ -83,6 +83,8 @@ icrm_init(icrm_context_t **icrm)
   if (rc)
     return ICRM_FAILURE;
 
+  slurm_init(NULL);
+
   return ICRM_SUCCESS;
 }
 
@@ -97,6 +99,7 @@ icrm_fini(icrm_context_t **icrm)
     }
     *icrm = NULL;
   }
+  slurm_fini();
 }
 
 
@@ -287,9 +290,8 @@ icrm_merge(struct icrm_context *icrm, uint32_t jobid)
 {
   icrmerr_t rc = ICRM_SUCCESS;
 
-  job_desc_msg_t jobdesc;
   job_array_resp_msg_t *resp = NULL;
-
+  job_desc_msg_t jobdesc;
   slurm_init_job_desc_msg(&jobdesc);
 
   /* according to Slurm update_job.c, only min_nodes should be set there */
@@ -300,13 +302,12 @@ icrm_merge(struct icrm_context *icrm, uint32_t jobid)
   if (sret != SLURM_SUCCESS) {
     WRITERR(icrm, "slurm_update_job2: %s", slurm_strerror(slurm_get_errno()));
     rc = ICRM_ERESOURCEMAN;
+  } else {
+    slurm_free_job_array_resp(resp);
   }
 
   /* XX maybe update Slurm environment? (see Slurm update_job.c)*/
 
-  if (resp) {
-    slurm_free_job_array_resp(resp);
-  }
   return rc;
 }
 
@@ -319,23 +320,23 @@ icrm_release_node(struct icrm_context *icrm, const char *nodename, uint32_t jobi
   assert(nodename);
   assert(ncpus > 0);
 
-  resource_allocation_response_msg_t *allocinfo = NULL;
-  job_array_resp_msg_t *jobresp = NULL;
-
   icrmerr_t ret = ICRM_SUCCESS;
+  resource_allocation_response_msg_t *allocinfo = NULL;
 
   int sret = slurm_allocation_lookup(jobid, &allocinfo);
   if (sret != SLURM_SUCCESS) {
     WRITERR(icrm, "slurm_allocation_lookup: %s", slurm_strerror(slurm_get_errno()));
-    ret = ICRM_ERESOURCEMAN;
-    goto end;
+    return ICRM_ERESOURCEMAN;
   }
 
   hm_t *hostmap = get_hostmap(allocinfo->node_list, allocinfo->cpus_per_node,
                               allocinfo->cpu_count_reps);
+
+  slurm_free_resource_allocation_response_msg(allocinfo);
+
   if (!hostmap) {
-    ret = ICRM_ENOMEM;
-    goto end;
+    slurm_free_resource_allocation_response_msg(allocinfo);
+    return ICRM_ENOMEM;
   }
 
   const uint16_t *nalloced = hm_get(hostmap, nodename);
@@ -346,28 +347,33 @@ icrm_release_node(struct icrm_context *icrm, const char *nodename, uint32_t jobi
       ret = ICRM_EAGAIN;
     else
       ret = ICRM_FAILURE;
-    goto end;
+
+    hm_free(hostmap);
+    return ret;
   }
 
   /* generate new hostlist with the node removed */
   uint16_t nocpus = 0;
   int rc = hm_set(hostmap, nodename, &nocpus, sizeof(nocpus));
   if (rc == -1) {
-    ret = ICRM_ENOMEM;
-    goto end;
+    hm_free(hostmap);
+    return ICRM_ENOMEM;
   }
 
   char *newlist = icrm_hostlist(hostmap, 0);
+
+  hm_free(hostmap);
+
   if(!newlist) {
-    ret = ICRM_ENOMEM;
-    goto end;
+    return ICRM_ENOMEM;
   }
 
   /* update job, equivalent to:
      "scontrol update JobId=$JOBID NodeList=$HOSTLIST" */
+  job_array_resp_msg_t *jobresp = NULL;
   job_desc_msg_t jobreq;
-
   slurm_init_job_desc_msg(&jobreq);
+
   jobreq.job_id = jobid;
   jobreq.req_nodes = newlist;
 
@@ -375,13 +381,14 @@ icrm_release_node(struct icrm_context *icrm, const char *nodename, uint32_t jobi
   if (sret != SLURM_SUCCESS) {
     WRITERR(icrm, "slurm_update_job2: %s", slurm_strerror(slurm_get_errno()));
     ret = ICRM_ERESOURCEMAN;
+  } else if (jobresp) {
+    slurm_free_job_array_resp(jobresp);
+    ret = ICRM_SUCCESS;
   }
 
- end:
-  if (allocinfo)
-    slurm_free_resource_allocation_response_msg(allocinfo);
-  if (jobresp)
-    slurm_free_job_array_resp(jobresp);
+  if (newlist) {
+    free(newlist);
+  }
 
   return ret;
 }
@@ -616,7 +623,6 @@ get_hostmap(const char *hostlist, uint16_t cpus_per_node[],
   hostlist_t hl;
   uint16_t ncpus;
   uint32_t reps;
-  char *host;
   size_t icpu;
 
   hm_t *hostmap = hm_create();
@@ -626,6 +632,7 @@ get_hostmap(const char *hostlist, uint16_t cpus_per_node[],
 
   hl = slurm_hostlist_create(hostlist);
   if (!hl) {
+    hm_free(hostmap);
     return NULL;
   }
 
@@ -636,6 +643,7 @@ get_hostmap(const char *hostlist, uint16_t cpus_per_node[],
   icpu = 0;
   reps = cpus_count_reps[icpu];
 
+  char *host;
   while ((host = slurm_hostlist_shift(hl))) {
     ncpus = cpus_per_node[icpu];
     reps--;
