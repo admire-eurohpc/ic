@@ -173,8 +173,10 @@ icc_fini(struct icc_context *icc)
     return rc;
 
   if (icc->icrm_xstream) {
-    ABT_xstream_join(icc->icrm_xstream);
+    icc->icrm_terminate = 1;
     ABT_xstream_free(&icc->icrm_xstream);
+    /* pool is freed by ABT_xstream_free? */
+    /* ABT_pool_free(&icc->icrm_pool); */
   }
 
   if (icc->bidirectional && icc->registered) {
@@ -187,9 +189,11 @@ icc_fini(struct icc_context *icc)
     }
   }
 
-  if (margo_addr_free(icc->mid, icc->addr) != HG_SUCCESS) {
-    margo_error(icc->mid, "Could not free Margo address");
-    rc = ICC_FAILURE;
+  if (icc->mid && icc->addr) {
+    if (margo_addr_free(icc->mid, icc->addr) != HG_SUCCESS) {
+      margo_error(icc->mid, "Could not free Margo address");
+      rc = ICC_FAILURE;
+    }
   }
 
   if (icc->hostlock) {
@@ -220,8 +224,9 @@ icc_fini(struct icc_context *icc)
     close(icc->flexmpi_sock);
   }
 
-  if (icc->mid)
+  if (icc->mid) {
     margo_finalize(icc->mid);
+  }
 
   free(icc);
 
@@ -525,7 +530,9 @@ _setup_icrm(struct icc_context *icc)
 {
   int rc;
 
-  /* setup a blocking ES to handle communication with the RM */
+  icc->icrm_terminate = 0;
+
+  /* setup a blocking pool to handle communication with the RM */
   rc = ABT_pool_create_basic(ABT_POOL_FIFO, ABT_POOL_ACCESS_MPMC, ABT_TRUE,
                              &icc->icrm_pool);
   if (rc != ABT_SUCCESS) {
@@ -576,7 +583,7 @@ _register_client(struct icc_context *icc, int nprocs)
   char addr_str[ICC_ADDR_LEN];
   hg_size_t addr_str_size = ICC_ADDR_LEN;
   client_register_in_t rpc_in;
-  int rc, rpc_rc;
+  int rc;
 
   assert(icc);
   assert(icc->icrm);
@@ -600,10 +607,11 @@ _register_client(struct icc_context *icc, int nprocs)
   rpc_in.clid = icc->clid;
   rpc_in.type = _icc_type_str(icc->type);
 
-  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_CLIENT_REGISTER], &rpc_in, &rpc_rc);
+  int rpcret = RPC_SUCCESS;
+  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_CLIENT_REGISTER], &rpc_in, &rpcret);
 
-  if (rc || rpc_rc) {
-    margo_error(icc->mid, "icc (register): Cannot register client to the IC (ret = %d, RPC ret = %d)", rc, rpc_rc);
+  if (rc || rpcret) {
+    margo_error(icc->mid, "icc (register): Cannot register client to the IC (ret = %d, RPC ret = %d)", rc, rpcret);
     rc = ICC_FAILURE;
   } else {
     icc->registered = 1;

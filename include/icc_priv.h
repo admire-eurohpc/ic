@@ -29,8 +29,9 @@ struct icc_context {
 
   /* XX fixme icrm not thread-safe */
   icrm_context_t    *icrm;              /* resource manager comm */
-  ABT_xstream       icrm_xstream;       /* blocking execution stream */
-  ABT_pool          icrm_pool;
+  char              icrm_terminate;     /* terminate flag */
+  ABT_pool          icrm_pool;          /* pool for blocking RM requests */
+  ABT_xstream       icrm_xstream;       /* exec stream to associate to the pool */
 
   icc_reconfigure_func_t reconfig_func;
   void                   *reconfig_data;

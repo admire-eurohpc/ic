@@ -128,8 +128,14 @@ resalloc_cb(hg_handle_t h)
      block on the request. A tasklet would be more appropriate than an
      ULT here, but Argobots 1.x does not allow tasklets to call
      eventuals, which RPC do */
-  struct alloc_args *args = malloc(sizeof(*args));
 
+  /* first, check that we are not being shut down */
+  if (icc->icrm_terminate) {
+    out.rc = RPC_TERMINATED;
+    goto respond;
+  }
+
+  struct alloc_args *args = malloc(sizeof(*args));
   if (args == NULL) {
     out.rc = ICC_ENOMEM;
     goto respond;
@@ -141,12 +147,13 @@ resalloc_cb(hg_handle_t h)
 
   /* note: args must be freed in the ULT */
 
-  ret = ABT_thread_create(icc->icrm_pool, (void (*)(void *))alloc_th, args,
-                          ABT_THREAD_ATTR_NULL, NULL);
-
-  if (ret != ABT_SUCCESS) {
-    margo_error(mid, "ABT_thread_create failure: ret=%d", ret);
-    out.rc = ICC_FAILURE;
+  if (icc->icrm_pool != ABT_POOL_NULL) {
+    ret = ABT_thread_create(icc->icrm_pool, (void (*)(void *))alloc_th, args,
+                            ABT_THREAD_ATTR_NULL, NULL);
+    if (ret != ABT_SUCCESS) {
+      margo_error(mid, "ABT_thread_create failure: ret=%d", ret);
+      out.rc = ICC_FAILURE;
+    }
   }
 
  respond:
