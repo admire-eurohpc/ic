@@ -49,6 +49,9 @@ enum icc_client_type {
  * resources. SHRINK, MAXPROCS and HOSTLIST are provided by the IC,
  * DATA is a pointer passed at registration by the caller, and passed
  * back as-is to the function by libicc.
+ *
+ * Warning: this function is called by Argobots (~threads) in libicc
+ * so it must be thread-safe and reentrant.
  */
 typedef int (*icc_reconfigure_func_t)(int shrink, uint32_t maxprocs, const char *hostlist, void *data);
 
