@@ -189,13 +189,6 @@ icc_fini(struct icc_context *icc)
     }
   }
 
-  if (icc->mid && icc->addr) {
-    if (margo_addr_free(icc->mid, icc->addr) != HG_SUCCESS) {
-      margo_error(icc->mid, "Could not free Margo address");
-      rc = ICC_FAILURE;
-    }
-  }
-
   if (icc->hostlock) {
     ABT_rwlock_free(&icc->hostlock);
   }
@@ -209,7 +202,7 @@ icc_fini(struct icc_context *icc)
   }
 
   if (icc->icrm) {
-      icrm_fini(&icc->icrm);
+    icrm_fini(&icc->icrm);
   }
 
   if (icc->flexhandle) {
@@ -225,6 +218,9 @@ icc_fini(struct icc_context *icc)
   }
 
   if (icc->mid) {
+    if (icc->addr) {
+      margo_addr_free(icc->mid, icc->addr);
+    }
     margo_finalize(icc->mid);
   }
 

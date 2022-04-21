@@ -598,7 +598,8 @@ _icrm_load_job(icrm_context_t *icrm, uint32_t jobid, job_info_msg_t **job)
 
   rc = ICRM_SUCCESS;
 
-  slurmrc = slurm_load_job(job, jobid, SHOW_ALL);
+  /* show local to avoid Slurm federation lookup */
+  slurmrc = slurm_load_job(job, jobid, SHOW_LOCAL);
 
   if (slurmrc != SLURM_SUCCESS) {
     if (errno == ESLURM_INVALID_JOB_ID) {
