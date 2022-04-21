@@ -10,7 +10,6 @@
 - icc:reconfigure: cleanup int/int32_t use
 - flexmpi: simplify func handling, private sock + func enough
 - server: prefix LOG_ERROR with jobid/clid?
-- server: create pool of icrm context
 - server: set hostlist
 - icdb: handle clients as a struct, commit func?
 - icdb: status in context redundant?
@@ -18,13 +17,9 @@
 - icdb: with icrm, factorize WRITERR func & macro
 - icdb: generally error string in context, yay or nay?
 - icrm: network calls in critical section: not great! Use a single RM thread?
-- icrm: icrm_context not thread safe and yet passed as is in icc_context!
-- icrm: remove socket stuff
-- icrm: make request in client instead of server?
 - icrm: add a generic ADMIRE name for dependency jobs
 - icrm: memleak: slurm_init() & slurm_fini() call?
 - hashmap: check hm_set return code
-- jobcleaner: pool of icrm context
 - spawn: wait for finalize? how?
 - spawn: use hostlist
 

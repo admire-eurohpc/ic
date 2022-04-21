@@ -228,8 +228,6 @@ jobclean_cb(hg_handle_t h)
   enum icrm_jobstate state;
   char icrmerrstr[ICC_ERRSTR_LEN];
 
-  icrm_init();
-
   ret = icrm_jobstate(in.jobid, &state, icrmerrstr);
   if (ret != ICRM_SUCCESS) {
     LOG_ERROR(mid, "Ressource manager error: %s", icrmerrstr);
@@ -237,8 +235,6 @@ jobclean_cb(hg_handle_t h)
     /* out.rc = RPC_FAILURE; */
     /* goto respond; */
   }
-
-  icrm_fini();
 
   if (state != ICRM_JOB_PENDING && state != ICRM_JOB_RUNNING) {
     margo_info(mid, "Job cleaner: Will cleanup job %"PRIu32, in.jobid);

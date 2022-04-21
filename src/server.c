@@ -85,6 +85,9 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
     goto error;
   }
 
+  /* initialize connection to the resource manager */
+  icrm_init();
+
   /* initialize connections pool to DB. Because the icdb_context is
      not thread safe, we create one connection per OS threads
      (Argobots "execution stream") */
@@ -149,6 +152,9 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   /* clean up malleability thread */
   ABT_mutex_free(&malldat.mutex);
   ABT_cond_free(&malldat.cond);
+
+  /* clean resource manager connection */
+  icrm_fini();
 
   /* close connections to DB */
   for (size_t i = 0; i < NTHREADS; i++) {
@@ -261,7 +267,6 @@ malleability_th(void *arg)
 
       /* XX number reconfiguration command, add hostlist */
       reconfigure_in_t in = { .cmdidx = 0, .maxprocs = dprocs, .hostlist = "" };
-
       hret = margo_addr_lookup(data->mid, clients[i].addr, &addr);
       if (hret != HG_SUCCESS) {
         LOG_ERROR(data->mid, "Failed getting Mercury address: %s", HG_Error_to_string(hret));
