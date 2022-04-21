@@ -225,25 +225,20 @@ jobclean_cb(hg_handle_t h)
   }
 
   /* clean job from db, ask Slurm first */
-  struct icrm_context *icrm;
   enum icrm_jobstate state;
+  char icrmerrstr[ICC_ERRSTR_LEN];
 
-  ret = icrm_init(&icrm);
-  if (ret != ICRM_SUCCESS) {
-    LOG_ERROR(mid, "Ressource manager init failure");
-    out.rc = RPC_FAILURE;
-    goto respond;
-  }
+  icrm_init();
 
-  ret = icrm_jobstate(icrm, in.jobid, &state);
+  ret = icrm_jobstate(in.jobid, &state, icrmerrstr);
   if (ret != ICRM_SUCCESS) {
-    LOG_ERROR(mid, "Ressource manager error: %s", icrm_errstr(icrm));
-    /* keep going even if the RM does not recognize the job */
+    LOG_ERROR(mid, "Ressource manager error: %s", icrmerrstr);
+    /* cleanup DB even if the RM does not recognize the job */
     /* out.rc = RPC_FAILURE; */
     /* goto respond; */
   }
 
-  icrm_fini(&icrm);
+  icrm_fini();
 
   if (state != ICRM_JOB_PENDING && state != ICRM_JOB_RUNNING) {
     margo_info(mid, "Job cleaner: Will cleanup job %"PRIu32, in.jobid);

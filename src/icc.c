@@ -201,9 +201,7 @@ icc_fini(struct icc_context *icc)
     hm_free(icc->hostrelease);
   }
 
-  if (icc->icrm) {
-    icrm_fini(&icc->icrm);
-  }
+  icrm_fini();
 
   if (icc->flexhandle) {
     rc = dlclose(icc->flexhandle);
@@ -384,7 +382,8 @@ icc_release_resource(struct icc_context *icc, const char *host, uint16_t ncpus)
     rc = ICC_FAILURE;
   }
   else if (n == *nalloced) {                  /* ok to release */
-    icrmerr_t ret = icrm_release_node(icc->icrm, host, icc->jobid, n);
+    char icrmerr[ICC_ERRSTR_LEN];
+    icrmerr_t ret = icrm_release_node(host, icc->jobid, n, icrmerr);
     if (ret == ICC_SUCCESS) {
       margo_debug(icc->mid, "RELEASED %s:%"PRIu16, host, n);
       uint16_t nocpu = 0;
@@ -395,7 +394,7 @@ icc_release_resource(struct icc_context *icc, const char *host, uint16_t ncpus)
     else {
       rc = ICC_FAILURE;
       margo_error(icc->mid, "Failure to release node %s", host);
-      margo_debug(icc->mid, icrm_errstr(icc->icrm));
+      margo_debug(icc->mid, icrmerr);
       rc = hm_set(icc->hostalloc, host, &n, sizeof(n));
       if (rc == -1) rc = ICC_ENOMEM;
     }
@@ -543,14 +542,7 @@ _setup_icrm(struct icc_context *icc)
     return ICC_FAILURE;
   }
 
-  rc = icrm_init(&icc->icrm);
-  if (rc != ICRM_SUCCESS) {
-    if (icc->icrm)
-      margo_error(icc->mid, "icrm init: %s", icrm_errstr(icc->icrm));
-    else
-      margo_error(icc->mid, "icrm init failure (ret = %d)", rc);
-    return ICC_FAILURE;
-  }
+  icrm_init();
 
   return ICC_SUCCESS;
 }
@@ -582,7 +574,6 @@ _register_client(struct icc_context *icc, int nprocs)
   int rc;
 
   assert(icc);
-  assert(icc->icrm);
   assert(icc->jobid);
 
   icc->provider_id = MARGO_PROVIDER_DEFAULT;
@@ -594,7 +585,12 @@ _register_client(struct icc_context *icc, int nprocs)
   }
 
   /* get job info from resource manager */
-  icrm_ncpus(icc->icrm, icc->jobid, &rpc_in.jobncpus, &rpc_in.jobnnodes);
+  char icrmerr[ICC_ERRSTR_LEN];
+  icrmerr_t icrmret;
+  icrmret = icrm_ncpus(icc->jobid, &rpc_in.jobncpus, &rpc_in.jobnnodes, icrmerr);
+  if (icrmret != ICRM_SUCCESS) {
+    margo_error(icc->mid, icrmerr);
+  }
 
   rpc_in.nprocs = nprocs;
   rpc_in.addr_str = addr_str;

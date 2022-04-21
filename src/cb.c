@@ -176,10 +176,11 @@ alloc_th(struct alloc_args *args)
 
   /* allocation request: blocking call */
   hm_t *newalloc;
-  icrmerr_t ret = icrm_alloc(icc->icrm, icc->jobid, &newjobid, &in.ncpus,
-                             &newalloc);
+  char icrmerr[ICC_ERRSTR_LEN];
+  icrmerr_t ret = icrm_alloc(icc->jobid, &newjobid, &in.ncpus, &newalloc,
+                             icrmerr);
   if (ret != ICRM_SUCCESS) {
-    margo_error(icc->mid, "icrm_alloc error: %s", icrm_errstr(icc->icrm));
+    margo_error(icc->mid, "icrm_alloc error: %s", icrmerr);
     goto end;
   }
 
@@ -191,9 +192,9 @@ alloc_th(struct alloc_args *args)
      hostmap needs to be updated atomically */
   ABT_rwlock_wrlock(icc->hostlock);
 
-  ret = icrm_merge(icc->icrm, newjobid);
+  ret = icrm_merge(newjobid, icrmerr);
   if (ret != ICRM_SUCCESS) {
-    margo_error(icc->mid, "icrm_renounce error: %s", icrm_errstr(icc->icrm));
+    margo_error(icc->mid, "icrm_renounce error: %s", icrmerr);
     goto end;
   }
 

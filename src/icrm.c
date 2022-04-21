@@ -27,7 +27,7 @@
 #define CHECK_NULL(p)  if (!(p)) { return ICRM_EPARAM; }
 #define CHECK_ICRM(icrm)  { CHECK_NULL(icrm); CHECK_NULL((icrm)->errstr); }
 
-#define WRITERR(icrm,...)  _writerr(icrm, __FILE__, __LINE__, __func__, __VA_ARGS__)
+#define WRITERR(buf,...)  writerr_internal(buf, __FILE__, __LINE__, __func__, __VA_ARGS__)
 
 
 /**
@@ -35,8 +35,8 @@
  *
  * The caller is responsible for freeing job.
  */
-static icrmerr_t _icrm_load_job(icrm_context_t *icrm, uint32_t jobid,
-                                job_info_msg_t **job);
+static icrmerr_t icrm_load_job_internal(uint32_t jobid, job_info_msg_t **job,
+                                        char errstr[ICC_ERRSTR_LEN]);
 
 /**
  * Return a hashmap with host:ncpus pairs. Uses the Slurm values HOSTS
@@ -47,85 +47,46 @@ static icrmerr_t _icrm_load_job(icrm_context_t *icrm, uint32_t jobid,
  *
  * The caller is responsible for freeing the hashmap.
  */
-static hm_t *get_hostmap(const char *hosts, uint16_t ncpus[], uint32_t reps[]);
+static hm_t *get_hostmap_internal(const char *hosts, uint16_t ncpus[],
+                                  uint32_t reps[]);
 
-static enum icrm_jobstate _slurm2icrmstate(enum job_states slurm_state);
-static icrmerr_t _slurm_socket(icrm_context_t *icrm);
-static icrmerr_t _writerr(icrm_context_t *icrm,
-                          const char *filename, int lineno,
-                          const char *funcname, const char *format, ...);
+/**
+ * Translate the Slurm job state SLURM_STATE to an icrm_jobstate.
+ */
+static enum icrm_jobstate slurm2icrmstate(enum job_states slurm_state);
 
-struct icrm_context {
-  char           errstr[ICC_ERRSTR_LEN];
-  int            sock;          /* Slurm communication socket */
-  unsigned short port;          /* Slurm communication port */
-};
+static icrmerr_t writerr_internal(char errstr[ICC_ERRSTR_LEN],
+                                  const char *filename, int lineno,
+                                  const char *funcname, const char *format, ...);
 
 
-icrmerr_t
-icrm_init(icrm_context_t **icrm)
+void
+icrm_init(void)
 {
-  CHECK_NULL(icrm);
-
-  icrmerr_t rc;
-  icrm_context_t *new;
-
-  *icrm = NULL;
-
-  new = calloc(1, sizeof(*new));
-
-  if (!new)
-    return ICRM_ENOMEM;
-
-  *icrm = new;
-
-  rc = _slurm_socket(*icrm);
-  if (rc)
-    return ICRM_FAILURE;
-
   slurm_init(NULL);
-
-  return ICRM_SUCCESS;
 }
 
 
 void
-icrm_fini(icrm_context_t **icrm)
+icrm_fini(void)
 {
-  if (icrm) {
-    if (*icrm) {
-      close((*icrm)->sock);
-      free(*icrm);
-    }
-    *icrm = NULL;
-  }
   slurm_fini();
 }
 
 
-char *
-icrm_errstr(icrm_context_t *icrm)
-{
-  if (!(icrm && icrm->errstr))
-    return NULL;
-
-  return icrm->errstr;
-}
-
-
 icrmerr_t
-icrm_jobstate(icrm_context_t *icrm, uint32_t jobid, enum icrm_jobstate *jobstate)
+icrm_jobstate(uint32_t jobid, enum icrm_jobstate *jobstate,
+              char errstr[ICC_ERRSTR_LEN])
 {
-  CHECK_ICRM(icrm);
   CHECK_NULL(jobstate);
 
   icrmerr_t rc;
   job_info_msg_t *buf = NULL;
 
-  rc = _icrm_load_job(icrm, jobid, &buf);
+  rc = icrm_load_job_internal(jobid, &buf, errstr);
 
   if (rc == ICRM_SUCCESS) {
-    *jobstate = _slurm2icrmstate(buf->job_array[0].job_state);
+    *jobstate = slurm2icrmstate(buf->job_array[0].job_state);
   }
 
   if (buf) {
@@ -137,10 +98,9 @@ icrm_jobstate(icrm_context_t *icrm, uint32_t jobid, enum icrm_jobstate *jobstate
 
 
 icrmerr_t
-icrm_ncpus(icrm_context_t *icrm, uint32_t jobid,
-           uint32_t *ncpus, uint32_t *nnodes)
+icrm_ncpus(uint32_t jobid, uint32_t *ncpus, uint32_t *nnodes,
+           char errstr[ICC_ERRSTR_LEN])
 {
-  CHECK_ICRM(icrm);
   CHECK_NULL(ncpus);
   CHECK_NULL(nnodes);
 
@@ -150,7 +110,7 @@ icrm_ncpus(icrm_context_t *icrm, uint32_t jobid,
   *ncpus = 0;
   *nnodes = 0;
 
-  rc = _icrm_load_job(icrm, jobid, &buf);
+  rc = icrm_load_job_internal(jobid, &buf, errstr);
   if (rc == ICRM_SUCCESS) {
     *ncpus = buf->job_array[0].num_cpus;
     *nnodes = buf->job_array[0].num_nodes;
@@ -165,8 +125,8 @@ icrm_ncpus(icrm_context_t *icrm, uint32_t jobid,
 
 
 icrmerr_t
-icrm_alloc(struct icrm_context *icrm, uint32_t jobid, uint32_t *newjobid,
-           uint32_t *ncpus, hm_t **hostmap)
+icrm_alloc(uint32_t jobid, uint32_t *newjobid, uint32_t *ncpus, hm_t **hostmap,
+           char errstr[ICC_ERRSTR_LEN])
 {
   icrmerr_t rc;
   int sret;
@@ -198,7 +158,7 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid, uint32_t *newjobid,
   resp = slurm_allocate_resources_blocking(&jobreq, 0, NULL);
 
   if (resp == NULL) {
-    WRITERR(icrm, "slurm_allocate_resources_blocking: %s",
+    WRITERR(errstr, "slurm_allocate_resources_blocking: %s",
             slurm_strerror(slurm_get_errno()));
     rc = ICRM_ERESOURCEMAN;
     goto end;
@@ -215,10 +175,10 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid, uint32_t *newjobid,
     *ncpus += resp->cpus_per_node[i] * resp->cpu_count_reps[i];
   }
 
-  *hostmap = get_hostmap(resp->node_list, resp->cpus_per_node,
-                         resp->cpu_count_reps);
+  *hostmap = get_hostmap_internal(resp->node_list, resp->cpus_per_node,
+                                  resp->cpu_count_reps);
   if (*hostmap == NULL) {
-    WRITERR(icrm, "Out of memory");
+    WRITERR(errstr, "Out of memory");
     rc = ICRM_ENOMEM;
     goto end;
   }
@@ -245,7 +205,7 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid, uint32_t *newjobid,
     sret = slurm_get_errno();
     /* invalid job step = no .extern step, ignore error  */
     if (sret != ESLURM_ALREADY_DONE && sret != ESLURM_INVALID_JOB_ID) {
-      WRITERR(icrm, "slurm_terminate_job_step: %s", slurm_strerror(slurm_get_errno()));
+      WRITERR(errstr, "slurm_terminate_job_step: %s", slurm_strerror(slurm_get_errno()));
       rc = ICRM_ERESOURCEMAN;
       goto end;
     }
@@ -263,7 +223,7 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid, uint32_t *newjobid,
     sret = slurm_get_job_steps(0, resp->job_id, NO_VAL, &stepinfo, SHOW_ALL);
     if (sret != SLURM_SUCCESS) {
       rc = ICRM_FAILURE;
-      WRITERR(icrm, "slurm_get_job_steps: %s", slurm_strerror(errno));
+      WRITERR(errstr, "slurm_get_job_steps: %s", slurm_strerror(slurm_get_errno()));
       goto end;
     }
 
@@ -273,7 +233,7 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid, uint32_t *newjobid,
 
     if (wait > 60) {
       rc = ICRM_FAILURE;
-      WRITERR(icrm, "Job step did not terminate");
+      WRITERR(errstr, "Job step did not terminate");
       goto end;
     }
   }
@@ -286,7 +246,7 @@ icrm_alloc(struct icrm_context *icrm, uint32_t jobid, uint32_t *newjobid,
 }
 
 icrmerr_t
-icrm_merge(struct icrm_context *icrm, uint32_t jobid)
+icrm_merge(uint32_t jobid, char errstr[ICC_ERRSTR_LEN])
 {
   icrmerr_t rc = ICRM_SUCCESS;
 
@@ -300,7 +260,7 @@ icrm_merge(struct icrm_context *icrm, uint32_t jobid)
 
   int sret = slurm_update_job2(&jobdesc, &resp);
   if (sret != SLURM_SUCCESS) {
-    WRITERR(icrm, "slurm_update_job2: %s", slurm_strerror(slurm_get_errno()));
+    WRITERR(errstr, "slurm_update_job2: %s", slurm_strerror(slurm_get_errno()));
     rc = ICRM_ERESOURCEMAN;
   } else {
     slurm_free_job_array_resp(resp);
@@ -313,8 +273,8 @@ icrm_merge(struct icrm_context *icrm, uint32_t jobid)
 
 
 icrmerr_t
-icrm_release_node(struct icrm_context *icrm, const char *nodename, uint32_t jobid,
-                  uint32_t ncpus)
+icrm_release_node(const char *nodename, uint32_t jobid, uint32_t ncpus,
+                  char errstr[ICC_ERRSTR_LEN])
 {
   assert(jobid);
   assert(nodename);
@@ -325,12 +285,13 @@ icrm_release_node(struct icrm_context *icrm, const char *nodename, uint32_t jobi
 
   int sret = slurm_allocation_lookup(jobid, &allocinfo);
   if (sret != SLURM_SUCCESS) {
-    WRITERR(icrm, "slurm_allocation_lookup: %s", slurm_strerror(slurm_get_errno()));
+    WRITERR(errstr, "slurm_allocation_lookup: %s", slurm_strerror(slurm_get_errno()));
     return ICRM_ERESOURCEMAN;
   }
 
-  hm_t *hostmap = get_hostmap(allocinfo->node_list, allocinfo->cpus_per_node,
-                              allocinfo->cpu_count_reps);
+  hm_t *hostmap = get_hostmap_internal(allocinfo->node_list,
+                                       allocinfo->cpus_per_node,
+                                       allocinfo->cpu_count_reps);
 
   slurm_free_resource_allocation_response_msg(allocinfo);
 
@@ -341,7 +302,7 @@ icrm_release_node(struct icrm_context *icrm, const char *nodename, uint32_t jobi
 
   const uint16_t *nalloced = hm_get(hostmap, nodename);
   if (!nalloced || *nalloced != ncpus) {
-    WRITERR(icrm, "Cannot release node %s:%"PRIu16", %"PRIu16" CPUs allocated",
+    WRITERR(errstr, "Cannot release node %s:%"PRIu16", %"PRIu16" CPUs allocated",
             nodename, ncpus, nalloced ? *nalloced : 0);
     if (*nalloced > ncpus)
       ret = ICRM_EAGAIN;
@@ -379,7 +340,7 @@ icrm_release_node(struct icrm_context *icrm, const char *nodename, uint32_t jobi
 
   sret = slurm_update_job2(&jobreq, &jobresp);
   if (sret != SLURM_SUCCESS) {
-    WRITERR(icrm, "slurm_update_job2: %s", slurm_strerror(slurm_get_errno()));
+    WRITERR(errstr, "slurm_update_job2: %s", slurm_strerror(slurm_get_errno()));
     ret = ICRM_ERESOURCEMAN;
   } else if (jobresp) {
     slurm_free_job_array_resp(jobresp);
@@ -467,18 +428,15 @@ icrm_hostlist(hm_t *hostmap, char withcpus)
 
 
 static icrmerr_t
-_writerr(icrm_context_t *icrm, const char *filename, int lineno,
-         const char *funcname, const char *format, ...)
+writerr_internal(char buf[ICC_ERRSTR_LEN], const char *filename, int lineno,
+                 const char *funcname, const char *format, ...)
 {
-  assert(icrm);
-  assert(icrm->errstr);
-
   int nbytes = 0;
 
   if (filename && lineno && funcname) {
-    nbytes = snprintf(icrm->errstr, ICC_ERRSTR_LEN, "%s (%s:%d): ", funcname, filename, lineno);
+    nbytes = snprintf(buf, ICC_ERRSTR_LEN, "%s (%s:%d): ", funcname, filename, lineno);
     if (nbytes < 0) {
-      icrm->errstr[0] = '\0';
+      buf[0] = '\0';
       return ICRM_FAILURE;
     }
   }
@@ -487,85 +445,18 @@ _writerr(icrm_context_t *icrm, const char *filename, int lineno,
   va_start(ap, format);
 
   if (nbytes < ICC_ERRSTR_LEN) {
-    vsnprintf(icrm->errstr + nbytes, ICC_ERRSTR_LEN, format, ap);
+    vsnprintf(buf + nbytes, ICC_ERRSTR_LEN, format, ap);
   }
 
-  icrm->errstr[ICC_ERRSTR_LEN - 1] = '\0';
+  buf[ICC_ERRSTR_LEN - 1] = '\0';
 
   va_end(ap);
 
   return ICRM_SUCCESS;
 }
 
-static icrmerr_t
-_slurm_socket(icrm_context_t *icrm)
-{
-  CHECK_ICRM(icrm);
-
-  struct addrinfo hints, *res, *p;
-  int sock, rc;
-
-  icrm->sock = -1;
-
-  memset(&hints, 0, sizeof(hints));
-  hints.ai_family = AF_UNSPEC;
-  hints.ai_socktype = SOCK_STREAM;
-  hints.ai_protocol = 0;
-  hints.ai_flags = AI_PASSIVE | AI_NUMERICSERV | AI_ADDRCONFIG;
-
-  res = NULL;
-
-  rc = getaddrinfo(NULL, "0", &hints, &res);
-  if (rc != 0) {
-    WRITERR(icrm, "getaddrinfo: %s", gai_strerror(rc));
-    return ICRM_FAILURE;
-  }
-
-  for (p = res; p != NULL; p = p->ai_next) {
-    sock = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-    if (sock == -1)
-      continue;                 /* failure, try next socket */
-
-    if (bind(sock, p->ai_addr, p->ai_addrlen) == 0)
-      break;                    /* success */
-
-    close(sock);
-  }
-
-  if (p == NULL) {
-    WRITERR(icrm, "Slurm socket: Could not bind");
-    return ICRM_FAILURE;
-  }
-
-  freeaddrinfo(res);
-
-  struct sockaddr_storage sin;
-  socklen_t len = sizeof(sin);
-
-  rc = listen(sock, 8);         /* no backlog expected */
-  if (rc == -1) {
-    WRITERR(icrm, "listen: %s", strerror(errno));
-    return ICRM_FAILURE;
-  }
-
-  rc = getsockname(sock, (struct sockaddr *)&sin, &len);
-  if (rc == -1) {
-    WRITERR(icrm, "getsockname: %s", strerror(errno));
-    return ICRM_FAILURE;
-  }
-
-  icrm->sock = sock;
-  if (sin.ss_family == AF_INET) {
-    icrm->port = ntohs(((struct sockaddr_in *)&sin)->sin_port);
-  } else {
-    icrm->port = ntohs(((struct sockaddr_in6 *)&sin)->sin6_port);
-  }
-
-  return ICRM_SUCCESS;
-}
-
 static enum icrm_jobstate
-_slurm2icrmstate(enum job_states slurm_jobstate)
+slurm2icrmstate(enum job_states slurm_jobstate)
 {
   switch (slurm_jobstate) {
   case JOB_PENDING:
@@ -589,10 +480,9 @@ _slurm2icrmstate(enum job_states slurm_jobstate)
 }
 
 static icrmerr_t
-_icrm_load_job(icrm_context_t *icrm, uint32_t jobid, job_info_msg_t **job)
+icrm_load_job_internal(uint32_t jobid, job_info_msg_t **job,
+                       char errstr[ICC_ERRSTR_LEN])
 {
-  CHECK_ICRM(icrm);
-
   icrmerr_t rc;
   int slurmrc;
 
@@ -607,15 +497,15 @@ _icrm_load_job(icrm_context_t *icrm, uint32_t jobid, job_info_msg_t **job)
     } else{
       rc = ICRM_FAILURE;
     }
-    WRITERR(icrm, "slurm: %s", slurm_strerror(errno));
+    WRITERR(errstr, "slurm: %s", slurm_strerror(errno));
   }
 
   return rc;
 }
 
 static hm_t *
-get_hostmap(const char *hostlist, uint16_t cpus_per_node[],
-            uint32_t cpus_count_reps[])
+get_hostmap_internal(const char *hostlist, uint16_t cpus_per_node[],
+                     uint32_t cpus_count_reps[])
 {
   assert(hostlist);
   assert(cpus_per_node);

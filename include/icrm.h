@@ -29,32 +29,17 @@ enum icrm_jobstate {
   ICRM_JOB_OTHER
 };
 
-/**
- * Context passed to ICRM functions. NOT thread-safe.
- */
-typedef struct icrm_context icrm_context_t;
-
 
 /**
- * Initialize an ICRM context.
- *
- * Return ICRM_SUCCESS or an error code.
+ * Initialize ICRM.
  */
-icrmerr_t icrm_init(icrm_context_t **icrm);
+void icrm_init(void);
 
 
 /**
- * Finalize an ICRM context.
+ * Finalize ICRM.
  */
-void icrm_fini(icrm_context_t **icrm);
-
-
-/**
- * Return the string describing the latest ICRM error or NULL if ICRM
- * is undefined. The content is only meaningful AFTER an ICRM function
- * has returned with an error code.
- */
-char *icrm_errstr(icrm_context_t *icrm);
+void icrm_fini(void);
 
 
 /**
@@ -63,18 +48,19 @@ char *icrm_errstr(icrm_context_t *icrm);
  *
  * Return ICRM_SUCCESS or an error code.
  */
-icrmerr_t icrm_jobstate(icrm_context_t *icrm, uint32_t jobid,
-                        enum icrm_jobstate *jobstate);
+icrmerr_t icrm_jobstate(uint32_t jobid, enum icrm_jobstate *jobstate,
+                        char errstr[ICC_ERRSTR_LEN]);
 
 /**
  * Query the resource manager for the number of cpus and the number of
  * nodes assocoated with JOBID. The result is returned in NCPUS and
  * NNODES respectively.
  *
- * Return ICRM_SUCCESS or an error code.
+ * Return ICRM_SUCCESS or an error code. Fill errstr in case of error.
  */
-icrmerr_t icrm_ncpus(icrm_context_t *icrm, uint32_t jobid,
-                     uint32_t *ncpus, uint32_t *nnodes);
+icrmerr_t icrm_ncpus(uint32_t jobid, uint32_t *ncpus, uint32_t *nnodes,
+                     char errstr[ICC_ERRSTR_LEN]);
+
 
 /**
  * Request a new allocation of NCPUS to the resource manager. Blocks
@@ -85,12 +71,12 @@ icrmerr_t icrm_ncpus(icrm_context_t *icrm, uint32_t jobid,
  * Return the new jobid in NEWJOBID, the actual number of CPUs granted
  * in NCPUS and a host(char *):ncpus(uint16_t) map in HOSTMAP.
  *
- * Return ICRM_SUCCESS or an error code.
+ * Return ICRM_SUCCESS or an error code. Fill errstr in case of error.
  *
  * The caller is responsible for freeing HOSTMAP.
  */
-icrmerr_t icrm_alloc(icrm_context_t *icrm, uint32_t jobid,
-                     uint32_t *newjobid, uint32_t *ncpus, hm_t **hostmap);
+icrmerr_t icrm_alloc(uint32_t jobid, uint32_t *newjobid, uint32_t *ncpus,
+                     hm_t **hostmap, char errstr[ICC_ERRSTR_LEN]);
 
 /**
  * Renounce the resources of job JOBID and merge them with the job for
@@ -99,7 +85,7 @@ icrmerr_t icrm_alloc(icrm_context_t *icrm, uint32_t jobid,
  *
  * Return ICRM_SUCCESS or an error code.
  */
-icrmerr_t icrm_merge(icrm_context_t *icrm, uint32_t jobid);
+icrmerr_t icrm_merge(uint32_t jobid, char errstr[ICC_ERRSTR_LEN]);
 
 
 /**
@@ -110,8 +96,8 @@ icrmerr_t icrm_merge(icrm_context_t *icrm, uint32_t jobid);
  * means that the node cannot be released because more CPUs have been
  * allocated on it.
  */
-icrmerr_t icrm_release_node(icrm_context_t *icrm, const char *nodename,
-                            uint32_t jobid, uint32_t ncpus);
+icrmerr_t icrm_release_node(const char *nodename, uint32_t jobid, uint32_t ncpus,
+                            char errstr[ICC_ERRSTR_LEN]);
 
 
 /**
