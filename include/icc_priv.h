@@ -28,7 +28,6 @@ struct icc_context {
   hm_t       *hostrelease;              /* map of host:ncpus released */
 
   /* XX fixme icrm not thread-safe */
-  icrm_context_t    *icrm;              /* resource manager comm */
   char              icrm_terminate;     /* terminate flag */
   ABT_pool          icrm_pool;          /* pool for blocking RM requests */
   ABT_xstream       icrm_xstream;       /* exec stream to associate to the pool */
