@@ -12,8 +12,10 @@
 #include <icc.h>
 
 
+#define TERMINATE_TAG 0x7
+#define ITER_MAX      10
+
 struct reconfig_data{
-  int      rootrank;
   MPI_Comm intercomm;
   char     *command;
 };
@@ -40,7 +42,6 @@ main(int argc, char **argv)
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-  data.rootrank = 0;
   data.command = argv[0];
   data.intercomm = MPI_COMM_NULL;
 
@@ -48,12 +49,14 @@ main(int argc, char **argv)
   ischild = data.intercomm != MPI_COMM_NULL ? 1 : 0;
 
   /* root only */
-  if (rank == data.rootrank && !ischild) {
+  if (!ischild && rank == 0) {
     icc_init_mpi(ICC_LOG_DEBUG, ICC_TYPE_MPI, size, reconfigure, &data, &icc);
     assert(icc);
   }
 
-  while (sleep(2) == 0) {
+  /* "computation" loop */
+  unsigned int iter = 0;
+  while (iter < ITER_MAX) {
     /* MPI_Get_processor_name != "Slurmd nodename" in emulation env */
     procname = getenv("SLURMD_NODENAME");
 
@@ -68,27 +71,29 @@ main(int argc, char **argv)
              ischild ? "Child" : "Parent ", procname ? procname : "NONODE", rank);
     }
 
-    /* terminate the spawned processes */
-    if (data.intercomm != MPI_COMM_NULL) {
-      int terminate = 0;
-      if (ischild) {
-        fprintf(stderr, "CHILD BLOCKING ON BCAST (rank %d)\n", rank);
-        MPI_Bcast(&terminate, 1, MPI_INT, data.rootrank, data.intercomm);
-        fprintf(stderr, "CHILD GOT BCAST (rank %d)\n", rank);
-        if (terminate)
-          break;
-      } else if (rank != data.rootrank) {
-        MPI_Bcast(&terminate, 1, MPI_INT, MPI_PROC_NULL, data.intercomm);
+    if (ischild) {
+      /* check for incoming terminate message */
+      int terminate;
+      MPI_Iprobe(0, TERMINATE_TAG, data.intercomm, &terminate, MPI_STATUS_IGNORE);
+
+      if (terminate) {
+        /* ack termination by accepting the message */
+        MPI_Recv(NULL, 0, MPI_INT, 0, TERMINATE_TAG, data.intercomm,
+                 MPI_STATUS_IGNORE);
+        MPI_Comm_disconnect(&data.intercomm);
+
+        return EXIT_SUCCESS;
       }
     }
+
+    ++iter;
+    sleep(2);
   }
 
-  if (rank == data.rootrank && !ischild) {
+  if (!ischild && rank == 0) {
     icc_fini(icc);
+    MPI_Finalize();
   }
-
-  fprintf(stderr, "FINALIZING (rank %d)\n", rank);
-  MPI_Finalize();
 }
 
 
@@ -98,22 +103,28 @@ reconfigure(int shrink, uint32_t maxprocs, const char *hostlist, void *data)
   MPI_Info hostinfo;
   struct reconfig_data *d = (struct reconfig_data *)data;
 
-  if (shrink) {
-    fprintf(stderr, "IN RECONFIG: shrink %d procs\n", maxprocs);
-
-    int terminate = 1;
-    /* only the root rank calls this function */
-    MPI_Bcast(&terminate, 1, MPI_INT, MPI_ROOT, d->intercomm);
-  } else {
+  if (!shrink) {
     fprintf(stderr, "IN RECONFIG: %d procs on %s\n", maxprocs, hostlist);
 
     MPI_Info_create(&hostinfo);
     MPI_Info_set(hostinfo, "host", hostlist);
 
-    MPI_Comm_spawn(d->command, MPI_ARGV_NULL, maxprocs, hostinfo, d->rootrank,
+    MPI_Comm_spawn(d->command, MPI_ARGV_NULL, maxprocs, hostinfo, 0,
                  MPI_COMM_SELF, &(d->intercomm), MPI_ERRCODES_IGNORE);
 
     MPI_Info_free(&hostinfo);
+  } else {
+    fprintf(stderr, "IN RECONFIG: shrink %d procs\n", maxprocs);
+
+    MPI_Request *reqs = malloc(maxprocs * sizeof(*reqs));
+
+    for (uint32_t i = 0; i < maxprocs; i++ ) {
+      MPI_Isend(NULL, 0, MPI_INT, i, TERMINATE_TAG, d->intercomm,
+                &reqs[i]);
+    }
+    MPI_Waitall(maxprocs, reqs, MPI_STATUSES_IGNORE);
+
+    free(reqs);
   }
 
   return 0;
