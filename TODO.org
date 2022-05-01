@@ -2,26 +2,22 @@
 - icc: jobntasks? ~universe_size in MPI?
 - icc: remove flexhandle, add a proper free function to register
 - icc: cleanup logic of registration (register_(flex)mpi?)
-- icc: cleanup context struct, keep icrm_stuff in, put flex stuff in?
 - icc: margo_register_data-ed struct needs to be made thread-safe??
 - icc: clid -> jobid.jobstepid?
 - icc: add an iccerr_t enum
-- icc:resallocdone: no way to get the status code of the alloc ULT
-- icc:reconfigure: cleanup int/int32_t use
+- icc: resallocdone: no way to get the status code of the alloc ULT
+- icc: reconfigure: cleanup int/int32_t use
+- icc: only allow one RESALLOC RPC at a time.
+- icc: RPC to IC on spawn/shrink done
 - flexmpi: simplify func handling, private sock + func enough
 - server: prefix LOG_ERROR with jobid/clid?
-- server: set hostlist
 - icdb: handle clients as a struct, commit func?
 - icdb: status in context redundant?
 - icdb: return icdberr_t from funcs + ERRSTR_LEN + context type _t
-- icdb: with icrm, factorize WRITERR func & macro
-- icdb: generally error string in context, yay or nay?
 - icrm: network calls in critical section: not great! Use a single RM thread?
 - icrm: add a generic ADMIRE name for dependency jobs
-- icrm: memleak: slurm_init() & slurm_fini() call?
 - hashmap: check hm_set return code
-- spawn: wait for finalize? how?
-- spawn: use hostlist
+- hashmap: hm_keys function?
 
 /* TODO
  * hg_error_to_string everywhere

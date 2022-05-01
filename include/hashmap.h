@@ -36,10 +36,12 @@ int hm_set(hm_t *map, const char *key, void *value, size_t size);
 
 
 /**
- * Get KEY and VALUE from the next item in MAP. This is a cursor based
- * iterator. The caller passes a 0 cursor at initialization and the
- * function returns an updated cursor. The iteration is over when the
- * returned cursor is 0.
+ * Get KEY and, if the passed pointer is not NULL, VALUE from the next
+ * item in MAP.
+ *
+ * This is a cursor based iterator. The caller passes a 0 cursor at
+ * initialization and the function returns an updated cursor. The
+ * iteration is over when the returned cursor is 0.
  *
  * Return the updated cursor.
  */

@@ -304,10 +304,11 @@ icrm_release_node(const char *nodename, uint32_t jobid, uint32_t ncpus,
   if (!nalloced || *nalloced != ncpus) {
     WRITERR(errstr, "Cannot release node %s:%"PRIu16", %"PRIu16" CPUs allocated",
             nodename, ncpus, nalloced ? *nalloced : 0);
-    if (*nalloced > ncpus)
+    if (*nalloced > ncpus) {
       ret = ICRM_EAGAIN;
-    else
+    } else {
       ret = ICRM_FAILURE;
+    }
 
     hm_free(hostmap);
     return ret;

@@ -23,6 +23,11 @@
   }
 
 
+/* shared variable to only allow one reconfig at a time */
+static ABT_mutex_memory resalloc_mutex = ABT_MUTEX_INITIALIZER;
+static int in_resalloc = 0;
+
+
 struct alloc_args {
   const struct icc_context *icc;
   uint32_t ncpus;
@@ -117,10 +122,28 @@ resalloc_cb(hg_handle_t h)
     goto respond;
   }
 
+  /* make sure no reconfiguration RPC is running */
+  ABT_mutex mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&resalloc_mutex);
+  ABT_mutex_lock(mutex);
+
+  if (in_resalloc) {
+    out.rc = RPC_EAGAIN;
+    ABT_mutex_unlock(mutex);
+    goto respond;
+  } else {
+    in_resalloc = 1;
+    ABT_mutex_unlock(mutex);
+  }
+
   /* shrinking request can be dealt with immediately */
   if (in.shrink) {
     ret = icc->reconfig_func(in.shrink, in.ncpus, NULL, icc->reconfig_data);
     out.rc = ret ? RPC_FAILURE : RPC_SUCCESS;
+
+    ABT_mutex_lock(mutex);
+    in_resalloc = 0;
+    ABT_mutex_unlock(mutex);
+
     goto respond;
   }
 
@@ -224,6 +247,11 @@ alloc_th(struct alloc_args *args)
   } else {
     margo_error(icc->mid, "Error in RPC_RESALLOCDONE");
   }
+
+  ABT_mutex mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&resalloc_mutex);
+  ABT_mutex_lock(mutex);
+  in_resalloc = 0;
+  ABT_mutex_unlock(mutex);
 
  end:
   free(args);

@@ -138,7 +138,9 @@ hm_next(struct hashmap *map, size_t cursor, const char **key, const void **value
   for (size_t i = cursor; i < map->nslots; i++) {
     if (map->items[i].key) {
       *key = map->items[i].key;
-      *value = map->items[i].value;
+      if (value) {
+        *value = map->items[i].value;
+      }
       return (i + 1) % map->nslots;
     }
   }

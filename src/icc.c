@@ -39,6 +39,11 @@ static const char *_icc_type_str(enum icc_client_type type);
  */
 static int _strtouint32(const char *nptr, uint32_t *dest);
 
+/**
+ * Release HOST to the resource manager. The caller must get hostlock
+ * before calling this function.
+ */
+static int release_node(struct icc_context *icc, const char *host);
 
 static int _setup_margo(enum icc_log_level log_level, struct icc_context *icc);
 static int _setup_reconfigure(struct icc_context *icc, icc_reconfigure_func_t func, void *data);
@@ -356,12 +361,16 @@ icc_rpc_malleability_region(struct icc_context *icc, enum icc_malleability_regio
 
 
 int
-icc_release_resource(struct icc_context *icc, const char *host, uint16_t ncpus)
+icc_release_register(struct icc_context *icc, const char *host, uint16_t ncpus)
 {
   CHECK_ICC(icc);
 
   if (!host || !ncpus)
     return ICC_EINVAL;
+
+  if (ncpus <= 0) {
+    return ICC_EINVAL;
+  }
 
   int rc = ICC_SUCCESS;
 
@@ -377,30 +386,82 @@ icc_release_resource(struct icc_context *icc, const char *host, uint16_t ncpus)
     rc = ICC_FAILURE;
   }
   else if (n > (nalloced ? *nalloced : 0)) {  /* inconsistency */
+    /* catch all cases where nalloced = 0 since n is > 0  */
     margo_error(icc->mid, "Too many CPUs released %s:%"PRIu16" (got %"PRIu16")",
                 host, ncpus, (nalloced ? *nalloced : 0));
     rc = ICC_FAILURE;
   }
-  else if (n == *nalloced) {                  /* ok to release */
-    char icrmerr[ICC_ERRSTR_LEN];
-    icrmerr_t ret = icrm_release_node(host, icc->jobid, n, icrmerr);
-    if (ret == ICC_SUCCESS) {
-      margo_debug(icc->mid, "RELEASED %s:%"PRIu16, host, n);
-      uint16_t nocpu = 0;
-      rc = hm_set(icc->hostrelease, host, &nocpu, sizeof(nocpu));
-      rc = hm_set(icc->hostalloc, host, &nocpu, sizeof(nocpu));
-      if (rc == -1) rc = ICC_ENOMEM;
+  else {                                      /* register CPU(s) for release */
+    rc = hm_set(icc->hostrelease, host, &n, sizeof(n));
+    if (rc == -1) {
+      rc = ICC_ENOMEM;
     }
-    else {
-      rc = ICC_FAILURE;
-      margo_error(icc->mid, "Failure to release node %s", host);
-      margo_debug(icc->mid, icrmerr);
-      rc = hm_set(icc->hostalloc, host, &n, sizeof(n));
-      if (rc == -1) rc = ICC_ENOMEM;
-    }
-    /* if (n < nalloced) not all CPUs have been released yet */
   }
+
   ABT_rwlock_unlock(icc->hostlock);
+
+  return rc;
+}
+
+
+int
+icc_release_nodes(struct icc_context *icc)
+{
+  CHECK_ICC(icc);
+
+  int rc;
+  const char *host;
+  size_t curs = 0;
+
+  ABT_rwlock_wrlock(icc->hostlock);
+
+  while ((curs = hm_next(icc->hostrelease, curs, &host, NULL)) != 0) {
+    rc = release_node(icc, host);
+    if (rc != ICC_SUCCESS) {
+      break;
+    }
+  }
+
+  ABT_rwlock_unlock(icc->hostlock);
+
+  return rc;
+}
+
+
+static int
+release_node(struct icc_context *icc, const char *host)
+{
+  CHECK_ICC(icc);
+  if (!host) {
+    return ICC_EINVAL;
+  }
+
+  const uint16_t *nreleased = hm_get(icc->hostrelease, host);
+  if (!nreleased) {
+    return ICC_EINVAL;
+  }
+
+  char icrmerr[ICC_ERRSTR_LEN];
+  int rc = icrm_release_node(host, icc->jobid, *nreleased, icrmerr);
+  if (rc == ICRM_SUCCESS) {
+    margo_debug(icc->mid, "Released %s:%"PRIu16, host, *nreleased);
+    uint16_t nocpu = 0;
+    hm_set(icc->hostrelease, host, &nocpu, sizeof(nocpu));
+    rc = hm_set(icc->hostalloc, host, &nocpu, sizeof(nocpu));
+    if (rc == -1) {
+      rc = ICC_ENOMEM;
+    } else {
+      rc = ICC_SUCCESS;
+    }
+  } else {
+    margo_info(icc->mid, "Not releasing node %s", host);
+    margo_debug(icc->mid, icrmerr);
+    if (rc == ICRM_EAGAIN) { /* not all CPUs released on node, ignore */
+      rc = ICC_SUCCESS;
+    } else {
+      rc = ICC_FAILURE;
+    }
+  }
 
   return rc;
 }

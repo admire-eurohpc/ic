@@ -50,8 +50,9 @@ enum icc_client_type {
  * DATA is a pointer passed at registration by the caller, and passed
  * back as-is to the function by libicc.
  *
- * Warning: this function is called by Argobots (~threads) in libicc
- * so it must be thread-safe and reentrant.
+ * Note: libicc makes sure that only one Argobot (~thread) calls this
+ * function at a time, so it doesn’t need to be thread-safe nor
+ * reentrant.
  */
 typedef int (*icc_reconfigure_func_t)(int shrink, uint32_t maxprocs, const char *hostlist, void *data);
 
@@ -106,13 +107,20 @@ int icc_wait_for_finalize(struct icc_context *icc);
 
 
 /**
- * Release NCPUS on HOST. The resource wil be actually released to the
- * resource manager once all CPUs of a node have been released.
+ * Register NCPUS on HOST for release. The resources will be actually
+ * released to the resource manager when calling icc_release_nodes()
+ * (which see).
  *
  * Return ICC_SUCCESS or an error code.
  */
-int
-icc_release_resource(struct icc_context *icc, const char *host, uint16_t ncpus);
+int icc_release_register(struct icc_context *icc, const char *host, uint16_t ncpus);
+
+
+/**
+ * Release nodes that have been registered for release by
+ * icc_release_register() to the resource manager.
+ */
+int icc_release_nodes(struct icc_context *icc);
 
 
 /**

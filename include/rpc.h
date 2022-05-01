@@ -18,6 +18,7 @@ enum rpc_retcode {
   RPC_FAILURE = -1,
   RPC_SUCCESS = 0,
   RPC_WAIT,
+  RPC_EAGAIN,                    /* RPC already running */
   RPC_TERMINATED,
 
   RPC_RETCODE_COUNT

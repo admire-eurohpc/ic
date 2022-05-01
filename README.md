@@ -200,8 +200,21 @@ and once the server is running:
 ```
 
 
-## Developers
-### Using libicc
+## Using libicc
+- See icc.h for the API. Libicc functions are prefixed by `icc_`.
+- Libicc functions take an opaque “context” of type `struct
+  icc_context` which is *not thread-safe*. Generally speaking, only
+  one thread of the application should interact with the library at a
+  time.
+
+The workflow is as follow:
+- init, which register the application to the IC
+- ...
+- call `icc_release_register()` to register CPUs for release.
+- call `icc_release_nodes()` to actually release the nodes to the
+  resource manager.
+
+## Extending libicc
 ### How to add a public RPC to libicc
 1. Define a new RPC code in `icc_rpc_code`.
 2. Define the Mercury structures associated with it (note that
