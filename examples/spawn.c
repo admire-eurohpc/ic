@@ -14,7 +14,7 @@
 
 
 #define TERMINATE_TAG   0x7
-#define ITER_MAX        12
+#define ITER_MAX        16
 #define HOSTNAME_MAXLEN 256
 
 struct reconfig_data{
@@ -87,7 +87,10 @@ main(int argc, char **argv)
                  MPI_STATUS_IGNORE);
         MPI_Send(procname, strlen(procname), MPI_CHAR, 0, TERMINATE_TAG,
                   data.intercomm);
+
+        MPI_Comm_disconnect(&data.intercomm);
         MPI_Finalize();
+        return 0;
       }
     }
 
@@ -96,12 +99,8 @@ main(int argc, char **argv)
   }
 
   if (!ischild && rank == 0) {
-    MPI_Finalize();
-
-    sleep(2);                   /* give some time to PMI proxies to exit */
-
-    icc_release_nodes(data.icc);
     icc_fini(data.icc);
+    MPI_Finalize();
   }
 }
 
@@ -148,6 +147,11 @@ reconfigure(int shrink, uint32_t maxprocs, const char *hostlist, void *data)
         icc_release_register(d->icc, hostname, 1);
       }
     }
+    MPI_Comm_disconnect(&d->intercomm);
+    /* warning: nodes must be released AFTER disconnection from the
+       intercommunicator, otherwise PMI proxies are still running */
+    sleep(2);                           /* give some time to PMI proxies to exit */
+    icc_release_nodes(d->icc);
   }
 
   return 0;
