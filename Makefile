@@ -45,10 +45,11 @@ libslurmjobmon_so := libslurmjobmon.so
 testapp_bin := testapp
 
 sources := hashmap.c server.c rpc.c cb.c cbcommon.c icdb.c icrm.c icc.c flexmpi.c
-sources += slurmjobmon.c slurmadhoccli.c client.c testapp.c spawn.c jobcleaner.c
+sources += slurmjobmon.c slurmadhoccli.c jobcleaner.c
+sources += client.c testapp.c spawn.c synthio.c
 
 # keep libicc in front
-binaries := $(libicc_so) server client jobcleaner $(libslurmjobmon_so) $(libslurmadhoccli_so) spawn
+binaries := $(libicc_so) server client jobcleaner $(libslurmjobmon_so) $(libslurmadhoccli_so) spawn synthio
 
 objects := $(sources:.c=.o)
 depends := $(sources:.c=.d)
@@ -122,6 +123,9 @@ jobcleaner: LDLIBS += `$(PKG_CONFIG) --libs` -L. -licc -Wl,--no-undefined,-rpath
 
 spawn: CFLAGS += `$(PKG_CONFIG) --cflags mpich`
 spawn: LDLIBS += `$(PKG_CONFIG) --libs mpich` -L. -licc -Wl,--no-undefined,-rpath-link=${PREFIX}/lib
+
+synthio: CFLAGS += `$(PKG_CONFIG) --cflags mpich`
+synthio: LDLIBS += `$(PKG_CONFIG) --libs mpich` -L. -licc -Wl,--no-undefined,-rpath-link=${PREFIX}/lib
 
 # $(testapp_bin): CFLAGS += `$(PKG_CONFIG) --cflags mpi`
 # $(testapp_bin): LDLIBS += `$(PKG_CONFIG) --libs mpi margo` -L. -licc
