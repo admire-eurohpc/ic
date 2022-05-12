@@ -166,6 +166,7 @@ io(int nblocks, int nelems, int rank, int nprocs,
 
   MPI_Offset offset;
   if (__builtin_mul_overflow(blocksize, rank, &offset)) {
+    free(buf);
     return -EOVERFLOW;
   }
 
@@ -175,11 +176,13 @@ io(int nblocks, int nelems, int rank, int nprocs,
   /* read blocks from the next process */
   int next_rank;
   if (__builtin_sadd_overflow(rank, 1, &next_rank)) {
+    free(buf);
     return -EOVERFLOW;
   }
   next_rank = next_rank % nprocs;
 
   if (__builtin_mul_overflow(blocksize, next_rank, &offset)) {
+    free(buf);
     return -EOVERFLOW;
   }
 
@@ -190,9 +193,11 @@ io(int nblocks, int nelems, int rank, int nprocs,
   for (size_t i = 0; i < (size_t)ntotal; i++) {
     if (*(buf + i) != next_rank) {
       fprintf(stderr,"INT %zd: %d instead of %d\n", i, *(buf + i), next_rank);
+      free(buf);
       return -EINVAL;
     }
   }
 
+  free(buf);
   return 0;
 }
