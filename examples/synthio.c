@@ -13,13 +13,16 @@
 #include <sys/time.h>           /* gettimeofday */
 #include <mpi.h>
 
+#define PRINTFROOT(rank,...) if (rank == 0) {printf(__VA_ARGS__);}
+
 #define NBLOCKS 128
-#define NELEMS 65536L           /* nelems in block */
+#define NELEMS 65536            /* nelems in block */
+#define NITER  3
 
 static void usage(int rank, char *name);
 static void errabort(int errcode);
-static int filetype_set(int nblocks, int nelems, int nprocs,
-                        MPI_Datatype *filetype);
+static int fileopen(const char *filepath, int nblocks, int nelems, int nprocs,
+                    MPI_File *fh, MPI_Datatype *filetype);
 
 static void compute(int rank, int nprocs, MPI_Comm comm);
 static int io(int nblocks, int nelems, int rank, int nprocs,
@@ -45,43 +48,32 @@ main(int argc, char **argv)
 
   MPI_File fh = MPI_FILE_NULL;
   MPI_Datatype filetype = MPI_DATATYPE_NULL;
+  fileopen(argv[1], NBLOCKS, NELEMS, nprocs, &fh, &filetype);
 
-  MPI_File_set_errhandler(fh, MPI_ERRORS_ARE_FATAL);
+  for (int i = 0; i < NITER; i++) {
+    PRINTFROOT(rank, "Iteration %d\n", i);
 
-  /* XX create file on open/delete on close */
-  MPI_File_open(MPI_COMM_WORLD, argv[1], MPI_MODE_RDWR | MPI_MODE_CREATE,
-                MPI_INFO_NULL, &fh);
+    time_t start, end;
+    start = time(NULL);
 
-  rc = filetype_set(NBLOCKS, NELEMS, nprocs, &filetype);
-  if (rc) {
-    errabort(-rc);
-  }
+    rc = io(NBLOCKS, NELEMS, rank, nprocs, filetype, fh);
+    if (rc) {
+      errabort(-rc);
+    }
 
-  time_t start, end;
-  start = time(NULL);
+    end = time(NULL);
 
-  rc = io(NBLOCKS, NELEMS, rank, nprocs, filetype, fh);
-  if (rc) {
-    errabort(-rc);
-  }
-
-  end = time(NULL);
-
-  if (rank == 0) {
-    long long nbytes = NBLOCKS * NELEMS * sizeof(int) * nprocs;
+    unsigned long long nbytes = NBLOCKS * NELEMS * sizeof(int) * nprocs;
     double elapsed = difftime(end, start);
-    printf("IO: %.0fs (%.2e B/s)\n", elapsed, nbytes / elapsed);
+    PRINTFROOT(rank, "IO: %.0fs (%.2e B/s)\n", elapsed, nbytes / elapsed);
+
+    start = time(NULL);
+
+    compute(rank, nprocs, MPI_COMM_WORLD);
+
+    end = time(NULL);
+    PRINTFROOT(rank, "Compute: %.0fs\n", difftime(end, start));
   }
-
-  start = time(NULL);
-
-  compute(rank, nprocs, MPI_COMM_WORLD);
-
-  end = time(NULL);
-  if (rank == 0) {
-    printf("Compute: %.0fs\n", difftime(end, start));
-  }
-
 
   if (fh != MPI_FILE_NULL) {
     MPI_File_close(&fh);
@@ -111,15 +103,23 @@ errabort(int errcode)
   MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
 }
 
+
 static int
-filetype_set(int nblocks, int nelems, int nprocs, MPI_Datatype *filetype)
+fileopen(const char *filepath, int nblocks, int nelems, int nprocs,
+         MPI_File *fh, MPI_Datatype *filetype)
 {
+  MPI_File_set_errhandler(*fh, MPI_ERRORS_ARE_FATAL);
+  MPI_File_open(MPI_COMM_WORLD, filepath,
+                MPI_MODE_RDWR | MPI_MODE_CREATE,
+                MPI_INFO_NULL, fh);
+
   int stride;
   if (__builtin_smul_overflow(nelems, nprocs, &stride)) {
     return -EOVERFLOW;
   }
   MPI_Type_vector(nblocks, nelems, stride, MPI_INT, filetype);
   MPI_Type_commit(filetype);
+
   return 0;
 }
 
