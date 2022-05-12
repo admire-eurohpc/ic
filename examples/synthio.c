@@ -8,11 +8,13 @@
 #include <stdio.h>              /* printf */
 #include <stdlib.h>             /* EXIT_SUCCESS, (s)rand */
 #include <string.h>             /* strerror */
+#include <time.h>               /* difftime */
 #include <unistd.h>             /* sleep, getentropy */
+#include <sys/time.h>           /* gettimeofday */
 #include <mpi.h>
 
-#define NBLOCKS 8
-#define NELEMS 8          /* nelems in block */
+#define NBLOCKS 128
+#define NELEMS 65536L           /* nelems in block */
 
 static void usage(int rank, char *name);
 static void errabort(int errcode);
@@ -55,12 +57,31 @@ main(int argc, char **argv)
     errabort(-rc);
   }
 
+  time_t start, end;
+  start = time(NULL);
+
   rc = io(NBLOCKS, NELEMS, rank, nprocs, filetype, fh);
   if (rc) {
     errabort(-rc);
   }
 
+  end = time(NULL);
+
+  if (rank == 0) {
+    long long nbytes = NBLOCKS * NELEMS * sizeof(int) * nprocs;
+    double elapsed = difftime(end, start);
+    printf("IO: %.0fs (%.2e B/s)\n", elapsed, nbytes / elapsed);
+  }
+
+  start = time(NULL);
+
   compute(rank, nprocs, MPI_COMM_WORLD);
+
+  end = time(NULL);
+  if (rank == 0) {
+    printf("Compute: %.0fs\n", difftime(end, start));
+  }
+
 
   if (fh != MPI_FILE_NULL) {
     MPI_File_close(&fh);
@@ -104,7 +125,7 @@ filetype_set(int nblocks, int nelems, int nprocs, MPI_Datatype *filetype)
 
 
 #define SERIAL_SEC   1
-#define PARALLEL_SEC 2
+#define PARALLEL_SEC 4
 
 static void
 compute(int rank, int nprocs, MPI_Comm comm)
