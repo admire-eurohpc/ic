@@ -112,13 +112,18 @@ icrmerr_t icrm_update_hostmap(hm_t *hostmap, hm_t *newalloc);
 /**
  * Return a comma-separated list of hostname from hashmap HOSTMAP. If
  * WITHCPUS is true, add the number of CPUs associated with the node:
- * host:ncpus.  The values of the hashmap must be pointers to
- * uint16_t.
+ * host:ncpus. If NCPUS_TOTAL is not null, set it to the total number
+ * of CPUs in HOSTMAP.
  *
- * Return the hostlist or NULL in case of a memory error.
+ * The values of the hashmap must be pointers to uint16_t.
+ *
+ * Return the hostlist, NULL in case of a memory error.
+ *
+ * If the NCPUS_TOTAL does not fit the total number of CPUs, return
+ * NULL and set NCPUS_TOTAL to UINT32_MAX.
  *
  * The caller is responsible for freeing the hostlist.
  */
-char *icrm_hostlist(hm_t *hostmap, char withcpus);
+char *icrm_hostlist(hm_t *hostmap, char withcpus, uint32_t *ncpus_total);
 
 #endif

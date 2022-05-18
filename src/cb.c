@@ -29,14 +29,13 @@ static int in_resalloc = 0;
 
 
 struct alloc_args {
-  const struct icc_context *icc;
+  struct icc_context *icc;
   uint32_t ncpus;
   int      retcode;
 };
 
 /**
- * Request a new allocation of ARGS.nnodes to the resource manager. If
- * ARGS.shrink is true, give back that many nodes (NOT IMPLEMENTED).
+ * Request a new allocation of ARGS.ncpus to the resource manager.
  *
  * The signature makes it suitable as an Argobots thread function
  * (with appropriate casts).
@@ -111,7 +110,7 @@ resalloc_cb(hg_handle_t h)
   out.rc = ICC_SUCCESS;
 
   const struct hg_info *info;
-  const struct icc_context *icc;
+  struct icc_context *icc;
 
   info = margo_get_info(h);
   icc = (struct icc_context *)margo_registered_data(mid, info->id);
@@ -137,8 +136,9 @@ resalloc_cb(hg_handle_t h)
 
   /* shrinking request can be dealt with immediately */
   if (in.shrink) {
-    ret = icc->reconfig_func(in.shrink, in.ncpus, NULL, icc->reconfig_data);
-    out.rc = ret ? RPC_FAILURE : RPC_SUCCESS;
+    ABT_rwlock_wrlock(icc->hostlock);
+    icc->reconfig_flag = ICC_RECONFIG_SHRINK;
+    ABT_rwlock_unlock(icc->hostlock);
 
     ABT_mutex_lock(mutex);
     in_resalloc = 0;
@@ -189,7 +189,7 @@ DEFINE_MARGO_RPC_HANDLER(resalloc_cb);
 static void
 alloc_th(struct alloc_args *args)
 {
-  const struct icc_context *icc = args->icc;
+  struct icc_context *icc = args->icc;
 
   resallocdone_in_t in = { 0 };
   in.ncpus = args->ncpus;
@@ -207,7 +207,12 @@ alloc_th(struct alloc_args *args)
     goto end;
   }
 
-  in.hostlist = icrm_hostlist(newalloc, 1);
+  in.hostlist = icrm_hostlist(newalloc, 1, NULL);
+  if (!in.hostlist) {
+    ret = ICRM_ENOMEM;
+    margo_error(icc->mid, "icrm_hostlist error: out of memory");
+    goto end;
+  }
 
   margo_debug(icc->mid, "Job %"PRIu32" resource allocation of %"PRIu32" CPUs (%s)", in.jobid, in.ncpus, in.hostlist);
 
@@ -229,21 +234,32 @@ alloc_th(struct alloc_args *args)
     goto end;
   }
 
+  ret = icrm_update_hostmap(icc->reconfigalloc, newalloc);
+  if (ret == ICRM_EOVERFLOW) {
+    margo_error(icc->mid, "Too many CPUs allocated");
+    ABT_rwlock_unlock(icc->hostlock);
+    goto end;
+  }
+
   ABT_rwlock_unlock(icc->hostlock);
 
   /* inform the IC that the allocation succeeded */
   int rpcret = RPC_SUCCESS;
-  ret = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_RESALLOCDONE], &in, &rpcret);
-  if (ret != ICC_SUCCESS) {
+  int iccret = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_RESALLOCDONE],
+                        &in, &rpcret);
+  if (iccret != ICC_SUCCESS) {
     margo_error(icc->mid, "Error sending RPC_RESALLOCDONE");
     goto end;
   }
 
   if (rpcret == RPC_WAIT) {            /* do not do reconfigure */
     margo_debug(icc->mid, "Job %"PRIu32": not reconfiguring", in.jobid);
-  } else if (rpcret == RPC_SUCCESS) {  /* reconfigure */
-    margo_debug(icc->mid, "Job %"PRIu32": reconfiguring", in.jobid);
-    ret = icc->reconfig_func(in.shrink, in.ncpus, in.hostlist, icc->reconfig_data);
+  } else if (rpcret == RPC_SUCCESS) {  /* prepare reconfiguration */
+    ABT_rwlock_wrlock(icc->hostlock);
+
+    icc->reconfig_flag = ICC_RECONFIG_EXPAND;
+
+    ABT_rwlock_unlock(icc->hostlock);
   } else {
     margo_error(icc->mid, "Error in RPC_RESALLOCDONE");
   }

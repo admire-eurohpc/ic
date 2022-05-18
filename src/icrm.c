@@ -322,7 +322,7 @@ icrm_release_node(const char *nodename, uint32_t jobid, uint32_t ncpus,
     return ICRM_ENOMEM;
   }
 
-  char *newlist = icrm_hostlist(hostmap, 0);
+  char *newlist = icrm_hostlist(hostmap, 0, NULL);
 
   hm_free(hostmap);
 
@@ -380,12 +380,16 @@ icrm_update_hostmap(hm_t *hostmap, hm_t *newalloc)
 
 
 char *
-icrm_hostlist(hm_t *hostmap, char withcpus)
+icrm_hostlist(hm_t *hostmap, char withcpus, uint32_t *ncpus_total)
 {
   char *buf, *tmp;
   size_t bufsize, nwritten, n, cursor;
   const char *host;
   const uint16_t *ncpus;
+
+  if (ncpus_total) {
+    *ncpus_total = 0;
+  }
 
   bufsize = 512;            /* start with a reasonably sized buffer */
 
@@ -400,6 +404,15 @@ icrm_hostlist(hm_t *hostmap, char withcpus)
 
   while ((cursor = hm_next(hostmap, cursor, &host, (const void **)&ncpus)) != 0) {
     assert(ncpus);
+
+    if (ncpus_total) {
+      *ncpus_total += *ncpus;
+      if (*ncpus_total < *ncpus) { /* overflow */
+        *ncpus_total = UINT32_MAX;
+        free(buf);
+        return NULL;
+      }
+    }
 
     if (*ncpus == 0) {          /* ignore node with no CPUs */
       continue;

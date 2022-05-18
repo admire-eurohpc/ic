@@ -26,6 +26,8 @@ struct icc_context {
   ABT_rwlock hostlock;
   hm_t       *hostalloc;                /* map of host:ncpus allocated */
   hm_t       *hostrelease;              /* map of host:ncpus released */
+  enum icc_reconfig_type reconfig_flag; /* pending reconfiguration order */
+  hm_t       *reconfigalloc;            /* map of host:ncpus to use for reconfig */
 
   /* XX fixme icrm not thread-safe */
   char              icrm_terminate;     /* terminate flag */

@@ -9,11 +9,14 @@
 
 struct icc_context;
 
-#define ICC_SUCCESS    0
-#define ICC_FAILURE   -1
-#define ICC_ENOMEM     1
-#define ICC_EINVAL     2        /* invalid argument */
-
+enum icc_retcode {
+  ICC_FAILURE = -1,
+  ICC_SUCCESS = 0,
+  ICC_ENOMEM,
+  ICC_EOVERFLOW,
+  ICC_EINVAL,
+};
+typedef enum icc_retcode iccret_t;
 
 /* Log levels, lifted from Margo */
 enum icc_log_level {
@@ -40,6 +43,11 @@ enum icc_client_type {
   ICC_TYPE_COUNT,
 };
 
+enum icc_reconfig_type {
+  ICC_RECONFIG_NONE,
+  ICC_RECONFIG_EXPAND,
+  ICC_RECONFIG_SHRINK
+};
 
 /**
  * Expected signature of the function that libicc calls on receiving a
@@ -104,6 +112,24 @@ int icc_sleep(struct icc_context *icc, double timeout_ms);
  * Return ICC_SUCCESS or an error code.
  */
 int icc_wait_for_finalize(struct icc_context *icc);
+
+
+/**
+ * Set RECONFIGTYPE to ICC_RECONFIG_EXPAND if there is a pending expansion
+ * order. In this case NPROCS and HOSTLIST will be set to indicate
+ * where the expansion should take place.
+ *
+ * Set RECONFIGTYPE to ICC_RECONFIG_SHRINK if there is a pending shrinking
+ * order. In this case NPROCS will be set to indicate the number of
+ * CPUs to release.
+ *
+ * Set RECONFIGTYPE to ICC_RECONFIG_NONE if there is no pending order.
+ *
+ * Return ICC_SUCCESS or an error code.
+ */
+iccret_t icc_reconfig_pending(struct icc_context *icc,
+                              enum icc_reconfig_type *reconfigtype,
+                              uint32_t *nprocs, const char **hostlist);
 
 
 /**

@@ -16,7 +16,6 @@
 #include "cbcommon.h"
 #include "flexmpi.h"
 
-
 #define NBLOCKING_ES  64
 #define CHECK_ICC(icc)  if (!(icc)) { return ICC_FAILURE; }
 
@@ -44,6 +43,7 @@ static int _strtouint32(const char *nptr, uint32_t *dest);
  * before calling this function.
  */
 static int release_node(struct icc_context *icc, const char *host);
+static iccret_t clear_hostmap(hm_t *hostmap);
 
 static int _setup_margo(enum icc_log_level log_level, struct icc_context *icc);
 static int _setup_reconfigure(struct icc_context *icc, icc_reconfigure_func_t func, void *data);
@@ -206,6 +206,10 @@ icc_fini(struct icc_context *icc)
     hm_free(icc->hostrelease);
   }
 
+  if (icc->reconfigalloc) {
+    hm_free(icc->reconfigalloc);
+  }
+
   icrm_fini();
 
   if (icc->flexhandle) {
@@ -359,6 +363,42 @@ icc_rpc_malleability_region(struct icc_context *icc, enum icc_malleability_regio
   return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
 
+iccret_t
+icc_reconfig_pending(struct icc_context *icc, enum icc_reconfig_type *reconfigtype,
+                     uint32_t *nprocs, const char **hostlist)
+{
+  *reconfigtype = ICC_RECONFIG_NONE;
+  *nprocs = 0;
+  *hostlist = NULL;
+
+  ABT_rwlock_rdlock(icc->hostlock);
+
+  if (icc->reconfig_flag == ICC_RECONFIG_NONE) {
+    ABT_rwlock_unlock(icc->hostlock);
+    return ICC_SUCCESS;
+  }
+
+  iccret_t rc = ICC_SUCCESS;
+
+  *hostlist = icrm_hostlist(icc->reconfigalloc, 1, nprocs);
+  if (!*hostlist) {
+    if (*nprocs == UINT32_MAX) {
+      rc = ICC_EOVERFLOW;
+    } else {
+      rc =  ICC_ENOMEM;
+    }
+  }
+
+  *reconfigtype = icc->reconfig_flag;
+
+  /* reset reconfig data */
+  icc->reconfig_flag = ICC_RECONFIG_NONE;
+  rc = clear_hostmap(icc->reconfigalloc);
+
+  ABT_rwlock_unlock(icc->hostlock);
+
+  return rc;
+}
 
 int
 icc_release_register(struct icc_context *icc, const char *host, uint16_t ncpus)
@@ -427,6 +467,22 @@ icc_release_nodes(struct icc_context *icc)
   return rc;
 }
 
+static iccret_t
+clear_hostmap(hm_t *hostmap)
+{
+  iccret_t rc = ICC_SUCCESS;
+  const char *host = NULL;
+  uint16_t nocpu = 0;
+  size_t curs = 0;
+  while ((curs = hm_next(hostmap, curs, &host, NULL)) != 0) {
+    if (hm_set(hostmap, host, &nocpu, sizeof(nocpu)) == -1) {
+      rc = ICC_ENOMEM;
+      break;
+    }
+  }
+
+  return rc;
+}
 
 static int
 release_node(struct icc_context *icc, const char *host)
@@ -446,12 +502,11 @@ release_node(struct icc_context *icc, const char *host)
   if (rc == ICRM_SUCCESS) {
     margo_debug(icc->mid, "Released %s:%"PRIu16, host, *nreleased);
     uint16_t nocpu = 0;
-    hm_set(icc->hostrelease, host, &nocpu, sizeof(nocpu));
-    rc = hm_set(icc->hostalloc, host, &nocpu, sizeof(nocpu));
-    if (rc == -1) {
-      rc = ICC_ENOMEM;
-    } else {
-      rc = ICC_SUCCESS;
+    if (hm_set(icc->hostrelease, host, &nocpu, sizeof(nocpu)) == -1) {
+      return ICC_ENOMEM;
+    }
+    if (hm_set(icc->hostalloc, host, &nocpu, sizeof(nocpu)) == -1) {
+      return ICC_ENOMEM;
     }
   } else {
     margo_info(icc->mid, "Not releasing node %s", host);
@@ -615,12 +670,18 @@ _setup_hostmaps(struct icc_context *icc)
   if (rc != ABT_SUCCESS)
     return ICC_FAILURE;
 
+  icc->reconfig_flag = ICC_RECONFIG_NONE;
+
   icc->hostalloc = hm_create();
   if (!icc->hostalloc)
     return ICC_FAILURE;
 
   icc->hostrelease = hm_create();
   if (!icc->hostrelease)
+    return ICC_FAILURE;
+
+  icc->reconfigalloc = hm_create();
+  if (!icc->reconfigalloc)
     return ICC_FAILURE;
 
   return ICC_SUCCESS;
