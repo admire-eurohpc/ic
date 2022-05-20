@@ -32,10 +32,10 @@ static void usage(char *name);
 static void errabort(int errcode);
 static void expand(uint32_t nprocs, const char *hostlist, const char *executable,
                    char *filepath, int iteration, MPI_Comm *intercomm);
-static void shrink(MPI_Comm *intercomm, struct icc_context *icc);
 
 static int isparent(void);
-static int childterminate();
+static void terminate_parent(MPI_Comm *intercomm, struct icc_context *icc);
+static void terminate_child(MPI_Comm *intercomm);
 static int fileopen(const char *filepath, int nblocks, int nelems, int nprocs,
                     MPI_File *fh, MPI_Datatype *filetype);
 
@@ -75,9 +75,12 @@ main(int argc, char **argv)
 
   MPI_Comm intercomm = MPI_COMM_NULL;
   int iter = 0;
+  int terminate = 0;
+
 
   if (!isparent()) {
     MPI_Comm_get_parent(&intercomm);
+    /* get current iteration from parent */
     MPI_Bcast(&iter, 1, MPI_INT, 0, intercomm);
   }
 
@@ -85,32 +88,48 @@ main(int argc, char **argv)
     PRINTFROOT(rank, "Iteration %d\n", iter);
 
     if (isparent()) {
+      enum icc_reconfig_type rct;
+      uint32_t nprocs;
+      const char *hostlist;
+
       if (rank == 0) {
-        enum icc_reconfig_type rct;
-        uint32_t nprocs;
-        const char *hostlist;
         rc = icc_reconfig_pending(icc, &rct, &nprocs, &hostlist);
         if (rc != ICC_SUCCESS) {
           errabort(rc);
         }
+      }
 
-        if (rct == ICC_RECONFIG_EXPAND) {
-          puts("EXPANDING");
-          expand(nprocs, hostlist, argv[0], argv[1], iter, &intercomm);
-        } else if (rct == ICC_RECONFIG_SHRINK) {
-          puts("SHRINKING");
-          shrink(&intercomm, icc);
-        } else {
-          if (intercomm != MPI_COMM_NULL) MPI_Barrier(intercomm);
-        }
-      } else {
-          if (intercomm != MPI_COMM_NULL) MPI_Barrier(intercomm);
+      /* broadcast the order to all parent processes */
+      MPI_Bcast(&rct, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+      switch (rct) {
+      case ICC_RECONFIG_EXPAND:
+        terminate = 0;
+        expand(nprocs, hostlist, argv[0], argv[1], iter, &intercomm);
+        break;
+      case ICC_RECONFIG_SHRINK:
+        terminate = 1;
+        break;
+      default:
+        terminate = 0;
+        break;
       }
     }
 
-    if (childterminate()) {
-      MPI_Finalize();
-      return 0;
+    /* termination order + sync point for children */
+    if (isparent()) {
+      if (intercomm != MPI_COMM_NULL)
+        MPI_Bcast(&terminate, 1, MPI_INT, rank == 0 ? MPI_ROOT : MPI_PROC_NULL,
+                  intercomm);
+      if (terminate) {
+        terminate_parent(&intercomm, icc);
+      }
+    } else {
+      MPI_Bcast(&terminate, 1, MPI_INT, 0, intercomm);
+      if (terminate) {
+        terminate_child(&intercomm);
+        return 0;
+      }
     }
 
     time_t start, end;
@@ -129,6 +148,10 @@ main(int argc, char **argv)
       double elapsed = difftime(end, start);
       PRINTFROOT(rank, "IO: %.0fs (%.2e B/s)\n", elapsed, nbytes / elapsed);
     }
+
+    /* sync parent and child before starting the timer */
+    if (intercomm != MPI_COMM_NULL)
+      MPI_Barrier(intercomm);
 
     start = time(NULL);
 
@@ -177,38 +200,6 @@ isparent()
   } else {
     return 0;
   }
-}
-
-static int
-childterminate(void)
-{
-  MPI_Comm parent;
-  MPI_Comm_get_parent(&parent);
-
-  /* parent do not terminate */
-  if (parent == MPI_COMM_NULL) {
-    return 0;
-  }
-
-  MPI_Barrier(parent);          /* wait for parents */
-
-  int terminate;
-  MPI_Iprobe(0, TERMINATE_TAG, parent, &terminate, MPI_STATUS_IGNORE);
-
-  if (terminate) {
-    /* ack termination and send our nodename */
-    MPI_Recv(NULL, 0, MPI_INT, 0, TERMINATE_TAG, parent, MPI_STATUS_IGNORE);
-
-    char *procname = getenv("SLURMD_NODENAME");
-    if (!procname) {
-      errabort(EINVAL);
-    }
-
-    MPI_Send(procname, strlen(procname), MPI_CHAR, 0, TERMINATE_TAG, parent);
-    MPI_Comm_disconnect(&parent);
-  }
-
-  return terminate;
 }
 
 static int
@@ -333,21 +324,25 @@ expand(uint32_t nprocs, const char *hostlist, const char *executable,
   argv[0] = filepath;
   argv[1] = NULL;
 
-  fprintf(stderr, "Spawning %s %s, on %s (%"PRIu32" procs, iter %d)\n",
-          executable, filepath, hostlist, nprocs, iteration);
+  /* rank in parent processes*/
+  int rank = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+  PRINTFROOT(rank, "Spawning %s %s, on %s (%"PRIu32" procs, iter %d)\n",
+             executable, filepath, hostlist, nprocs, iteration);
   MPI_Comm_spawn(executable, argv, nprocs, hostinfo, 0,
-                 MPI_COMM_SELF, intercomm, MPI_ERRCODES_IGNORE);
+                 MPI_COMM_WORLD, intercomm, MPI_ERRCODES_IGNORE);
 
   MPI_Info_free(&hostinfo);
 
-  MPI_Bcast(&iteration, 1, MPI_INT, MPI_ROOT, *intercomm);
-
-  MPI_Barrier(*intercomm);
+  /* send current itertion to children */
+  MPI_Bcast(&iteration, 1, MPI_INT, rank == 0 ? MPI_ROOT : MPI_PROC_NULL,
+            *intercomm);
 }
 
 
 static void
-shrink(MPI_Comm *intercomm, struct icc_context *icc)
+terminate_parent(MPI_Comm *intercomm, struct icc_context *icc)
 {
   if (*intercomm == MPI_COMM_NULL) { /* nothing to shrink */
     return;
@@ -356,34 +351,43 @@ shrink(MPI_Comm *intercomm, struct icc_context *icc)
   int nchilds;
   MPI_Comm_remote_size(*intercomm, &nchilds);
 
-  MPI_Request *reqs = malloc(nchilds * sizeof(*reqs));
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-  for (int i = 0; i < nchilds; i++) {
-    MPI_Isend(NULL, 0, MPI_INT, i, TERMINATE_TAG, *intercomm, &reqs[i]);
-  }
+  if (rank != 0) {
+    MPI_Comm_disconnect(intercomm);
+  } else {
+    for (int i = 0; i < nchilds; i++ ) {
+      char hostname[HOSTNAME_MAXLEN];
+      MPI_Recv(hostname, HOSTNAME_MAXLEN, MPI_CHAR, i, TERMINATE_TAG, *intercomm,
+               MPI_STATUS_IGNORE);
 
-  MPI_Barrier(*intercomm);
-
-  MPI_Waitall(nchilds, reqs, MPI_STATUSES_IGNORE);
-
-  free(reqs);
-
-  for (int i = 0; i < nchilds; i++ ) {
-    char hostname[HOSTNAME_MAXLEN];
-    MPI_Recv(hostname, HOSTNAME_MAXLEN, MPI_CHAR, i, TERMINATE_TAG, *intercomm,
-             MPI_STATUS_IGNORE);
-
-    size_t hostlen = strnlen(hostname, HOSTNAME_MAXLEN);
-    if (hostlen == HOSTNAME_MAXLEN) {  /* string not terminated */
-      exit(EXIT_FAILURE);
-    } else {
-      icc_release_register(icc, hostname, 1);
+      size_t hostlen = strnlen(hostname, HOSTNAME_MAXLEN);
+      if (hostlen == HOSTNAME_MAXLEN) {  /* string not terminated */
+        exit(EXIT_FAILURE);
+      } else {
+        icc_release_register(icc, hostname, 1);
+      }
     }
+
+    MPI_Comm_disconnect(intercomm);
+    /* warning: nodes must be released AFTER disconnection from the
+       intercommunicator, otherwise PMI proxies are still running */
+    sleep(2);                           /* give some time to PMI proxies to exit */
+    icc_release_nodes(icc);
+  }
+}
+
+static void
+terminate_child(MPI_Comm *intercomm)
+{
+  char *procname = getenv("SLURMD_NODENAME");
+  if (!procname) {
+    errabort(EINVAL);
   }
 
+  MPI_Send(procname, strlen(procname), MPI_CHAR, 0, TERMINATE_TAG, *intercomm);
   MPI_Comm_disconnect(intercomm);
-  /* warning: nodes must be released AFTER disconnection from the
-     intercommunicator, otherwise PMI proxies are still running */
-  sleep(2);                           /* give some time to PMI proxies to exit */
-  icc_release_nodes(icc);
+
+  MPI_Finalize();
 }
