@@ -1,6 +1,6 @@
 #!/bin/sh
-# Run Redis server and the ICC server for 10 minutes. The ICC address
-# file will be written in the ADMIRE_DIR directory.
+# Run Redis server and the ICC server. The ICC address file will be
+# written in the ADMIRE_DIR directory.
 
 #SBATCH --job-name=admire_ic
 #SBATCH --output=icc_server_out.txt
@@ -27,6 +27,7 @@ export PATH LD_LIBRARY_PATH ADMIRE_DIR
 
 mkdir -p $ADMIRE_DIR
 
-srun redis-server &
+srun -n1 --overlap redis-server &
 sleep 2				# give some time to Redis to start
-srun icc_server
+srun -n1 --overlap icc_server
+
