@@ -136,13 +136,21 @@ resalloc_cb(hg_handle_t h)
 
   /* shrinking request can be dealt with immediately */
   if (in.shrink) {
-    ABT_rwlock_wrlock(icc->hostlock);
-    icc->reconfig_flag = ICC_RECONFIG_SHRINK;
-    ABT_rwlock_unlock(icc->hostlock);
 
-    ABT_mutex_lock(mutex);
-    in_resalloc = 0;
-    ABT_mutex_unlock(mutex);
+    if (icc->reconfig_func) {
+      /* call callback immediately if available */
+      ret = icc->reconfig_func(in.shrink, in.ncpus, NULL, icc->reconfig_data);
+      out.rc = ret ? RPC_FAILURE : RPC_SUCCESS;
+    } else {
+      /* set flag to be polled later otherwise */
+      ABT_rwlock_wrlock(icc->hostlock);
+      icc->reconfig_flag = ICC_RECONFIG_SHRINK;
+      ABT_rwlock_unlock(icc->hostlock);
+
+      ABT_mutex_lock(mutex);
+      in_resalloc = 0;
+      ABT_mutex_unlock(mutex);
+    }
 
     goto respond;
   }
@@ -255,11 +263,17 @@ alloc_th(struct alloc_args *args)
   if (rpcret == RPC_WAIT) {            /* do not do reconfigure */
     margo_debug(icc->mid, "Job %"PRIu32": not reconfiguring", in.jobid);
   } else if (rpcret == RPC_SUCCESS) {  /* prepare reconfiguration */
-    ABT_rwlock_wrlock(icc->hostlock);
 
-    icc->reconfig_flag = ICC_RECONFIG_EXPAND;
-
-    ABT_rwlock_unlock(icc->hostlock);
+    if (icc->reconfig_func) {
+      /* call callback immediately if available */
+      margo_debug(icc->mid, "Job %"PRIu32": reconfiguring", in.jobid);
+      iccret = icc->reconfig_func(0, in.ncpus, in.hostlist, icc->reconfig_data);
+    } else {
+      /* set flag to be polled later otherwise */
+      ABT_rwlock_wrlock(icc->hostlock);
+      icc->reconfig_flag = ICC_RECONFIG_EXPAND;
+      ABT_rwlock_unlock(icc->hostlock);
+    }
   } else {
     margo_error(icc->mid, "Error in RPC_RESALLOCDONE");
   }

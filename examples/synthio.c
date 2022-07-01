@@ -56,15 +56,21 @@ main(int argc, char **argv)
   if (provided < MPI_THREAD_MULTIPLE) {
     fputs("Multithreading not supported\n", stderr);
     MPI_Finalize();
+    return EXIT_FAILURE;
   }
 
   int rank, nprocs;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
-  struct icc_context *icc;
+  struct icc_context *icc = NULL;
   if (rank == 0 && isparent()) {
     icc_init_mpi(ICC_LOG_DEBUG, ICC_TYPE_MPI, nprocs, NULL, NULL, &icc);
+    if (!icc) {
+      fputs("ICC could not be initialized\n", stderr);
+      MPI_Finalize();
+      return EXIT_FAILURE;
+    }
   }
 
   int rc = 0;
