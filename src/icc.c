@@ -112,7 +112,7 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
   if (rc)
     goto error;
 
-  /* icrm requires Argobots to be setup, so icrm goes after Margo */
+  /* icrm requires Argobots to be setup, so goes after Margo */
   rc = _setup_icrm(icc);
   if (rc)
     goto error;
@@ -121,8 +121,8 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
   if (rc)
     goto error;
 
-  /* register reconfiguration func */
-  if (func) {
+  /* register reconfiguration func, automatic for FlexMPI */
+  if (icc->type == ICC_TYPE_FLEXMPI || func) {
     rc = _setup_reconfigure(icc, func, data);
     if (rc)
       goto error;

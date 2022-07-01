@@ -243,7 +243,6 @@ malleability_th(void *arg)
       break;
     } while (1);
 
-
     margo_info(data->mid, "Malleability: Job %"PRIu32": got %zu client%s",
                data->jobid, nclients, nclients > 1 ? "s" : "");
 
@@ -258,59 +257,69 @@ malleability_th(void *arg)
 	break;
       }
 
-      margo_info(data->mid, "Malleability: Job %"PRIu32": client %s: %s%"PRId32" procs", clients[i].jobid, clients[i].clid, dprocs > 0 ? "+" : "", dprocs);
-
       /* make malleability RPC */
       hg_addr_t addr;
       hg_return_t hret;
       int rpcret;
 
-      /* XX number reconfiguration command, add hostlist */
-      reconfigure_in_t in = { .cmdidx = 0, .maxprocs = dprocs, .hostlist = "" };
       hret = margo_addr_lookup(data->mid, clients[i].addr, &addr);
       if (hret != HG_SUCCESS) {
         LOG_ERROR(data->mid, "Failed getting Mercury address: %s", HG_Error_to_string(hret));
         break;
       }
 
-      /* XX TMP test resalloc */
-      resalloc_in_t allocin;
-      allocin.shrink = 0;
-      allocin.ncpus = 5;
+      if (!strncmp(clients[i].type, "flexmpi", ICC_TYPE_LEN)) {
 
-      ret = rpc_send(data->mid, addr, data->rpcids[RPC_RESALLOC], &allocin, &rpcret);
-      if (ret) {
-        LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RESALLOC send failed ", clients[i].jobid, clients[i].clid);
-      } else if (rpcret) {
-        LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RESALLOC returned with code %d", clients[i].jobid, clients[i].clid, rpcret);
-      } else {
-        margo_info(data->mid, "Malleability: Job %"PRIu32" RPC_RESALLOC for %"PRIu32" CPUs", clients[i].jobid, allocin.ncpus);
-      }
+        /* XX number reconfiguration command, add hostlist */
+        reconfigure_in_t in = { .cmdidx = 0, .maxprocs = dprocs, .hostlist = "" };
 
+        ret = rpc_send(data->mid, addr, data->rpcids[RPC_RECONFIGURE], &in, &rpcret);
+        if (ret) {
+          LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RECONFIGURE send failed ", clients[i].jobid, clients[i].clid);
+        } else if (rpcret) {
+          LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RECONFIGURE returned with code %d", clients[i].jobid, clients[i].clid, rpcret);
+        }
+        else {
+          margo_info(data->mid, "Malleability: Job %"PRIu32": client %s: %s%"PRId32" procs", clients[i].jobid, clients[i].clid, dprocs > 0 ? "+" : "", dprocs);
+          /* XX generalize with a "writeclient" function? */
+          ret = icdb_incrnprocs(icdb, clients[i].clid, dprocs);
+          if (ret != ICDB_SUCCESS) {
+            LOG_ERROR(data->mid, "IC database failure: %s", icdb_errstr(icdb));
+          }
+        }
+      } else if (!strncmp(clients[i].type, "mpi", ICC_TYPE_LEN)) {
 
-      sleep(8);
-      allocin.shrink = 1;
-      ret = rpc_send(data->mid, addr, data->rpcids[RPC_RESALLOC], &allocin, &rpcret);
-      if (ret)
-      margo_info(data->mid, "Malleability: Job %"PRIu32" RPC_RESALLOC for -%"PRIu32" CPUs", clients[i].jobid, allocin.ncpus);
+          /* XX TMP test resalloc */
+          resalloc_in_t allocin;
+          allocin.shrink = 0;
+          allocin.ncpus = 3;
 
+          sleep(4);
+
+          ret = rpc_send(data->mid, addr, data->rpcids[RPC_RESALLOC], &allocin, &rpcret);
+          if (ret) {
+            LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RESALLOC send failed ", clients[i].jobid, clients[i].clid);
+          } else if (rpcret) {
+            LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RESALLOC returned with code %d", clients[i].jobid, clients[i].clid, rpcret);
+          } else {
+            margo_info(data->mid, "Malleability: Job %"PRIu32" RPC_RESALLOC for %"PRIu32" CPUs", clients[i].jobid, allocin.ncpus);
+          }
+
+          sleep(16);
+
+          allocin.shrink = 1;
+          ret = rpc_send(data->mid, addr, data->rpcids[RPC_RESALLOC], &allocin, &rpcret);
+          if (ret) {
+            LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RESALLOC send failed ", clients[i].jobid, clients[i].clid);
+          } else if (rpcret) {
+            LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RESALLOC returned with code %d", clients[i].jobid, clients[i].clid, rpcret);
+          } else {
+            margo_info(data->mid, "Malleability: Job %"PRIu32" RPC_RESALLOC for -%"PRIu32" CPUs", clients[i].jobid, allocin.ncpus);
+          }
+        }
 
       data->sleep = 1;
       continue;
-
-      ret = rpc_send(data->mid, addr, data->rpcids[RPC_RECONFIGURE], &in, &rpcret);
-      if (ret) {
-        LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RECONFIGURE send failed ", clients[i].jobid, clients[i].clid);
-      } else if (rpcret) {
-        LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RECONFIGURE returned with code %d", clients[i].jobid, clients[i].clid, rpcret);
-      }
-      else {
-        /* XX generalize with a "writeclient" function? */
-        ret = icdb_incrnprocs(icdb, clients[i].clid, dprocs);
-        if (ret != ICDB_SUCCESS) {
-          LOG_ERROR(data->mid, "IC database failure: %s", icdb_errstr(icdb));
-        }
-      }
     }
 
     /* go back to sleep */
