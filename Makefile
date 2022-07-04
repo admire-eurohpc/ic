@@ -119,7 +119,7 @@ $(libicc_so): LDLIBS += `$(PKG_CONFIG) --libs margo uuid` $(LIBS_SLURM) -ldl -Wl
 
 client: LDLIBS += -L. -licc -Wl,--no-undefined,-rpath-link=${PREFIX}/lib
 
-jobcleaner: LDLIBS += `$(PKG_CONFIG) --libs` -L. -licc -Wl,--no-undefined,-rpath-link=${PREFIX}/lib
+jobcleaner: LDLIBS += -L. -licc -Wl,--no-undefined,-rpath-link=${PREFIX}/lib
 
 spawn: CFLAGS += `$(PKG_CONFIG) --cflags mpich`
 spawn: LDLIBS += `$(PKG_CONFIG) --libs mpich` -L. -licc -Wl,--no-undefined,-rpath-link=${PREFIX}/lib
