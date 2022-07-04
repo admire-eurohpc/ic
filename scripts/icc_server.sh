@@ -27,7 +27,7 @@ export PATH LD_LIBRARY_PATH ADMIRE_DIR
 
 mkdir -p $ADMIRE_DIR
 
-srun -n1 --overlap redis-server &
+srun -n1 --exact redis-server &
 sleep 2				# give some time to Redis to start
-srun -n1 --overlap icc_server
+srun -n1 --exact icc_server
 
