@@ -323,8 +323,10 @@ expand(uint32_t nprocs, const char *hostlist, const char *executable,
        char *filepath, int iteration, MPI_Comm *intercomm)
 {
   MPI_Info hostinfo;
-  MPI_Info_create(&hostinfo);
-  MPI_Info_set(hostinfo, "host", hostlist);
+  if (hostlist) {
+    MPI_Info_create(&hostinfo);
+    MPI_Info_set(hostinfo, "host", hostlist);
+  }
 
   char *argv[2];
   argv[0] = filepath;
