@@ -1,6 +1,15 @@
 /**
  * Synthetic MPI application with distinct IO and "computation"
  * phases.
+ *
+ * The compute phase linearly decreases in time with the
+ * number of processes.
+ *
+ * The IO phase accesses the file non-contiguously, with each MPI
+ * process writing and reading NBLOCKS of NELEMS in a round-robin
+ * fashion. The reading is shifted one block, meaning each process
+ * reads the blocks its neighbour wrote. This is done to avoid
+ * measuring the effect of the page cache.
  */
 
 #include <errno.h>
@@ -15,14 +24,13 @@
 #include <mpi.h>
 #include <icc.h>
 
-#define PRINTFROOT(rank,...) if (rank == 0) {                   \
-    printf("%s: ", isparent() ? "parent" : "child"); \
+#define PRINTFROOT(rank,...) if (rank == 0 && isparent()) {     \
     printf(__VA_ARGS__);                                        \
 }
 
-#define NBLOCKS 128
+#define NBLOCKS 2048            /* nblocks per process */
 #define NELEMS 65536            /* nelems in block */
-#define NITER  20
+#define NITER  12
 
 #define TERMINATE_TAG   0x7
 #define HOSTNAME_MAXLEN 256
@@ -91,8 +99,6 @@ main(int argc, char **argv)
   }
 
   for (; iter < NITER; iter++) {
-    PRINTFROOT(rank, "Iteration %d\n", iter);
-
     if (isparent()) {
       enum icc_reconfig_type rct;
       uint32_t nprocs;
@@ -139,6 +145,9 @@ main(int argc, char **argv)
     }
 
     time_t start, end;
+    unsigned long long nbytes = 0;
+    double elapsed_io = 0;
+    double elapsed_compute = 0;
 
     if (isparent()) {
       start = time(NULL);
@@ -150,9 +159,8 @@ main(int argc, char **argv)
 
       end = time(NULL);
 
-      unsigned long long nbytes = NBLOCKS * NELEMS * sizeof(int) * nprocs;
-      double elapsed = difftime(end, start);
-      PRINTFROOT(rank, "IO: %.0fs (%.2e B/s)\n", elapsed, nbytes / elapsed);
+      nbytes = NBLOCKS * NELEMS * sizeof(int) * nprocs;
+      elapsed_io = difftime(end, start);
     }
 
     /* sync parent and child before starting the timer */
@@ -164,7 +172,11 @@ main(int argc, char **argv)
     compute(rank == 0 && isparent(), MPI_COMM_WORLD, intercomm);
 
     end = time(NULL);
-    PRINTFROOT(rank, "Compute: %.0fs\n", difftime(end, start));
+
+    elapsed_compute = difftime(end, start);
+
+    PRINTFROOT(rank, "Iteration %d: %.0fs IO (%.2e B/s), %.0fs compute\n",
+               iter, elapsed_io, nbytes / elapsed_io, elapsed_compute);
 
   } /* end iteration */
 
@@ -228,8 +240,8 @@ fileopen(const char *filepath, int nblocks, int nelems, int nprocs,
 }
 
 
-#define SERIAL_SEC   1
-#define PARALLEL_SEC 4
+#define SERIAL_SEC   4
+#define PARALLEL_SEC 12
 
 static void
 compute(int isroot, MPI_Comm intracomm, MPI_Comm intercomm)
@@ -322,7 +334,7 @@ static void
 expand(uint32_t nprocs, const char *hostlist, const char *executable,
        char *filepath, int iteration, MPI_Comm *intercomm)
 {
-  MPI_Info hostinfo;
+  MPI_Info hostinfo = MPI_INFO_NULL;
   if (hostlist) {
     MPI_Info_create(&hostinfo);
     MPI_Info_set(hostinfo, "host", hostlist);
@@ -341,7 +353,9 @@ expand(uint32_t nprocs, const char *hostlist, const char *executable,
   MPI_Comm_spawn(executable, argv, nprocs, hostinfo, 0,
                  MPI_COMM_WORLD, intercomm, MPI_ERRCODES_IGNORE);
 
-  MPI_Info_free(&hostinfo);
+  if (hostinfo != MPI_INFO_NULL) {
+    MPI_Info_free(&hostinfo);
+  }
 
   /* send current itertion to children */
   MPI_Bcast(&iteration, 1, MPI_INT, rank == 0 ? MPI_ROOT : MPI_PROC_NULL,
