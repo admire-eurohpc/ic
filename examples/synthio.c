@@ -102,7 +102,7 @@ main(int argc, char **argv)
     if (isparent()) {
       enum icc_reconfig_type rct;
       uint32_t nprocs;
-      const char *hostlist;
+      const char *hostlist = NULL; /* must be null for all ranks except root */
 
       if (rank == 0) {
         rc = icc_reconfig_pending(icc, &rct, &nprocs, &hostlist);
