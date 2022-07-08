@@ -85,7 +85,7 @@ int icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct i
  *
  * Return ICC_SUCCESS or an error code.
  */
-int icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid, unsigned int nprocs, icc_reconfigure_func_t func, void *data, struct icc_context **icc);
+int icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid, int nprocs, icc_reconfigure_func_t func, void *data, struct icc_context **icc);
 
 
 /**

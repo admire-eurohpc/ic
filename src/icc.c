@@ -49,7 +49,7 @@ static int _setup_margo(enum icc_log_level log_level, struct icc_context *icc);
 static int _setup_reconfigure(struct icc_context *icc, icc_reconfigure_func_t func, void *data);
 static int _setup_icrm(struct icc_context *icc);
 static int _setup_hostmaps(struct icc_context *icc);
-static int _register_client(struct icc_context *icc, int nprocs);
+static int _register_client(struct icc_context *icc, unsigned int nprocs);
 
 /* public functions */
 
@@ -60,7 +60,7 @@ icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_c
 
 int
 icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
-             unsigned int nprocs, icc_reconfigure_func_t func, void *data,
+             int nprocs, icc_reconfigure_func_t func, void *data,
              struct icc_context **icc_context)
 {
   int rc;
@@ -132,10 +132,18 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
   margo_register_data(icc->mid, icc->rpcids[RPC_RECONFIGURE], icc, NULL);
   margo_register_data(icc->mid, icc->rpcids[RPC_RESALLOC], icc, NULL);
 
+  /* nprocs should unsigned, but MPI defines it as an int, so we take
+     care of the check here */
+  if (nprocs < 0) {
+    margo_error(icc->mid, "icc (init): Invalid number of processes");
+    rc = ICC_FAILURE;
+    goto error;
+  }
+
   /* register client last to avoid race conditions where the IC would
      send a RPC command before the client is fully set up */
   if (icc->bidirectional) {
-    rc = _register_client(icc, nprocs);
+    rc = _register_client(icc, (unsigned)nprocs);
     if (rc)
       goto error;
   }
@@ -688,7 +696,7 @@ _setup_hostmaps(struct icc_context *icc)
 }
 
 static int
-_register_client(struct icc_context *icc, int nprocs)
+_register_client(struct icc_context *icc, unsigned int nprocs)
 {
   char addr_str[ICC_ADDR_LEN];
   hg_size_t addr_str_size = ICC_ADDR_LEN;
