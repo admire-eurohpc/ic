@@ -6,13 +6,18 @@
  * number of processes.
  *
  * The IO phase accesses the file non-contiguously, with each MPI
- * process writing and reading NBLOCKS of NELEMS in a round-robin
- * fashion. The reading is shifted one block, meaning each process
- * reads the blocks its neighbour wrote. This is done to avoid
- * measuring the effect of the page cache.
+ * process writing and reading blocks of NELEMS in a round-robin
+ * fashion to achieve a total of NBYTES. The reading is shifted one
+ * block, meaning each process reads the blocks its neighbour
+ * wrote. This is done to avoid measuring the effect of the page
+ * cache.
+ *
+ * TODO:
+ * - increase precision of timer gettimeofday(2) + timersub(3)
  */
 
 #include <errno.h>
+#include <getopt.h>             /* getopt_long */
 #include <inttypes.h>           /* PRIuXX */
 #include <limits.h>             /* INT_MAX */
 #include <stdio.h>              /* printf */
@@ -28,9 +33,9 @@
     printf(__VA_ARGS__);                                        \
 }
 
-#define NBLOCKS 2048            /* nblocks per process */
-#define NELEMS 65536            /* nelems in block */
 #define NITER  12
+#define NBYTES_DEFAULT (4ULL * 1024 * 1024 * 1024)
+#define NELEMS         (1024 * 1024) /* nelems per block (int for MPI) */
 
 #define TERMINATE_TAG   0x7
 #define HOSTNAME_MAXLEN 256
@@ -38,14 +43,16 @@
 
 static void usage(char *name);
 static void errabort(int errcode);
-static void expand(uint32_t nprocs, const char *hostlist, const char *executable,
-                   char *filepath, int iteration, MPI_Comm *intercomm);
+static void expand(uint32_t nprocs, const char *hostlist, int argc, char *argv[],
+                   int iteration, MPI_Comm *intercomm);
 
 static int isparent(void);
 static void terminate_parent(MPI_Comm *intercomm, struct icc_context *icc);
 static void terminate_child(MPI_Comm *intercomm);
 static int fileopen(const char *filepath, int nblocks, int nelems, int nprocs,
                     MPI_File *fh, MPI_Datatype *filetype);
+static int nblocks_per_procs(unsigned long long nbytes, int nelems, int nprocs,
+                             int *nblocks);
 
 static void compute(int isroot, MPI_Comm intracomm, MPI_Comm intercomm);
 static int io(int nblocks, int nelems, int rank, int nprocs,
@@ -54,22 +61,57 @@ static int io(int nblocks, int nelems, int rank, int nprocs,
 int
 main(int argc, char **argv)
 {
-  if (argc < 2) {
+  unsigned long long nbytes = NBYTES_DEFAULT;
+  static struct option longopts[] = {
+    { "size", required_argument, NULL, 's' },
+    { NULL,    0,                NULL,  0  },
+  };
+
+  int ch;
+  char *endptr;
+  while ((ch = getopt_long(argc, argv, "s:", longopts, NULL)) != -1)
+    switch (ch) {
+    case 's':
+      nbytes = strtoull(optarg, &endptr, 0);
+      if (errno != 0 || endptr == optarg || *endptr != '\0')
+        exit(EXIT_FAILURE);
+    case 0:
+      continue;
+    default:
+      usage(argv[0]);
+      exit(EXIT_FAILURE);
+    }
+
+  if (argc - optind < 1) {
+    fputs("Missing file path\n", stderr);
     usage(argv[0]);
-    return EXIT_FAILURE;
+    exit(EXIT_FAILURE);
   }
+
+  char *filepath = argv[optind];
 
   int provided;
   MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
   if (provided < MPI_THREAD_MULTIPLE) {
     fputs("Multithreading not supported\n", stderr);
     MPI_Finalize();
-    return EXIT_FAILURE;
+    exit(EXIT_FAILURE);
   }
 
   int rank, nprocs;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+
+  int rc = 0;
+  int nblocks;
+
+  rc = nblocks_per_procs(nbytes, NELEMS, nprocs, &nblocks);
+  if (rc < 0) {
+    errabort(-rc);
+  } else if (nblocks == 0) {
+    fputs("Not enough bytes to write", stderr);
+    errabort(EINVAL);
+  }
 
   struct icc_context *icc = NULL;
   if (rank == 0 && isparent()) {
@@ -81,16 +123,14 @@ main(int argc, char **argv)
     }
   }
 
-  int rc = 0;
-
   MPI_File fh = MPI_FILE_NULL;
   MPI_Datatype filetype = MPI_DATATYPE_NULL;
-  fileopen(argv[1], NBLOCKS, NELEMS, nprocs, &fh, &filetype);
+  /* XX check return code */
+  fileopen(filepath, nblocks, NELEMS, nprocs, &fh, &filetype);
 
   MPI_Comm intercomm = MPI_COMM_NULL;
   int iter = 0;
   int terminate = 0;
-
 
   if (!isparent()) {
     MPI_Comm_get_parent(&intercomm);
@@ -101,11 +141,11 @@ main(int argc, char **argv)
   for (; iter < NITER; iter++) {
     if (isparent()) {
       enum icc_reconfig_type rct;
-      uint32_t nprocs;
+      uint32_t nprocs_spawn;
       const char *hostlist = NULL; /* must be null for all ranks except root */
 
       if (rank == 0) {
-        rc = icc_reconfig_pending(icc, &rct, &nprocs, &hostlist);
+        rc = icc_reconfig_pending(icc, &rct, &nprocs_spawn, &hostlist);
         if (rc != ICC_SUCCESS) {
           errabort(rc);
         }
@@ -117,7 +157,7 @@ main(int argc, char **argv)
       switch (rct) {
       case ICC_RECONFIG_EXPAND:
         terminate = 0;
-        expand(nprocs, hostlist, argv[0], argv[1], iter, &intercomm);
+        expand(nprocs_spawn, hostlist, argc, argv, iter, &intercomm);
         break;
       case ICC_RECONFIG_SHRINK:
         terminate = 1;
@@ -145,21 +185,19 @@ main(int argc, char **argv)
     }
 
     time_t start, end;
-    unsigned long long nbytes = 0;
     double elapsed_io = 0;
     double elapsed_compute = 0;
 
     if (isparent()) {
       start = time(NULL);
 
-      rc = io(NBLOCKS, NELEMS, rank, nprocs, filetype, fh);
+      rc = io(nblocks, NELEMS, rank, nprocs, filetype, fh);
       if (rc) {
         errabort(-rc);
       }
 
       end = time(NULL);
 
-      nbytes = NBLOCKS * NELEMS * sizeof(int) * nprocs;
       elapsed_io = difftime(end, start);
     }
 
@@ -175,8 +213,8 @@ main(int argc, char **argv)
 
     elapsed_compute = difftime(end, start);
 
-    PRINTFROOT(rank, "Iteration %d: %.0fs IO (%.2e B/s), %.0fs compute\n",
-               iter, elapsed_io, nbytes / elapsed_io, elapsed_compute);
+    PRINTFROOT(rank, "Iteration %d: %.0fs IO (%.2llu B/s), %.0fs compute\n",
+               iter, elapsed_io, nbytes / (unsigned)elapsed_io, elapsed_compute);
 
   } /* end iteration */
 
@@ -192,11 +230,10 @@ main(int argc, char **argv)
   return EXIT_SUCCESS;
 }
 
-
 static void
 usage(char *name)
 {
-  fprintf(stderr, "usage: %s <filepath>\n", name);
+  fprintf(stderr, "Usage: %s [--size TOTALSIZE] FILEPATH\n", name);
 }
 
 static void
@@ -224,10 +261,15 @@ static int
 fileopen(const char *filepath, int nblocks, int nelems, int nprocs,
          MPI_File *fh, MPI_Datatype *filetype)
 {
+  MPI_Info info;
+  MPI_Info_create(&info);
+
   MPI_File_set_errhandler(*fh, MPI_ERRORS_ARE_FATAL);
   MPI_File_open(MPI_COMM_WORLD, filepath,
                 MPI_MODE_RDWR | MPI_MODE_CREATE,
-                MPI_INFO_NULL, fh);
+                info, fh);
+
+  MPI_Info_free(&info);
 
   int stride;
   if (__builtin_smul_overflow(nelems, nprocs, &stride)) {
@@ -239,22 +281,51 @@ fileopen(const char *filepath, int nblocks, int nelems, int nprocs,
   return 0;
 }
 
+static int
+nblocks_per_procs(unsigned long long nbytes, int nelems, int nprocs, int *nblocks)
+{
+  unsigned int nbytes_per_block;
+  unsigned int nbytes_per_segment;       /* a segment is a block per procs */
 
-#define SERIAL_SEC   4
-#define PARALLEL_SEC 12
+  if (__builtin_mul_overflow(nelems, sizeof(int), &nbytes_per_block)) {
+    return -EOVERFLOW;
+  }
+
+  if (__builtin_mul_overflow(nbytes_per_block, nprocs, &nbytes_per_segment)) {
+    return -EOVERFLOW;
+  }
+
+  unsigned long long nblocks_per_proc = nbytes / nbytes_per_segment;
+
+  /* we want an int for MPI, so detect possible overflow */
+  if (nblocks_per_proc <= INT_MAX) {
+    *nblocks = (int)nblocks_per_proc;
+  } else {
+    return -EOVERFLOW;
+  }
+
+  return 0;
+}
+
+#define SERIAL_SEC   2
+#define PARALLEL_SEC 32
 
 static void
 compute(int isroot, MPI_Comm intracomm, MPI_Comm intercomm)
 {
   if (isroot) {
-    int n, nprocs = 0, nchilds = 0;
+    int n,  nprocs = 0, nchilds = 0;
     MPI_Comm_size(intracomm, &nprocs);
     if (intercomm != MPI_COMM_NULL) {
       MPI_Comm_remote_size(intercomm, &nchilds);
     }
 
     n = nprocs + nchilds;
-    sleep(SERIAL_SEC + PARALLEL_SEC / n);
+
+    if (n < 0) {  /* should not happen , but MPI returns ints... */
+      n = 1;
+    }
+    sleep(SERIAL_SEC + PARALLEL_SEC / (unsigned int)n);
   }
 
   if (intercomm != MPI_COMM_NULL) {
@@ -269,12 +340,16 @@ static int
 io(int nblocks, int nelems, int rank, int nprocs,
    MPI_Datatype filetype, MPI_File fh)
 {
-  size_t blocksize = nelems * sizeof(int);
+  if (nblocks < 0 || nelems < 0) {
+    return -EINVAL;
+  }
+
+  size_t blocksize = (unsigned int)nelems * sizeof(int);
   if (blocksize < (size_t)nelems) {
     return -EOVERFLOW;
   }
 
-  size_t bufsize = blocksize * nblocks;
+  size_t bufsize = blocksize * (unsigned int)nblocks;
   if (bufsize < blocksize) {
     return -EOVERFLOW;
   }
@@ -331,33 +406,43 @@ io(int nblocks, int nelems, int rank, int nprocs,
 }
 
 static void
-expand(uint32_t nprocs, const char *hostlist, const char *executable,
-       char *filepath, int iteration, MPI_Comm *intercomm)
+expand(uint32_t nprocs, const char *hostlist, int argc, char *argv[],
+       int iteration, MPI_Comm *intercomm)
 {
+  /* rank in parent processes*/
+  int rank = -1;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
   MPI_Info hostinfo = MPI_INFO_NULL;
   if (hostlist) {
     MPI_Info_create(&hostinfo);
     MPI_Info_set(hostinfo, "host", hostlist);
   }
 
-  char *argv[2];
-  argv[0] = filepath;
-  argv[1] = NULL;
+  char **child_argv = malloc((unsigned int)argc * sizeof(*child_argv)); /* assume no overflow */
 
-  /* rank in parent processes*/
-  int rank = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  for (int i = 0; i < argc - 1; i++) {
+    child_argv[i] = argv[i + 1];
+  }
+  child_argv[argc - 1] = NULL;
 
-  PRINTFROOT(rank, "Spawning %s %s, on %s (%"PRIu32" procs, iter %d)\n",
-             executable, filepath, hostlist, nprocs, iteration);
-  MPI_Comm_spawn(executable, argv, nprocs, hostinfo, 0,
+  if (nprocs > INT_MAX) {
+    nprocs = 0;
+  }
+
+  PRINTFROOT(rank, "Spawning %s on %s (%"PRIu32" procs, iter %d)\n",
+             argv[0], hostlist, nprocs, iteration);
+
+  MPI_Comm_spawn(argv[0], child_argv, (int)nprocs, hostinfo, 0,
                  MPI_COMM_WORLD, intercomm, MPI_ERRCODES_IGNORE);
+
+  free(child_argv);
 
   if (hostinfo != MPI_INFO_NULL) {
     MPI_Info_free(&hostinfo);
   }
 
-  /* send current itertion to children */
+  /* send current iteration to children */
   MPI_Bcast(&iteration, 1, MPI_INT, rank == 0 ? MPI_ROOT : MPI_PROC_NULL,
             *intercomm);
 }
@@ -395,7 +480,9 @@ terminate_parent(MPI_Comm *intercomm, struct icc_context *icc)
     MPI_Comm_disconnect(intercomm);
     /* warning: nodes must be released AFTER disconnection from the
        intercommunicator, otherwise PMI proxies are still running */
-    sleep(2);                           /* give some time to PMI proxies to exit */
+
+    /* give some time to PMI proxies to exit (XX hackish) */
+    sleep(2);
     icc_release_nodes(icc);
   }
 }
@@ -408,7 +495,12 @@ terminate_child(MPI_Comm *intercomm)
     errabort(EINVAL);
   }
 
-  MPI_Send(procname, strlen(procname), MPI_CHAR, 0, TERMINATE_TAG, *intercomm);
+  size_t len = strlen(procname);
+  if (len > INT_MAX) {
+    len = INT_MAX;
+  }
+
+  MPI_Send(procname, (int)len, MPI_CHAR, 0, TERMINATE_TAG, *intercomm);
   MPI_Comm_disconnect(intercomm);
 
   MPI_Finalize();
