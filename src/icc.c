@@ -89,7 +89,7 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
 
   /* jobid is only required for registered clients */
   if (icc->bidirectional && !jobid) {
-      margo_error(icc->mid, "icc (init): No JOB_ID found");
+      margo_error(MARGO_INSTANCE_NULL, "icc (init): No JOB_ID found");
       rc = ICC_FAILURE;
       goto error;
   }
@@ -97,7 +97,7 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
   if (jobid) {
     rc = _strtouint32(jobid, &icc->jobid);
     if (rc) {
-      margo_error(icc->mid, "icc (init): Error converting job id \"%s\": %s", jobid, strerror(-rc));
+      margo_error(MARGO_INSTANCE_NULL, "icc (init): Error converting job id \"%s\": %s", jobid, strerror(-rc));
       rc = ICC_FAILURE;
       goto error;
     }
