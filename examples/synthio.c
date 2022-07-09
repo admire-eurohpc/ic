@@ -13,7 +13,8 @@
  * cache.
  *
  * TODO:
- * - increase precision of timer gettimeofday(2) + timersub(3)
+ * - remove file at the end of run
+ * - cleanup error messages + return codes, add perror style abort
  */
 
 #include <errno.h>
@@ -23,9 +24,8 @@
 #include <stdio.h>              /* printf */
 #include <stdlib.h>             /* EXIT_SUCCESS, (s)rand */
 #include <string.h>             /* strerror */
-#include <time.h>               /* difftime */
+#include <time.h>               /* clock_gettime */
 #include <unistd.h>             /* sleep, getentropy */
-#include <sys/time.h>           /* gettimeofday */
 #include <mpi.h>
 #include <icc.h>
 
@@ -36,6 +36,8 @@
 #define NITER  12
 #define NBYTES_DEFAULT (4ULL * 1024 * 1024 * 1024)
 #define NELEMS         (1024 * 1024) /* nelems per block (int for MPI) */
+#define SERIAL_SEC_DEFAULT   2U       /* duration of the serial part of the computation */
+#define PARALLEL_SEC_DEFAULT 32U      /* duration of the parallel part of the computation */
 
 #define TERMINATE_TAG   0x7
 #define HOSTNAME_MAXLEN 256
@@ -53,8 +55,10 @@ static int fileopen(const char *filepath, int nblocks, int nelems, int nprocs,
                     MPI_File *fh, MPI_Datatype *filetype);
 static int nblocks_per_procs(unsigned long long nbytes, int nelems, int nprocs,
                              int *nblocks);
+static int timediff_ms(struct timespec start, struct timespec end, long *res_ms);
 
-static void compute(int isroot, MPI_Comm intracomm, MPI_Comm intercomm);
+static void compute(unsigned int serial_sec, unsigned int parallel_sec,
+                    int isroot, MPI_Comm intracomm, MPI_Comm intercomm);
 static int io(int nblocks, int nelems, int rank, int nprocs,
               MPI_Datatype filetype, MPI_File fh);
 
@@ -62,19 +66,45 @@ int
 main(int argc, char **argv)
 {
   unsigned long long nbytes = NBYTES_DEFAULT;
+  unsigned int serial_sec = SERIAL_SEC_DEFAULT;
+  unsigned int parallel_sec = PARALLEL_SEC_DEFAULT;
+
   static struct option longopts[] = {
     { "size", required_argument, NULL, 's' },
+    { "serial-time", required_argument, NULL, 'l' },
+    { "parallel-time", required_argument, NULL, 'p' },
     { NULL,    0,                NULL,  0  },
   };
 
   int ch;
   char *endptr;
-  while ((ch = getopt_long(argc, argv, "s:", longopts, NULL)) != -1)
+  unsigned long tmp;
+
+  while ((ch = getopt_long(argc, argv, "s:l:p:", longopts, NULL)) != -1)
     switch (ch) {
     case 's':
       nbytes = strtoull(optarg, &endptr, 0);
-      if (errno != 0 || endptr == optarg || *endptr != '\0')
+      if (errno != 0 || endptr == optarg || *endptr != '\0') {
+        fputs("Invalid argument: size\n", stderr);
         exit(EXIT_FAILURE);
+      }
+      break;
+    case 'l':
+      tmp = strtoul(optarg, &endptr, 0);
+      if (errno != 0 || endptr == optarg || *endptr != '\0' || tmp > UINT_MAX) {
+        fputs("Invalid argument: serial-time\n", stderr);
+        exit(EXIT_FAILURE);
+      }
+      serial_sec = (unsigned int)tmp;
+      break;
+    case 'p':
+      tmp = strtoul(optarg, &endptr, 0);
+      if (errno != 0 || endptr == optarg || *endptr != '\0' || tmp > UINT_MAX) {
+        fputs("Invalid argument: parallel-time\n", stderr);
+        exit(EXIT_FAILURE);
+      }
+      parallel_sec = (unsigned int)tmp;
+      break;
     case 0:
       continue;
     default:
@@ -109,7 +139,7 @@ main(int argc, char **argv)
   if (rc < 0) {
     errabort(-rc);
   } else if (nblocks == 0) {
-    fputs("Not enough bytes to write", stderr);
+    fputs("Not enough bytes to write\n", stderr);
     errabort(EINVAL);
   }
 
@@ -184,40 +214,55 @@ main(int argc, char **argv)
       }
     }
 
-    time_t start, end;
-    double elapsed_io = 0;
-    double elapsed_compute = 0;
+    struct timespec start, end;
+    long elapsed_io, elapsed_compute;
 
     if (isparent()) {
-      start = time(NULL);
+      rc = clock_gettime(CLOCK_MONOTONIC, &start);
+      if (rc) {
+        errabort(rc);
+      }
 
       rc = io(nblocks, NELEMS, rank, nprocs, filetype, fh);
       if (rc) {
         errabort(-rc);
       }
+      rc = clock_gettime(CLOCK_MONOTONIC, &end);
+      if (rc) {
+        errabort(rc);
+      }
 
-      end = time(NULL);
-
-      elapsed_io = difftime(end, start);
+      if (timediff_ms(start, end, &elapsed_io)) {
+        elapsed_io = 0;         /* overflow */
+      }
     }
 
     /* sync parent and child before starting the timer */
     if (intercomm != MPI_COMM_NULL)
       MPI_Barrier(intercomm);
 
-    start = time(NULL);
+    rc = clock_gettime(CLOCK_MONOTONIC, &start);
+    if (rc) {
+      errabort(rc);
+    }
 
-    compute(rank == 0 && isparent(), MPI_COMM_WORLD, intercomm);
+    compute(serial_sec, parallel_sec,
+            rank == 0 && isparent(), MPI_COMM_WORLD, intercomm);
 
-    end = time(NULL);
+    rc = clock_gettime(CLOCK_MONOTONIC, &end);
+    if (rc) {
+      errabort(rc);
+    }
 
-    elapsed_compute = difftime(end, start);
+    if (timediff_ms(start, end, &elapsed_compute)) {
+      elapsed_compute = 0;      /* overflow */
+    }
 
-    PRINTFROOT(rank, "Iteration %d: %.0fs IO (%.2llu B/s), %.0fs compute\n",
-               iter, elapsed_io, nbytes / (unsigned)elapsed_io, elapsed_compute);
+    /* elapsed_io can be cast to unsigned because it shouldn’t be negative */
+
+    PRINTFROOT(rank, "Iteration %d: %ldms IO (%lld KB/s), %ldms compute\n", iter, elapsed_io, nbytes / (long unsigned)elapsed_io, elapsed_compute);
 
   } /* end iteration */
-
 
   if (fh != MPI_FILE_NULL) {
     MPI_File_close(&fh);
@@ -307,13 +352,41 @@ nblocks_per_procs(unsigned long long nbytes, int nelems, int nprocs, int *nblock
   return 0;
 }
 
-#define SERIAL_SEC   2
-#define PARALLEL_SEC 32
+/**
+ * Set RES_MS to the number of ms elapsed between START and
+ * END. Return 0 or EOVERFLOW on overflow.
+ */
+static int
+timediff_ms(struct timespec start, struct timespec end, long *res_ms)
+{
+  struct timespec diff;
+
+  diff.tv_sec = end.tv_sec - start.tv_sec;
+  diff.tv_nsec = end.tv_nsec - start.tv_nsec;
+  if (diff.tv_nsec < 0) {
+    diff.tv_sec--;
+    diff.tv_nsec += 1000000000L;
+  }
+
+  long ms;
+  if (__builtin_mul_overflow(diff.tv_sec, 1000L, &ms)) {
+    return EOVERFLOW;
+  }
+
+  /* XX floating point division? */
+  if (__builtin_saddl_overflow(ms, diff.tv_nsec / 1000000L, res_ms)) {
+    return EOVERFLOW;
+  }
+
+  return 0;
+}
 
 static void
-compute(int isroot, MPI_Comm intracomm, MPI_Comm intercomm)
+compute(unsigned int serial_sec, unsigned int parallel_sec,
+        int isroot, MPI_Comm intracomm, MPI_Comm intercomm)
 {
   if (isroot) {
+    unsigned int total_sleep;
     int n,  nprocs = 0, nchilds = 0;
     MPI_Comm_size(intracomm, &nprocs);
     if (intercomm != MPI_COMM_NULL) {
@@ -325,7 +398,13 @@ compute(int isroot, MPI_Comm intracomm, MPI_Comm intercomm)
     if (n < 0) {  /* should not happen , but MPI returns ints... */
       n = 1;
     }
-    sleep(SERIAL_SEC + PARALLEL_SEC / (unsigned int)n);
+
+    total_sleep = serial_sec + parallel_sec / (unsigned int)n;
+    if (total_sleep < serial_sec) { /* overflow */
+      total_sleep = UINT_MAX;
+    }
+
+    sleep(total_sleep);
   }
 
   if (intercomm != MPI_COMM_NULL) {
