@@ -55,7 +55,7 @@ static int fileopen(const char *filepath, int nblocks, int nelems, int nprocs,
                     MPI_File *fh, MPI_Datatype *filetype);
 static int nblocks_per_procs(unsigned long long nbytes, int nelems, int nprocs,
                              int *nblocks);
-static int timediff_ms(struct timespec start, struct timespec end, long *res_ms);
+static int timediff_ms(struct timespec start, struct timespec end, unsigned long *res_ms);
 
 static void compute(unsigned int serial_sec, unsigned int parallel_sec,
                     int isroot, MPI_Comm intracomm, MPI_Comm intercomm);
@@ -215,7 +215,7 @@ main(int argc, char **argv)
     }
 
     struct timespec start, end;
-    long elapsed_io, elapsed_compute;
+    unsigned long elapsed_io, elapsed_compute;
 
     if (isparent()) {
       rc = clock_gettime(CLOCK_MONOTONIC, &start);
@@ -258,9 +258,7 @@ main(int argc, char **argv)
       elapsed_compute = 0;      /* overflow */
     }
 
-    /* elapsed_io can be cast to unsigned because it shouldn’t be negative */
-
-    PRINTFROOT(rank, "Iteration %d: %ldms IO (%lld KB/s), %ldms compute\n", iter, elapsed_io, nbytes / (long unsigned)elapsed_io, elapsed_compute);
+    PRINTFROOT(rank, "Iteration %d: %ldms IO (%lld KB/s), %ldms compute\n", iter, elapsed_io, nbytes / elapsed_io, elapsed_compute);
 
   } /* end iteration */
 
@@ -357,7 +355,7 @@ nblocks_per_procs(unsigned long long nbytes, int nelems, int nprocs, int *nblock
  * END. Return 0 or EOVERFLOW on overflow.
  */
 static int
-timediff_ms(struct timespec start, struct timespec end, long *res_ms)
+timediff_ms(struct timespec start, struct timespec end, unsigned long *res_ms)
 {
   struct timespec diff;
 
@@ -368,13 +366,19 @@ timediff_ms(struct timespec start, struct timespec end, long *res_ms)
     diff.tv_nsec += 1000000000L;
   }
 
-  long ms;
-  if (__builtin_mul_overflow(diff.tv_sec, 1000L, &ms)) {
+  /* negative time makes no sense for a time difference. After this
+     check tv_sec & tv_nsec can be cast to unsigned types */
+  if (diff.tv_sec < 0 || diff.tv_nsec < 0) {
+    return EINVAL;
+  }
+
+  unsigned long ms;
+  if (__builtin_mul_overflow((uintmax_t)diff.tv_sec, 1000U, &ms)) {
     return EOVERFLOW;
   }
 
   /* XX floating point division? */
-  if (__builtin_saddl_overflow(ms, diff.tv_nsec / 1000000L, res_ms)) {
+  if (__builtin_uaddl_overflow(ms, (unsigned long)diff.tv_nsec / 1000000UL, res_ms)) {
     return EOVERFLOW;
   }
 
