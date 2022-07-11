@@ -133,7 +133,7 @@ main(int argc, char **argv)
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
   int rc = 0;
-  int nblocks;
+  int nblocks = -1;
 
   rc = nblocks_per_procs(nbytes, NELEMS, nprocs, &nblocks);
   if (rc < 0) {
