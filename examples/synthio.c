@@ -215,7 +215,7 @@ main(int argc, char **argv)
     }
 
     struct timespec start, end;
-    unsigned long elapsed_io, elapsed_compute;
+    unsigned long elapsed_io = ULONG_MAX, elapsed_compute = ULONG_MAX;
 
     if (isparent()) {
       rc = clock_gettime(CLOCK_MONOTONIC, &start);
