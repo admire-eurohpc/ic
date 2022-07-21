@@ -14,6 +14,8 @@ void jobmon_exit_cb(hg_handle_t h);
 void adhoc_nodes_cb(hg_handle_t h);
 void malleability_avail_cb(hg_handle_t h);
 void malleability_region_cb(hg_handle_t h);
+void hint_io_begin_cb(hg_handle_t h);
+void hint_io_end_cb(hg_handle_t h);
 
 DECLARE_MARGO_RPC_HANDLER(client_register_cb);
 DECLARE_MARGO_RPC_HANDLER(client_deregister_cb);
@@ -24,6 +26,8 @@ DECLARE_MARGO_RPC_HANDLER(jobmon_exit_cb);
 DECLARE_MARGO_RPC_HANDLER(adhoc_nodes_cb);
 DECLARE_MARGO_RPC_HANDLER(malleability_avail_cb);
 DECLARE_MARGO_RPC_HANDLER(malleability_region_cb);
+DECLARE_MARGO_RPC_HANDLER(hint_io_begin_cb);
+DECLARE_MARGO_RPC_HANDLER(hint_io_end_cb);
 
 
 /* XX fixme: duplication in structs */

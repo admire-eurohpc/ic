@@ -40,6 +40,7 @@ enum icc_client_type {
   ICC_TYPE_JOBCLEANER,
   ICC_TYPE_JOBMON,
   ICC_TYPE_ADHOCCLI,
+  ICC_TYPE_IOSETS,
   ICC_TYPE_COUNT,
 };
 
@@ -147,6 +148,20 @@ int icc_release_register(struct icc_context *icc, const char *host, uint16_t ncp
  * icc_release_register() to the resource manager.
  */
 int icc_release_nodes(struct icc_context *icc);
+
+
+/**
+ * Inform the IC of the beginning of an IO phase. Returns when no
+ * other application in the same IO-set is running. This allows the IC
+ * to grant exclusive access to the storage system.
+ */
+iccret_t icc_hint_io_begin(struct icc_context *icc);
+
+
+/**
+ * Inform the IC of the end of an IO phase.
+ */
+iccret_t icc_hint_io_end(struct icc_context *icc);
 
 
 /**

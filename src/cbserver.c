@@ -435,3 +435,61 @@ malleability_region_cb(hg_handle_t h)
   MARGO_DESTROY_HANDLE(h, hret)
 }
 DEFINE_MARGO_RPC_HANDLER(malleability_region_cb);
+
+void
+hint_io_begin_cb(hg_handle_t h)
+{
+  hg_return_t hret;
+  margo_instance_id mid;
+  hint_io_in_t in;
+  rpc_out_t out;
+  int ret;
+
+  mid = margo_hg_handle_get_instance(h);
+  assert(mid);
+
+  out.rc = RPC_SUCCESS;
+
+  MARGO_GET_INPUT(h, in, hret);
+  if (hret != HG_SUCCESS) {
+    out.rc = RPC_FAILURE;
+    goto respond;
+  }
+
+  margo_debug(mid, "%"PRIu32".%"PRIu32" IO phase begin (priority %"PRIu32")",
+              in.jobid, in.jobstepid, in.priority);
+
+ respond:
+  MARGO_RESPOND(h, out, ret);
+  MARGO_DESTROY_HANDLE(h, hret)
+}
+DEFINE_MARGO_RPC_HANDLER(hint_io_begin_cb);
+
+void
+hint_io_end_cb(hg_handle_t h)
+{
+  hg_return_t hret;
+  margo_instance_id mid;
+  hint_io_in_t in;
+  rpc_out_t out;
+  int ret;
+
+  mid = margo_hg_handle_get_instance(h);
+  assert(mid);
+
+  out.rc = RPC_SUCCESS;
+
+  MARGO_GET_INPUT(h, in, hret);
+  if (hret != HG_SUCCESS) {
+    out.rc = RPC_FAILURE;
+    goto respond;
+  }
+
+  margo_debug(mid, "%"PRIu32".%"PRIu32" IO phase end",
+              in.jobid, in.jobstepid);
+
+ respond:
+  MARGO_RESPOND(h, out, ret);
+  MARGO_DESTROY_HANDLE(h, hret)
+}
+DEFINE_MARGO_RPC_HANDLER(hint_io_end_cb);

@@ -77,7 +77,8 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
   icc->type = typeid;
 
   /*  apps that must be able to both receive AND send RPCs to the IC */
-  if (typeid == ICC_TYPE_MPI || typeid == ICC_TYPE_FLEXMPI)
+  if (typeid == ICC_TYPE_MPI || typeid == ICC_TYPE_FLEXMPI ||
+      typeid == ICC_TYPE_IOSETS)
     icc->bidirectional = 1;
 
   /* resource manager jobid */
@@ -409,6 +410,40 @@ icc_reconfig_pending(struct icc_context *icc, enum icc_reconfig_type *reconfigty
   return rc;
 }
 
+
+iccret_t
+icc_hint_io_begin(struct icc_context *icc)
+{
+  int rc = ICC_SUCCESS;
+
+  /* 1. compute IO-set characteristic time/priority */
+  /* 2. RPC to get the lock from IC, if not go to sleep on a condition var */
+  int rpcret = RPC_SUCCESS;
+  hint_io_in_t in;
+
+  in.jobid = icc->jobid;
+  in.jobstepid = 0;             /* XX get jobstep id */
+  in.priority = 0;
+
+  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_HINT_IO_BEGIN], &in, &rpcret);
+  if (rc || rpcret) {
+    margo_error(icc->mid, "icc (hint_io_begin): ret=%d, RPC ret= %d", rc, rpcret);
+    rc = ICC_FAILURE;
+  }
+
+  /* 3. return once we acquired the lock */
+  return rc;
+}
+
+
+iccret_t
+icc_hint_io_end(struct icc_context *icc)
+{
+  /* release DB lock */
+
+  return 0;
+}
+
 int
 icc_release_register(struct icc_context *icc, const char *host, uint16_t ncpus)
 {
@@ -594,6 +629,9 @@ _setup_margo(enum icc_log_level log_level, struct icc_context *icc)
   icc->rpcids[RPC_ADHOC_NODES] = MARGO_REGISTER(icc->mid, RPC_ADHOC_NODES_NAME, adhoc_nodes_in_t, rpc_out_t, NULL);
   icc->rpcids[RPC_MALLEABILITY_AVAIL] = MARGO_REGISTER(icc->mid, RPC_MALLEABILITY_AVAIL_NAME, malleability_avail_in_t, rpc_out_t, NULL);
 
+  icc->rpcids[RPC_HINT_IO_BEGIN] = MARGO_REGISTER(icc->mid, RPC_HINT_IO_BEGIN_NAME, hint_io_in_t, rpc_out_t, NULL);
+  icc->rpcids[RPC_HINT_IO_END] = MARGO_REGISTER(icc->mid, RPC_HINT_IO_END_NAME, hint_io_in_t, rpc_out_t, NULL);
+
   if (icc->bidirectional) {
     icc->rpcids[RPC_CLIENT_REGISTER] = MARGO_REGISTER(icc->mid, RPC_CLIENT_REGISTER_NAME, client_register_in_t, rpc_out_t, NULL);
     icc->rpcids[RPC_CLIENT_DEREGISTER] = MARGO_REGISTER(icc->mid, RPC_CLIENT_DEREGISTER_NAME, client_deregister_in_t, rpc_out_t, NULL);
@@ -734,7 +772,7 @@ _register_client(struct icc_context *icc, unsigned int nprocs)
   rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_CLIENT_REGISTER], &rpc_in, &rpcret);
 
   if (rc || rpcret) {
-    margo_error(icc->mid, "icc (register): Cannot register client to the IC (ret = %d, RPC ret = %d)", rc, rpcret);
+    margo_error(icc->mid, "icc (register): Cannot register client to the IC (ret=%d, RPCret=%d)", rc, rpcret);
     rc = ICC_FAILURE;
   } else {
     icc->registered = 1;
@@ -759,6 +797,8 @@ _icc_type_str(enum icc_client_type type)
    return "adhoccli";
   case ICC_TYPE_JOBMON:
    return "jobmon";
+  case ICC_TYPE_IOSETS:
+   return "iosets";
   default:
     return "error";
   }

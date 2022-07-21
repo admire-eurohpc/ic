@@ -17,7 +17,7 @@ _icc_typecode(const char *type);
 void
 usage(void)
 {
-  (void)fprintf(stderr, "usage: ICC client [--type=mpi|flexmpi|adhoccli|jobmon]\n");
+  (void)fprintf(stderr, "usage: ICC client [--type=mpi|flexmpi|adhoccli|jobmon|iosets]\n");
   exit(1);
 }
 
@@ -52,7 +52,7 @@ main(int argc, char **argv)
   int rpcret;
 
   struct icc_context *icc;
-  icc_init_mpi(ICC_LOG_DEBUG, typeid, 3, reconfig, NULL, &icc);
+  icc_init(ICC_LOG_DEBUG, typeid, &icc);
   assert(icc != NULL);
 
   ret = icc_rpc_test(icc, 32, typeid, &rpcret);
@@ -72,9 +72,14 @@ main(int argc, char **argv)
     ret = icc_rpc_malleability_region(icc, ICC_MALLEABILITY_REGION_LEAVE, &rpcret);
     assert(ret == ICC_SUCCESS && rpcret == ICC_SUCCESS);
   }
-
-  /* wait for allocation request */
-  icc_sleep(icc, 2000);
+  else if (typeid == ICC_TYPE_MPI) {
+    /* wait for allocation request */
+    icc_sleep(icc, 2000);
+  }
+  else if (typeid == ICC_TYPE_IOSETS) {
+    ret = icc_hint_io_begin(icc);
+    assert(ret == ICC_SUCCESS);
+  }
 
   puts("icc_client: Finishing");
   ret = icc_fini(icc);
@@ -98,5 +103,6 @@ _icc_typecode(const char *type)
   else if (!strncmp(type, "flexmpi", 8)) return ICC_TYPE_FLEXMPI;
   else if (!strncmp(type, "adhoccli", 9)) return ICC_TYPE_ADHOCCLI;
   else if (!strncmp(type, "jobmon", 7)) return ICC_TYPE_JOBMON;
+  else if (!strncmp(type, "iosets", 7)) return ICC_TYPE_IOSETS;
   else return ICC_TYPE_UNDEFINED;
 }

@@ -103,6 +103,8 @@ enum icc_rpc_code {
   /* internal RPCs */
   RPC_CLIENT_REGISTER,
   RPC_CLIENT_DEREGISTER,
+  RPC_HINT_IO_BEGIN,
+  RPC_HINT_IO_END,
 
   /* public RPCs */
   RPC_TEST = 128,
@@ -222,6 +224,16 @@ MERCURY_GEN_PROC(reconfigure_in_t,
                  ((uint32_t)(cmdidx))
                  ((int32_t)(maxprocs))
 		 ((hg_const_string_t)(hostlist)))
+
+
+
+#define RPC_HINT_IO_BEGIN_NAME "icc_hint_io_begin"
+#define RPC_HINT_IO_END_NAME   "icc_hint_io_end"
+
+MERCURY_GEN_PROC(hint_io_in_t,
+                 ((uint32_t)(jobid))
+                 ((uint32_t)(jobstepid))
+                 ((int32_t)(priority)))
 
 
 /**
