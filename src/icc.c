@@ -371,6 +371,7 @@ icc_rpc_malleability_region(struct icc_context *icc, enum icc_malleability_regio
   return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
 
+
 iccret_t
 icc_reconfig_pending(struct icc_context *icc, enum icc_reconfig_type *reconfigtype,
                      uint32_t *nprocs, const char **hostlist)
@@ -427,9 +428,9 @@ icc_release_register(struct icc_context *icc, const char *host, uint16_t ncpus)
   const uint16_t *nreleased = hm_get(icc->hostrelease, host);
   const uint16_t *nalloced = hm_get(icc->hostalloc, host);
 
-  uint16_t n = ncpus + (nreleased ? *nreleased : 0);
+  unsigned int n = (unsigned int)ncpus + (nreleased ? *nreleased : 0);
 
-  if (n < ncpus) {                              /* overflow */
+  if (n > UINT16_MAX || n < ncpus) {          /* overflow */
     margo_error(icc->mid, "Too many CPUs to release");
     rc = ICC_FAILURE;
   }
@@ -787,7 +788,7 @@ _strtouint32(const char *nptr, uint32_t *dest)
   if (val > UINT32_MAX)
     return -EINVAL;
 
-  *dest = val;
+  *dest = (uint32_t)val;
 
   return 0;
 }
