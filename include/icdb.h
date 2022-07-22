@@ -113,16 +113,13 @@ int icdb_getclient(struct icdb_context *icdb, const char *clid, struct icdb_clie
 
 /**
  * Get no more than IC clients into the array of size COUNT. Filter by
- * TYPE or JOBID. If TYPE is NULL or JOBID is 0, the corresponding
- * filter is not applied. XX FIXME multiple filters not implemented
- * yet.
+ * JOBID if different from 0.
  *
  * COUNT is updated with the number of clients found. ICDB_E2BIG is
  * returned if CLIENTS is too small to store them all. In this case,
- * the caller has to resize the array accordingly. Note that because
- * the filtering XX
+ * the caller has to resize the array accordingly.
  */
-int icdb_getclients(struct icdb_context *icdb, const char *type, uint32_t jobid,
+int icdb_getclients(struct icdb_context *icdb, uint32_t jobid,
                     struct icdb_client clients[], size_t *count);
 
 

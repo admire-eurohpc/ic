@@ -259,7 +259,7 @@ icdb_getclient(struct icdb_context *icdb, const char *clid, struct icdb_client *
 
 
 int
-icdb_getclients(struct icdb_context *icdb, const char *type, uint32_t jobid,
+icdb_getclients(struct icdb_context *icdb, uint32_t jobid,
                 struct icdb_client *clients, size_t *count)
 {
   /*
@@ -275,14 +275,8 @@ icdb_getclients(struct icdb_context *icdb, const char *type, uint32_t jobid,
   size_t need;
 
 
-  if (type && jobid) {
-    /* XX FIXME use SINTER for multiple filters */
-    ;
-  } else if (type) {
-    rep = redisCommand(icdb->redisctx,
-                       "SORT index:clients:type:%s"
-                       ICDB_CLIENT_QUERY, type);
-  } else if (jobid) {
+  /* XX if multiple filters use SINTER */
+  if (jobid) {
     rep = redisCommand(icdb->redisctx,
                        "SORT index:clients:jobid:%"PRIu32
                        ICDB_CLIENT_QUERY, jobid);

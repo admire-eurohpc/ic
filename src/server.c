@@ -219,7 +219,7 @@ malleability_th(void *arg)
 
     do {
       /* XX fixme filter on (flex)MPI clients?*/
-      ret = icdb_getclients(icdb, NULL, data->jobid, clients, &nclients);
+      ret = icdb_getclients(icdb, data->jobid, clients, &nclients);
 
       /* clients array is too small, expand */
       if (ret == ICDB_E2BIG && nclients <= NCLIENTS_MAX) {
@@ -248,15 +248,6 @@ malleability_th(void *arg)
 
     /* reconfigure to share cpus fairly between all steps of a job */
     for (size_t i = 0; i < nclients; i++) {
-      long long dprocs;
-
-      dprocs = job.ncpus / nclients - clients[i].nprocs;
-
-      if (dprocs < INT32_MIN || dprocs > INT32_MAX) {
-	LOG_ERROR(data->mid, "Reconfiguration: Job %"PRIu32": too many new processes");
-	break;
-      }
-
       /* make malleability RPC */
       hg_addr_t addr;
       hg_return_t hret;
@@ -269,6 +260,12 @@ malleability_th(void *arg)
       }
 
       if (!strncmp(clients[i].type, "flexmpi", ICC_TYPE_LEN)) {
+        long long dprocs = job.ncpus / nclients - clients[i].nprocs;
+
+        if (dprocs < INT32_MIN || dprocs > INT32_MAX) {
+          LOG_ERROR(data->mid, "Reconfiguration: Job %"PRIu32": too many new processes");
+          break;
+        }
 
         /* XX number reconfiguration command, add hostlist */
         reconfigure_in_t in = { .cmdidx = 0, .maxprocs = dprocs, .hostlist = "" };
