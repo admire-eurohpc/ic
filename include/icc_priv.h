@@ -36,8 +36,9 @@ struct icc_context {
 
   icc_reconfigure_func_t reconfig_func;
   void                   *reconfig_data;
+
   /* XX TMP: flexmpi specific */
-  void                   *flexhandle;   /* dlopen handle to FlexMPI lib */
+  void                  *flexhandle;    /* dlopen handle to FlexMPI lib */
   int                   flexmpi_sock;
   flexmpi_reconfigure_t flexmpi_func;
 };

@@ -87,7 +87,7 @@ hm_get(struct hashmap* map, const char *key)
     index = (index + 1) % map->nslots;    /* key not found, linear probe + wrap */
   }
 
-  /* warning: the loop is only exited on reaching the rigth key or
+  /* warning: the loop is only exited on reaching the right key or
      NULL, so the map must never be completely full, otherwise an
      inexistent key will trigger an infinite loop */
 
