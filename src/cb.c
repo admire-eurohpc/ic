@@ -254,7 +254,7 @@ alloc_th(struct alloc_args *args)
   /* inform the IC that the allocation succeeded */
   int rpcret = RPC_SUCCESS;
   int iccret = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_RESALLOCDONE],
-                        &in, &rpcret);
+                        &in, &rpcret, RPC_TIMEOUT_MS_DEFAULT);
   if (iccret != ICC_SUCCESS) {
     margo_error(icc->mid, "Error sending RPC_RESALLOCDONE");
     goto end;

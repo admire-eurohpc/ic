@@ -4,8 +4,6 @@
 #include "rpc.h"
 
 #define ICC_ADDR_FILENAME  "icc.addr"
-#define RPC_TIMEOUT_MS 2000
-
 
 int
 get_hg_addr(margo_instance_id mid, char *addr_str, hg_size_t *addr_str_size)
@@ -65,10 +63,15 @@ icc_addr_file()
 
 int
 rpc_send(margo_instance_id mid, hg_addr_t addr, hg_id_t rpcid,
-         void *in, int *retcode)
+         void *in, int *retcode, double timeout_ms)
 {
   assert(addr);
   assert(rpcid);
+
+  if (timeout_ms < 0) {
+    margo_error(mid, "Invalid timeout value: %f", timeout_ms);
+    return -1;
+  }
 
   hg_return_t hret;
   hg_handle_t handle;
@@ -79,7 +82,7 @@ rpc_send(margo_instance_id mid, hg_addr_t addr, hg_id_t rpcid,
     return -1;
   }
 
-  hret = margo_forward_timed(handle, in, RPC_TIMEOUT_MS);
+  hret = margo_forward_timed(handle, in, timeout_ms);
   if (hret != HG_SUCCESS) {
     margo_error(mid, "Margo RPC forwarding failure: %s", HG_Error_to_string(hret));
 

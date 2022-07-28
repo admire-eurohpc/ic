@@ -197,7 +197,7 @@ icc_fini(struct icc_context *icc)
     client_deregister_in_t in;
     in.clid = icc->clid;
 
-    rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_CLIENT_DEREGISTER], &in, &rpcrc);
+    rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_CLIENT_DEREGISTER], &in, &rpcrc, RPC_TIMEOUT_MS_DEFAULT);
     if (rc || rpcrc) {
       margo_error(icc->mid, "Could not deregister target to IC");
     }
@@ -258,7 +258,7 @@ icc_rpc_test(struct icc_context *icc, uint8_t number, enum icc_client_type type,
   in.number = number;
   in.type = _icc_type_str(type);
 
-  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_TEST], &in, retcode);
+  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_TEST], &in, retcode, RPC_TIMEOUT_MS_DEFAULT);
 
   return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
@@ -273,7 +273,7 @@ icc_rpc_jobclean(struct icc_context *icc, uint32_t jobid, int *retcode)
 
   in.jobid = jobid;
 
-  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_JOBCLEAN], &in, retcode);
+  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_JOBCLEAN], &in, retcode, RPC_TIMEOUT_MS_DEFAULT);
 
   return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
@@ -292,7 +292,7 @@ icc_rpc_adhoc_nodes(struct icc_context *icc, uint32_t jobid, uint32_t nnodes, ui
   in.nnodes = nnodes;
   in.adhoc_nnodes = adhoc_nnodes;
 
-  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_ADHOC_NODES], &in, retcode);
+  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_ADHOC_NODES], &in, retcode, RPC_TIMEOUT_MS_DEFAULT);
 
   return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
@@ -310,7 +310,7 @@ icc_rpc_jobmon_submit(struct icc_context *icc, uint32_t jobid, uint32_t jobstepi
   in.jobstepid = jobstepid;
   in.nnodes = nnodes;
 
-  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_JOBMON_SUBMIT], &in, retcode);
+  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_JOBMON_SUBMIT], &in, retcode, RPC_TIMEOUT_MS_DEFAULT);
 
   return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
@@ -327,7 +327,7 @@ icc_rpc_jobmon_exit(struct icc_context *icc, uint32_t jobid, uint32_t jobstepid,
   in.jobid = jobid;
   in.jobstepid = jobstepid;
 
-  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_JOBMON_EXIT], &in, retcode);
+  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_JOBMON_EXIT], &in, retcode, RPC_TIMEOUT_MS_DEFAULT);
 
   return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
@@ -348,7 +348,7 @@ icc_rpc_malleability_avail(struct icc_context *icc, char *type, char *portname, 
   in.jobid = jobid;
   in.nnodes = nnodes;
 
-  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_MALLEABILITY_AVAIL], &in, retcode);
+  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_MALLEABILITY_AVAIL], &in, retcode, RPC_TIMEOUT_MS_DEFAULT);
 
   return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
@@ -367,7 +367,7 @@ icc_rpc_malleability_region(struct icc_context *icc, enum icc_malleability_regio
   in.clid = icc->clid;
   in.type = type; /* safe to cast type to uint8 because of the check above */
 
-  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_MALLEABILITY_REGION], &in, retcode);
+  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_MALLEABILITY_REGION], &in, retcode, RPC_TIMEOUT_MS_DEFAULT);
 
   return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
@@ -425,7 +425,7 @@ icc_hint_io_begin(struct icc_context *icc)
   in.jobstepid = 0;             /* XX get jobstep id */
   in.priority = 0;
 
-  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_HINT_IO_BEGIN], &in, &rpcret);
+  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_HINT_IO_BEGIN], &in, &rpcret, RPC_TIMEOUT_MS_DEFAULT);
   if (rc || rpcret) {
     margo_error(icc->mid, "icc (hint_io_begin): ret=%d, RPC ret= %d", rc, rpcret);
     rc = ICC_FAILURE;
@@ -769,7 +769,7 @@ _register_client(struct icc_context *icc, unsigned int nprocs)
   rpc_in.type = _icc_type_str(icc->type);
 
   int rpcret = RPC_SUCCESS;
-  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_CLIENT_REGISTER], &rpc_in, &rpcret);
+  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_CLIENT_REGISTER], &rpc_in, &rpcret, RPC_TIMEOUT_MS_DEFAULT);
 
   if (rc || rpcret) {
     margo_error(icc->mid, "icc (register): Cannot register client to the IC (ret=%d, RPCret=%d)", rc, rpcret);

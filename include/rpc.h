@@ -13,6 +13,7 @@
 #define HG_PROTOCOL "ofi+tcp"     /* Mercury protocol */
 #define MARGO_PROVIDER_DEFAULT 0  /* for using multiple Argobots
                                      pools, unused for now */
+#define RPC_TIMEOUT_MS_DEFAULT 2000
 
 enum rpc_retcode {
   RPC_FAILURE = -1,
@@ -245,6 +246,6 @@ MERCURY_GEN_PROC(hint_io_in_t,
  */
 int
 rpc_send(margo_instance_id mid, hg_addr_t addr, hg_id_t rpc_id,
-         void *data, int *retcode);
+         void *data, int *retcode, double timeout_ms);
 
 #endif

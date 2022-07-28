@@ -272,7 +272,7 @@ malleability_th(void *arg)
         /* XX number reconfiguration command, add hostlist */
         reconfigure_in_t in = { .cmdidx = 0, .maxprocs = dprocs, .hostlist = "" };
 
-        ret = rpc_send(data->mid, addr, data->rpcids[RPC_RECONFIGURE], &in, &rpcret);
+        ret = rpc_send(data->mid, addr, data->rpcids[RPC_RECONFIGURE], &in, &rpcret, RPC_TIMEOUT_MS_DEFAULT);
         if (ret) {
           LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RECONFIGURE send failed ", clients[i].jobid, clients[i].clid);
         } else if (rpcret) {
@@ -295,7 +295,7 @@ malleability_th(void *arg)
 
           sleep(4);
 
-          ret = rpc_send(data->mid, addr, data->rpcids[RPC_RESALLOC], &allocin, &rpcret);
+          ret = rpc_send(data->mid, addr, data->rpcids[RPC_RESALLOC], &allocin, &rpcret, RPC_TIMEOUT_MS_DEFAULT);
           if (ret) {
             LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RESALLOC send failed ", clients[i].jobid, clients[i].clid);
           } else if (rpcret) {
@@ -307,7 +307,7 @@ malleability_th(void *arg)
           sleep(16);
 
           allocin.shrink = 1;
-          ret = rpc_send(data->mid, addr, data->rpcids[RPC_RESALLOC], &allocin, &rpcret);
+          ret = rpc_send(data->mid, addr, data->rpcids[RPC_RESALLOC], &allocin, &rpcret, RPC_TIMEOUT_MS_DEFAULT);
           if (ret) {
             LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RESALLOC send failed ", clients[i].jobid, clients[i].clid);
           } else if (rpcret) {
