@@ -423,9 +423,10 @@ icc_hint_io_begin(struct icc_context *icc)
 
   in.jobid = icc->jobid;
   in.jobstepid = 0;             /* XX get jobstep id */
-  in.priority = 0;
+  in.iosetid = 0;
 
-  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_HINT_IO_BEGIN], &in, &rpcret, RPC_TIMEOUT_MS_DEFAULT);
+  /* no timeout, because we want to block */
+  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_HINT_IO_BEGIN], &in, &rpcret, 0);
   if (rc || rpcret) {
     margo_error(icc->mid, "icc (hint_io_begin): ret=%d, RPC ret= %d", rc, rpcret);
     rc = ICC_FAILURE;

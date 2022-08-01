@@ -29,6 +29,13 @@
   }
 
 
+/**
+ * Turn a signed integer into its decimal representation. Result must
+ * be freed using free(3). Returns NULL in case of error.
+ * XX small malloc, not good
+ */
+static char * inttostr(long long x);
+
 
 void
 client_register_cb(hg_handle_t h)
@@ -444,10 +451,12 @@ hint_io_begin_cb(hg_handle_t h)
   hint_io_in_t in;
   rpc_out_t out;
   int ret;
+  char *iosetid;
 
   mid = margo_hg_handle_get_instance(h);
   assert(mid);
 
+  iosetid = NULL;
   out.rc = RPC_SUCCESS;
 
   MARGO_GET_INPUT(h, in, hret);
@@ -456,10 +465,70 @@ hint_io_begin_cb(hg_handle_t h)
     goto respond;
   }
 
-  margo_debug(mid, "%"PRIu32".%"PRIu32" IO phase begin (priority %"PRIu32")",
-              in.jobid, in.jobstepid, in.priority);
+  const struct hg_info *info = margo_get_info(h);
+  struct cb_data *data = (struct cb_data *)margo_registered_data(mid, info->id);
+
+  if (!data) {
+    out.rc = RPC_FAILURE;
+    LOG_ERROR(mid, "No registered data");
+    goto respond;
+  }
+
+  assert(data->iosets != NULL);
+
+  iosetid = inttostr((long long)in.iosetid);
+  if (!iosetid) {
+    out.rc = RPC_FAILURE;
+    LOG_ERROR(mid, "Could not convert IO-set \"%"PRIi64"\" to string", in.iosetid);
+    goto respond;
+  }
+
+  /* get a writer lock in case we need to initialize */
+  ABT_rwlock_wrlock(data->iosets_lock);
+
+  const struct ioset *set = hm_get(data->iosets, iosetid);
+
+  if (!set) {
+    struct ioset s;
+    /* lazily initialize ioset data */
+    s.setid = in.iosetid;
+    s.isrunning = calloc(1, sizeof(int)); /* yes, mallocing one int... */
+    ABT_mutex_create(&s.mutex);
+    ABT_cond_create(&s.cond);
+
+    int rc;
+    rc = hm_set(data->iosets, iosetid, &s, sizeof(s));
+    if (rc == -1) {
+      LOG_ERROR(mid, "Cannot set IO-set data");
+      out.rc = RPC_FAILURE;
+      ABT_rwlock_unlock(data->iosets_lock);
+      goto respond;
+    }
+
+    set = &s;
+  }
+
+  ABT_rwlock_unlock(data->iosets_lock);
+
+  /* If an application in the set is running already we go to sleep on
+   * cond. When it finishes running, the condition will be signaled to
+   * wake us up.
+   */
+
+  ABT_mutex_lock(set->mutex);
+  while (*set->isrunning) {
+    ABT_rwlock_unlock(data->iosets_lock);
+    ABT_cond_wait(set->cond, set->mutex);
+  }
+  *set->isrunning = 1;
+  ABT_mutex_unlock(set->mutex);
+
+  margo_debug(mid, "%"PRIu32".%"PRIu32" IO phase begin (setid %"PRIi64")",
+              in.jobid, in.jobstepid, in.iosetid);
 
  respond:
+  if (iosetid) free(iosetid);
+
   MARGO_RESPOND(h, out, ret);
   MARGO_DESTROY_HANDLE(h, hret)
 }
@@ -493,3 +562,29 @@ hint_io_end_cb(hg_handle_t h)
   MARGO_DESTROY_HANDLE(h, hret)
 }
 DEFINE_MARGO_RPC_HANDLER(hint_io_end_cb);
+
+
+static char *
+inttostr(long long x)
+{
+  char *res;
+  int nbytes, n;
+
+  nbytes = snprintf(NULL, 0, "%lld", x);
+  if (nbytes < 0) {
+    return NULL;
+  }
+
+  res = malloc(nbytes + 1);
+  if (!res) {
+    return NULL;
+  }
+
+  n = snprintf(res, nbytes + 1, "%lld", x);
+  if (n >= nbytes + 1) {            /* output truncated */
+    free(res);
+    return NULL;
+  }
+
+  return res;
+}

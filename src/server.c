@@ -142,12 +142,32 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   }
 
   /* attach various pieces of data to RPCs  */
-  struct cb_data d = { .icdbs = icdbs, .rpcids = rpc_ids, .malldat = &malldat };
+  struct cb_data d = {
+    .icdbs = icdbs,
+    .rpcids = rpc_ids,
+    .malldat = &malldat
+  };
+
+  /* iosets data */
+  ABT_rwlock_create(&d.iosets_lock);
+  if (rc != ABT_SUCCESS) {
+    LOG_ERROR(mid, "Could not create IO-set lock");
+    goto error;
+  }
+
+  d.iosets = hm_create();
+  if (!d.iosets) {
+    LOG_ERROR(mid, "Could not create IO-set map");
+    goto error;
+  }
+
   margo_register_data(mid, rpc_ids[RPC_CLIENT_REGISTER], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_CLIENT_DEREGISTER], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_JOBCLEAN], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_JOBMON_SUBMIT], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_MALLEABILITY_AVAIL], &d, NULL);
+  margo_register_data(mid, rpc_ids[RPC_HINT_IO_BEGIN], &d, NULL);
+  margo_register_data(mid, rpc_ids[RPC_HINT_IO_END], &d, NULL);
 
   margo_wait_for_finalize(mid);
 
@@ -162,6 +182,10 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   for (size_t i = 0; i < NTHREADS; i++) {
     icdb_fini(&icdbs[i]);
   }
+
+  /* clean up ioset data */
+  ABT_rwlock_free(&d.iosets_lock);
+  hm_free(d.iosets);
 
   return 0;
 

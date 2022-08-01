@@ -53,5 +53,4 @@ size_t hm_next(hm_t *map, size_t cursor, const char **key, const void **value);
  */
 size_t hm_length(hm_t *map);
 
-
 #endif

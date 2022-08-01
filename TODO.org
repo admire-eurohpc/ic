@@ -18,6 +18,7 @@
 - icrm: add a generic ADMIRE name for dependency jobs
 - hashmap: check hm_set return code
 - hashmap: hm_keys function?
+- iosets: too many small mallocs in callbacks hint_io_* : one hint + ioset ID
 
 /* TODO
  * hg_error_to_string everywhere

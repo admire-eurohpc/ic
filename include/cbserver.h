@@ -1,9 +1,11 @@
 #ifndef _ADMIRE_IC_CB_SERVER
 #define _ADMIRE_IC_CB_SERVER
-
 /**
- * IC server callbacks. Most need access to the DB.
+ * IC server callbacks. Some need access to the DB.
  */
+
+#include "hashmap.h"
+
 
 void client_register_cb(hg_handle_t h);
 void client_deregister_cb(hg_handle_t h);
@@ -41,10 +43,20 @@ struct malleability_data {
   hg_id_t             *rpcids;  /* RPC handles */
 };
 
+struct ioset {
+  long long setid;
+  int       *isrunning;
+  ABT_mutex mutex;
+  ABT_cond  cond;
+};
+
 struct cb_data {
   struct icdb_context **icdbs;  /* DB connection pool */
   hg_id_t             *rpcids;  /* RPC handles */
   struct malleability_data *malldat;
+
+  hm_t       *iosets;         /* map of IO-set data, lock! */
+  ABT_rwlock iosets_lock;
 };
 
 #endif

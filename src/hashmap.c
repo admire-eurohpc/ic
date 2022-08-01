@@ -2,7 +2,10 @@
  * Small hashmap implementation, inspired from
  * https://benhoyt.com/writings/hash-table-in-c/.
  *
- * Definitely NOT thread-safe.
+ * Definitely NOT thread-safe, protect with a rw-lock.  Both key and
+ * value are allocated on hm_set, and can be freed by the caller
+ * afterwards. On the other hand, memory returned by hm_get should not
+ * be modified.
  */
 
 #include "hashmap.h"

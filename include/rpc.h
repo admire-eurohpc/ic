@@ -234,7 +234,7 @@ MERCURY_GEN_PROC(reconfigure_in_t,
 MERCURY_GEN_PROC(hint_io_in_t,
                  ((uint32_t)(jobid))
                  ((uint32_t)(jobstepid))
-                 ((int32_t)(priority)))
+                 ((int64_t)(iosetid)))
 
 
 /**
