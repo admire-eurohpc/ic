@@ -416,23 +416,20 @@ icc_hint_io_begin(struct icc_context *icc)
 {
   int rc = ICC_SUCCESS;
 
-  /* 1. compute IO-set characteristic time/priority */
-  /* 2. RPC to get the lock from IC, if not go to sleep on a condition var */
   int rpcret = RPC_SUCCESS;
   hint_io_in_t in;
 
   in.jobid = icc->jobid;
   in.jobstepid = 0;             /* XX get jobstep id */
-  in.iosetid = 0;
+  in.iosetid = 0;               /* XX compute ioset */
 
-  /* no timeout, because we want to block */
+  /* we expect to block until it is our turn to run, so timeout is set to 0 */
   rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_HINT_IO_BEGIN], &in, &rpcret, 0);
   if (rc || rpcret) {
     margo_error(icc->mid, "icc (hint_io_begin): ret=%d, RPC ret= %d", rc, rpcret);
     rc = ICC_FAILURE;
   }
 
-  /* 3. return once we acquired the lock */
   return rc;
 }
 
@@ -440,10 +437,24 @@ icc_hint_io_begin(struct icc_context *icc)
 iccret_t
 icc_hint_io_end(struct icc_context *icc)
 {
-  /* release DB lock */
+  int rc = ICC_SUCCESS;
 
-  return 0;
+  int rpcret = RPC_SUCCESS;
+  hint_io_in_t in;
+
+  in.jobid = icc->jobid;
+  in.jobstepid = 0;             /* XX get jobstep id */
+  in.iosetid = 0;               /* XX compute ioset */
+
+  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_HINT_IO_END], &in, &rpcret, RPC_TIMEOUT_MS_DEFAULT);
+  if (rc || rpcret) {
+    margo_error(icc->mid, "icc (hint_io_end): ret=%d, RPC ret= %d", rc, rpcret);
+    rc = ICC_FAILURE;
+  }
+
+  return rc;
 }
+
 
 int
 icc_release_register(struct icc_context *icc, const char *host, uint16_t ncpus)

@@ -55,12 +55,13 @@ main(int argc, char **argv)
   icc_init(ICC_LOG_DEBUG, typeid, &icc);
   assert(icc != NULL);
 
-  ret = icc_rpc_test(icc, 32, typeid, &rpcret);
-
-  if (ret == ICC_SUCCESS)
-    printf("icc_client: RPC \"TEST\" successful: retcode=%d\n", rpcret);
-  else
-    fprintf(stderr, "Error sending RPC to IC (retcode=%d)\n", ret);
+  if (typeid != ICC_TYPE_IOSETS) {
+    ret = icc_rpc_test(icc, 32, typeid, &rpcret);
+    if (ret == ICC_SUCCESS)
+      printf("icc_client: RPC \"TEST\" successful: retcode=%d\n", rpcret);
+    else
+      fprintf(stderr, "Error sending RPC to IC (retcode=%d)\n", ret);
+  }
 
   /* FlexMPI apps need to wait for malleability commands */
   if (typeid == ICC_TYPE_FLEXMPI) {
@@ -77,7 +78,15 @@ main(int argc, char **argv)
     icc_sleep(icc, 2000);
   }
   else if (typeid == ICC_TYPE_IOSETS) {
+
+    fputs("[IO-sets] io_begin\n", stderr); /* write to stderr to avoid buffering */
     ret = icc_hint_io_begin(icc);
+    assert(ret == ICC_SUCCESS);
+
+    icc_sleep(icc, 8000);
+
+    fputs("[IO-sets] io_end\n", stderr);
+    ret = icc_hint_io_end(icc);
     assert(ret == ICC_SUCCESS);
   }
 

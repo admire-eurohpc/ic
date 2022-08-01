@@ -554,10 +554,41 @@ hint_io_end_cb(hg_handle_t h)
     goto respond;
   }
 
-  margo_debug(mid, "%"PRIu32".%"PRIu32" IO phase end",
-              in.jobid, in.jobstepid);
+  const struct hg_info *info = margo_get_info(h);
+  struct cb_data *data = (struct cb_data *)margo_registered_data(mid, info->id);
+
+  if (!data) {
+    out.rc = RPC_FAILURE;
+    LOG_ERROR(mid, "No registered data");
+    goto respond;
+  }
+
+  assert(data->iosets != NULL);
+
+  char *iosetid = inttostr((long long)in.iosetid);
+  if (!iosetid) {
+    out.rc = RPC_FAILURE;
+    LOG_ERROR(mid, "Could not convert IO-set \"%"PRIi64"\" to string", in.iosetid);
+    goto respond;
+  }
+
+  ABT_rwlock_rdlock(data->iosets_lock);
+
+  const struct ioset *set = hm_get(data->iosets, iosetid);
+
+  ABT_rwlock_unlock(data->iosets_lock);
+
+  ABT_mutex_lock(set->mutex);
+  *set->isrunning = 0;
+  ABT_cond_signal(set->cond);
+  ABT_mutex_unlock(set->mutex);
+
+  margo_debug(mid, "%"PRIu32".%"PRIu32" IO phase end (setid %"PRIi64")",
+              in.jobid, in.jobstepid, in.iosetid);
 
  respond:
+  if (iosetid) free(iosetid);
+
   MARGO_RESPOND(h, out, ret);
   MARGO_DESTROY_HANDLE(h, hret)
 }
