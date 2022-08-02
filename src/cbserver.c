@@ -577,6 +577,11 @@ hint_io_end_cb(hg_handle_t h)
 
   ABT_rwlock_unlock(data->iosets_lock);
 
+  if (!set) {
+    LOG_ERROR(mid, "No running IO-set with id \"%"PRIi64"\"", in.iosetid);
+    goto respond;
+  }
+
   ABT_mutex_lock(set->mutex);
   *set->isrunning = 0;
   ABT_cond_signal(set->cond);

@@ -78,7 +78,6 @@ main(int argc, char **argv)
     icc_sleep(icc, 2000);
   }
   else if (typeid == ICC_TYPE_IOSETS) {
-
     fputs("[IO-sets] io_begin\n", stderr); /* write to stderr to avoid buffering */
     ret = icc_hint_io_begin(icc);
     assert(ret == ICC_SUCCESS);

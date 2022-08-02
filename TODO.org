@@ -19,6 +19,7 @@
 - hashmap: check hm_set return code
 - hashmap: hm_keys function?
 - iosets: too many small mallocs in callbacks hint_io_* : one hint + ioset ID
+- iosets: handle case of disconnecting app? timeout?
 
 /* TODO
  * hg_error_to_string everywhere
