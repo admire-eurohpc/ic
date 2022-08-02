@@ -517,7 +517,6 @@ hint_io_begin_cb(hg_handle_t h)
 
   ABT_mutex_lock(set->mutex);
   while (*set->isrunning) {
-    ABT_rwlock_unlock(data->iosets_lock);
     ABT_cond_wait(set->cond, set->mutex);
   }
   *set->isrunning = 1;
