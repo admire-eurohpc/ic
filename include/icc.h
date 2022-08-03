@@ -151,17 +151,22 @@ int icc_release_nodes(struct icc_context *icc);
 
 
 /**
- * Inform the IC of the beginning of an IO phase. Returns when no
- * other application in the same IO-set is running. This allows the IC
- * to grant exclusive access to the storage system.
+ * Inform the IC of the beginning of an IO slice. Set the PHASE flag
+ * if it is the first slice in an IO phase.
+ *
+ * Returns when no other application in the same IO-set is running,
+ * setting NSLICES to the number of slices the application is allowed
+ * to write before having to ask for permission again.
  */
-iccret_t icc_hint_io_begin(struct icc_context *icc);
+iccret_t icc_hint_io_begin(struct icc_context *icc, int phase,
+                           unsigned int *nslices);
 
 
 /**
- * Inform the IC of the end of an IO phase.
+ * Inform the IC of the end of an IO slice. Set
+ * the PHASE flag if it is the last slice in an IO phase.
  */
-iccret_t icc_hint_io_end(struct icc_context *icc);
+iccret_t icc_hint_io_end(struct icc_context *icc, int phase);
 
 
 /**

@@ -449,7 +449,7 @@ hint_io_begin_cb(hg_handle_t h)
   hg_return_t hret;
   margo_instance_id mid;
   hint_io_in_t in;
-  rpc_out_t out;
+  hint_io_out_t out;
   int ret;
   char *iosetid;
 
@@ -457,7 +457,9 @@ hint_io_begin_cb(hg_handle_t h)
   assert(mid);
 
   iosetid = NULL;
+
   out.rc = RPC_SUCCESS;
+  out.nslices = 1;
 
   MARGO_GET_INPUT(h, in, hret);
   if (hret != HG_SUCCESS) {
@@ -474,53 +476,65 @@ hint_io_begin_cb(hg_handle_t h)
     goto respond;
   }
 
+  assert(data->iosetq != NULL);
+  assert(data->iosetlock != NULL);
   assert(data->iosets != NULL);
 
-  iosetid = inttostr((long long)in.iosetid);
-  if (!iosetid) {
-    out.rc = RPC_FAILURE;
-    LOG_ERROR(mid, "Could not convert IO-set \"%"PRIi64"\" to string", in.iosetid);
-    goto respond;
-  }
-
-  /* get a writer lock in case we need to initialize */
-  ABT_rwlock_wrlock(data->iosets_lock);
-
-  const struct ioset *set = hm_get(data->iosets, iosetid);
-
-  if (!set) {
-    struct ioset s;
-    /* lazily initialize ioset data */
-    s.setid = in.iosetid;
-    s.isrunning = calloc(1, sizeof(int)); /* yes, mallocing one int... */
-    ABT_mutex_create(&s.mutex);
-    ABT_cond_create(&s.cond);
-
-    int rc;
-    rc = hm_set(data->iosets, iosetid, &s, sizeof(s));
-    if (rc == -1) {
-      LOG_ERROR(mid, "Cannot set IO-set data");
+  if (in.phase_flag) {          /* beginning a new phase */
+    iosetid = inttostr((long long)in.iosetid);
+    if (!iosetid) {
       out.rc = RPC_FAILURE;
-      ABT_rwlock_unlock(data->iosets_lock);
+      LOG_ERROR(mid, "Could not convert IO-set \"%"PRIi64"\" to string", in.iosetid);
       goto respond;
     }
 
-    set = &s;
+    /* get a writer lock in case we need to initialize */
+    ABT_rwlock_wrlock(data->iosets_lock);
+
+    const struct ioset *set = hm_get(data->iosets, iosetid);
+
+    if (!set) {
+      struct ioset s;
+      /* lazily initialize ioset data */
+      s.setid = in.iosetid;
+      s.isrunning = calloc(1, sizeof(int)); /* yes, mallocing one int... */
+      ABT_mutex_create(&s.lock);
+      ABT_cond_create(&s.waitq);
+
+      int rc;
+      rc = hm_set(data->iosets, iosetid, &s, sizeof(s));
+      if (rc == -1) {
+        LOG_ERROR(mid, "Cannot set IO-set data");
+        out.rc = RPC_FAILURE;
+        ABT_rwlock_unlock(data->iosets_lock);
+        goto respond;
+      }
+
+      set = &s;
+    }
+
+    ABT_rwlock_unlock(data->iosets_lock);
+
+    /* If an application in the set is running already we go to sleep on
+     * cond. When it finishes running, the condition will be signaled to
+     * wake us up.
+     */
+
+    ABT_mutex_lock(set->lock);
+    while (*set->isrunning) {
+      ABT_cond_wait(set->waitq, set->lock);
+    }
+    *set->isrunning = 1;
+    ABT_mutex_unlock(set->lock);
   }
 
-  ABT_rwlock_unlock(data->iosets_lock);
-
-  /* If an application in the set is running already we go to sleep on
-   * cond. When it finishes running, the condition will be signaled to
-   * wake us up.
-   */
-
-  ABT_mutex_lock(set->mutex);
-  while (*set->isrunning) {
-    ABT_cond_wait(set->cond, set->mutex);
+  /* now check for slices */
+  ABT_mutex_lock(data->iosetlock);
+  while (data->ioset_isrunning) {
+    ABT_cond_wait(data->iosetq, data->iosetlock);
   }
-  *set->isrunning = 1;
-  ABT_mutex_unlock(set->mutex);
+  data->ioset_isrunning = 1;
+  ABT_mutex_unlock(data->iosetlock);
 
   margo_debug(mid, "%"PRIu32".%"PRIu32" IO phase begin (setid %"PRIi64")",
               in.jobid, in.jobstepid, in.iosetid);
@@ -563,32 +577,44 @@ hint_io_end_cb(hg_handle_t h)
   }
 
   assert(data->iosets != NULL);
+  assert(data->iosetq != NULL);
+  assert(data->iosetlock != NULL);
 
-  char *iosetid = inttostr((long long)in.iosetid);
-  if (!iosetid) {
-    out.rc = RPC_FAILURE;
-    LOG_ERROR(mid, "Could not convert IO-set \"%"PRIi64"\" to string", in.iosetid);
-    goto respond;
+  ABT_mutex_lock(data->iosetlock);
+  data->ioset_isrunning = 0;
+  ABT_cond_signal(data->iosetq);
+  ABT_mutex_unlock(data->iosetlock);
+
+  char *iosetid = NULL;
+
+  if (in.phase_flag) {          /* reaching end of IO phase */
+    iosetid = inttostr((long long)in.iosetid);
+    if (!iosetid) {
+      out.rc = RPC_FAILURE;
+      LOG_ERROR(mid, "Could not convert IO-set \"%"PRIi64"\" to string", in.iosetid);
+      goto respond;
+    }
+
+    ABT_rwlock_rdlock(data->iosets_lock);
+
+    const struct ioset *set = hm_get(data->iosets, iosetid);
+
+    ABT_rwlock_unlock(data->iosets_lock);
+
+    if (!set) {
+      LOG_ERROR(mid, "No running IO-set with id \"%"PRIi64"\"", in.iosetid);
+      goto respond;
+    }
+
+    /* signal waiting app in the same set */
+    ABT_mutex_lock(set->lock);
+    *set->isrunning = 0;
+    ABT_cond_signal(set->waitq);
+    ABT_mutex_unlock(set->lock);
+
+    margo_debug(mid, "%"PRIu32".%"PRIu32" IO phase end (setid %"PRIi64")",
+                in.jobid, in.jobstepid, in.iosetid);
   }
-
-  ABT_rwlock_rdlock(data->iosets_lock);
-
-  const struct ioset *set = hm_get(data->iosets, iosetid);
-
-  ABT_rwlock_unlock(data->iosets_lock);
-
-  if (!set) {
-    LOG_ERROR(mid, "No running IO-set with id \"%"PRIi64"\"", in.iosetid);
-    goto respond;
-  }
-
-  ABT_mutex_lock(set->mutex);
-  *set->isrunning = 0;
-  ABT_cond_signal(set->cond);
-  ABT_mutex_unlock(set->mutex);
-
-  margo_debug(mid, "%"PRIu32".%"PRIu32" IO phase end (setid %"PRIi64")",
-              in.jobid, in.jobstepid, in.iosetid);
 
  respond:
   if (iosetid) free(iosetid);

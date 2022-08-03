@@ -45,9 +45,9 @@ struct malleability_data {
 
 struct ioset {
   long long setid;
-  int       *isrunning;
-  ABT_mutex mutex;
-  ABT_cond  cond;
+  int       *isrunning;         /* app in the same set is running already */
+  ABT_cond  waitq;              /* waiting queue for app in this set */
+  ABT_mutex lock;
 };
 
 struct cb_data {
@@ -55,7 +55,11 @@ struct cb_data {
   hg_id_t             *rpcids;  /* RPC handles */
   struct malleability_data *malldat;
 
-  hm_t       *iosets;         /* map of IO-set data, lock! */
+  int       ioset_isrunning; /* an app is running, regardless of set */
+  ABT_cond  iosetq;          /* queue for running apps, XX FIFO? */
+  ABT_mutex iosetlock;
+
+  hm_t      *iosets;         /* map of struct ioset, lock! */
   ABT_rwlock iosets_lock;
 };
 

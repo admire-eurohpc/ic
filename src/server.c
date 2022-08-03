@@ -36,7 +36,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
     goto error;
   }
 
-  margo_set_log_level(mid, MARGO_LOG_INFO);
+  margo_set_log_level(mid, MARGO_LOG_DEBUG);
 
   hg_size_t addr_str_size = ICC_ADDR_LEN;
   char addr_str[ICC_ADDR_LEN];
@@ -117,7 +117,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   rpc_ids[RPC_RECONFIGURE] = MARGO_REGISTER(mid, RPC_RECONFIGURE_NAME, reconfigure_in_t, rpc_out_t, NULL);
   rpc_ids[RPC_MALLEABILITY_AVAIL] = MARGO_REGISTER(mid, RPC_MALLEABILITY_AVAIL_NAME, malleability_avail_in_t, rpc_out_t, malleability_avail_cb);
   rpc_ids[RPC_MALLEABILITY_REGION] = MARGO_REGISTER(mid, RPC_MALLEABILITY_REGION_NAME, malleability_region_in_t, rpc_out_t, malleability_region_cb);
-  rpc_ids[RPC_HINT_IO_BEGIN] = MARGO_REGISTER(mid, RPC_HINT_IO_BEGIN_NAME, hint_io_in_t, rpc_out_t, hint_io_begin_cb);
+  rpc_ids[RPC_HINT_IO_BEGIN] = MARGO_REGISTER(mid, RPC_HINT_IO_BEGIN_NAME, hint_io_in_t, hint_io_out_t, hint_io_begin_cb);
   rpc_ids[RPC_HINT_IO_END] = MARGO_REGISTER(mid, RPC_HINT_IO_END_NAME, hint_io_in_t, rpc_out_t, hint_io_end_cb);
 
   ABT_pool rpc_pool;
@@ -149,12 +149,14 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   };
 
   /* iosets data */
+  ABT_mutex_create(&d.iosetlock);
+  ABT_cond_create(&d.iosetq);
+
   ABT_rwlock_create(&d.iosets_lock);
   if (rc != ABT_SUCCESS) {
     LOG_ERROR(mid, "Could not create IO-set lock");
     goto error;
   }
-
   d.iosets = hm_create();
   if (!d.iosets) {
     LOG_ERROR(mid, "Could not create IO-set map");
@@ -184,7 +186,10 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   }
 
   /* clean up ioset data */
+  ABT_cond_free(&d.iosetq);
+  ABT_mutex_free(&d.iosetlock);
   ABT_rwlock_free(&d.iosets_lock);
+  /* XX free int + mutex + cond in hm */
   hm_free(d.iosets);
 
   return 0;

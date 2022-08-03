@@ -412,30 +412,66 @@ icc_reconfig_pending(struct icc_context *icc, enum icc_reconfig_type *reconfigty
 
 
 iccret_t
-icc_hint_io_begin(struct icc_context *icc)
+icc_hint_io_begin(struct icc_context *icc, int phase, unsigned int *nslices)
 {
-  int rc = ICC_SUCCESS;
-
-  int rpcret = RPC_SUCCESS;
   hint_io_in_t in;
-
   in.jobid = icc->jobid;
   in.jobstepid = 0;             /* XX get jobstep id */
-  in.iosetid = 0;               /* XX compute ioset */
+  in.iosetid = 2;               /* XX compute priority */
+  in.phase_flag = phase ? 1 : 0;
 
-  /* we expect to block until it is our turn to run, so timeout is set to 0 */
-  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_HINT_IO_BEGIN], &in, &rpcret, 0);
-  if (rc || rpcret) {
-    margo_error(icc->mid, "icc (hint_io_begin): ret=%d, RPC ret= %d", rc, rpcret);
-    rc = ICC_FAILURE;
+  /* make RPC by hand instead of using rpc_send() because of the
+     custom return struct */
+
+  hg_return_t hret;
+  hg_handle_t handle;
+  hint_io_out_t resp;
+
+  hret = margo_create(icc->mid, icc->addr, icc->rpcids[RPC_HINT_IO_BEGIN], &handle);
+  if (hret != HG_SUCCESS) {
+    margo_error(icc->mid, "icc (hint_io_begin): RPC creation failure: %s", HG_Error_to_string(hret));
+    return ICC_FAILURE;
   }
 
-  return rc;
+  /* we expect to block until it is our turn to run, so no timeout */
+  hret = margo_forward(handle, &in);
+  if (hret != HG_SUCCESS) {
+    margo_error(icc->mid, "icc (hint_io_begin): RPC forwarding failure: %s", HG_Error_to_string(hret));
+    if (hret != HG_NOENTRY) {
+      hret = margo_destroy(handle);
+      return ICC_FAILURE;
+    }
+  }
+
+  hret = margo_get_output(handle, &resp);
+  if (hret != HG_SUCCESS) {
+    margo_error(icc->mid, "icc (hint_io_begin): Could not get RPC output: %s", HG_Error_to_string(hret));
+  }
+  else {
+    if (resp.rc != RPC_SUCCESS) {
+      margo_error(icc->mid, "icc (hint_io_begin): RPC error: %d", resp.rc);
+    } else {
+      *nslices = resp.nslices;
+    }
+
+    hret = margo_free_output(handle, &resp);
+    if (hret != HG_SUCCESS) {
+      margo_error(icc->mid, "icc (hint_io_begin): Could not free RPC output: %s", HG_Error_to_string(hret));
+    }
+  }
+
+  hret = margo_destroy(handle);
+  if (hret != HG_SUCCESS) {
+    margo_error(icc->mid, "icc (hint_io_begin): Could not destroy Margo RPC handle: %s", HG_Error_to_string(hret));
+    return ICC_FAILURE;
+  }
+
+  return ICC_SUCCESS;
 }
 
 
 iccret_t
-icc_hint_io_end(struct icc_context *icc)
+icc_hint_io_end(struct icc_context *icc, int phase)
 {
   int rc = ICC_SUCCESS;
 
@@ -445,6 +481,7 @@ icc_hint_io_end(struct icc_context *icc)
   in.jobid = icc->jobid;
   in.jobstepid = 0;             /* XX get jobstep id */
   in.iosetid = 0;               /* XX compute ioset */
+  in.phase_flag = phase ? 1 : 0;
 
   rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_HINT_IO_END], &in, &rpcret, RPC_TIMEOUT_MS_DEFAULT);
   if (rc || rpcret) {
@@ -641,7 +678,7 @@ _setup_margo(enum icc_log_level log_level, struct icc_context *icc)
   icc->rpcids[RPC_ADHOC_NODES] = MARGO_REGISTER(icc->mid, RPC_ADHOC_NODES_NAME, adhoc_nodes_in_t, rpc_out_t, NULL);
   icc->rpcids[RPC_MALLEABILITY_AVAIL] = MARGO_REGISTER(icc->mid, RPC_MALLEABILITY_AVAIL_NAME, malleability_avail_in_t, rpc_out_t, NULL);
 
-  icc->rpcids[RPC_HINT_IO_BEGIN] = MARGO_REGISTER(icc->mid, RPC_HINT_IO_BEGIN_NAME, hint_io_in_t, rpc_out_t, NULL);
+  icc->rpcids[RPC_HINT_IO_BEGIN] = MARGO_REGISTER(icc->mid, RPC_HINT_IO_BEGIN_NAME, hint_io_in_t, hint_io_out_t, NULL);
   icc->rpcids[RPC_HINT_IO_END] = MARGO_REGISTER(icc->mid, RPC_HINT_IO_END_NAME, hint_io_in_t, rpc_out_t, NULL);
 
   if (icc->bidirectional) {

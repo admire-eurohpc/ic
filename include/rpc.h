@@ -234,8 +234,12 @@ MERCURY_GEN_PROC(reconfigure_in_t,
 MERCURY_GEN_PROC(hint_io_in_t,
                  ((uint32_t)(jobid))
                  ((uint32_t)(jobstepid))
-                 ((int64_t)(iosetid)))
+                 ((int64_t)(iosetid))
+                 ((int8_t)(phase_flag)))
 
+MERCURY_GEN_PROC(hint_io_out_t,
+                 ((uint16_t)(nslices))
+                 ((int32_t)(rc)))
 
 /**
  * Send RPC identifed by RPC_CODE from Margo instance MID to the Margo

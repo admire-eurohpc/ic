@@ -78,14 +78,16 @@ main(int argc, char **argv)
     icc_sleep(icc, 2000);
   }
   else if (typeid == ICC_TYPE_IOSETS) {
+    unsigned int nslices = 0;
     fputs("[IO-sets] io_begin\n", stderr); /* write to stderr to avoid buffering */
-    ret = icc_hint_io_begin(icc);
+    ret = icc_hint_io_begin(icc, 1, &nslices);
     assert(ret == ICC_SUCCESS);
 
+    fprintf(stderr, "[IO-sets] Will write %u slice%s\n", nslices, nslices > 1 ? "s" : "");
     icc_sleep(icc, 8000);
 
     fputs("[IO-sets] io_end\n", stderr);
-    ret = icc_hint_io_end(icc);
+    ret = icc_hint_io_end(icc, 1);
     assert(ret == ICC_SUCCESS);
   }
 
