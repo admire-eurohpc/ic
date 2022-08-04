@@ -234,8 +234,8 @@ MERCURY_GEN_PROC(reconfigure_in_t,
 MERCURY_GEN_PROC(hint_io_in_t,
                  ((uint32_t)(jobid))
                  ((uint32_t)(jobstepid))
-                 ((int64_t)(iosetid))
-                 ((int8_t)(phase_flag)))
+                 ((uint32_t)(ioset_witer)) /* app characteristic time (ms) */
+                 ((int8_t)(phase_flag)))   /* set if we start/end an IO phase */
 
 MERCURY_GEN_PROC(hint_io_out_t,
                  ((uint16_t)(nslices))

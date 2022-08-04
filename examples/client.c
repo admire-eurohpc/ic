@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <errno.h>
 #include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,7 +18,7 @@ _icc_typecode(const char *type);
 void
 usage(void)
 {
-  (void)fprintf(stderr, "usage: ICC client [--type=mpi|flexmpi|adhoccli|jobmon|iosets]\n");
+  (void)fprintf(stderr, "usage: ICC client [--type=mpi|flexmpi|adhoccli|jobmon|iosets] --ioset-chartime=CHARACTERISTIC_TIME (in ms)\n");
   exit(1);
 }
 
@@ -27,18 +28,30 @@ main(int argc, char **argv)
 {
   static struct option longopts[] = {
     { "type", required_argument, NULL, 't' },
+    { "ioset-chartime", required_argument, NULL, 'w' },
     { NULL,   0,                 NULL,  0  },
   };
 
   int ch;
   enum icc_client_type typeid = 0;
+  char *endptr;
+  unsigned long tmp;
+  unsigned long witer = 1;
 
-  while ((ch = getopt_long(argc, argv, "t:", longopts, NULL)) != -1)
+  while ((ch = getopt_long(argc, argv, "t:w:", longopts, NULL)) != -1)
     switch (ch) {
     case 't':
       typeid = _icc_typecode(optarg);
       if (typeid == ICC_TYPE_UNDEFINED)
         usage();
+      break;
+    case 'w':
+      tmp = strtoul(optarg, &endptr, 0);
+      if (errno != 0 || endptr == optarg || *endptr != '\0') {
+        fputs("Invalid argument: ioset-chartime\n", stderr);
+        exit(EXIT_FAILURE);
+      }
+      witer = tmp;
       break;
     case 0:
       continue;
@@ -79,15 +92,18 @@ main(int argc, char **argv)
   }
   else if (typeid == ICC_TYPE_IOSETS) {
     unsigned int nslices = 0;
-    fputs("[IO-sets] io_begin\n", stderr); /* write to stderr to avoid buffering */
-    ret = icc_hint_io_begin(icc, 1, &nslices);
+    fputs("[IO-sets] IO phase begin\n", stderr); /* write to stderr to avoid buffering */
+    ret = icc_hint_io_begin(icc, witer, 1, &nslices);
     assert(ret == ICC_SUCCESS);
 
     fprintf(stderr, "[IO-sets] Will write %u slice%s\n", nslices, nslices > 1 ? "s" : "");
-    icc_sleep(icc, 8000);
+    icc_sleep(icc, 3000);
 
-    fputs("[IO-sets] io_end\n", stderr);
-    ret = icc_hint_io_end(icc, 1);
+    /* ret = icc_hint_io_begin(icc, witer, 0, &nslices); */
+    /* ret = icc_hint_io_end(icc, witer, 0); */
+
+    fputs("[IO-sets] IO phase end\n", stderr);
+    ret = icc_hint_io_end(icc, witer, 1);
     assert(ret == ICC_SUCCESS);
   }
 

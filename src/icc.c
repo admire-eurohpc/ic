@@ -412,12 +412,19 @@ icc_reconfig_pending(struct icc_context *icc, enum icc_reconfig_type *reconfigty
 
 
 iccret_t
-icc_hint_io_begin(struct icc_context *icc, int phase, unsigned int *nslices)
+icc_hint_io_begin(struct icc_context *icc, unsigned long witer_ms, int phase, unsigned int *nslices)
 {
+  assert(icc);
+
+  if (witer_ms > UINT32_MAX) {
+    margo_error(icc->mid, "icc (hint_io_begin): IO-set characteristic time is too big");
+    return ICC_FAILURE;
+  }
+
   hint_io_in_t in;
   in.jobid = icc->jobid;
   in.jobstepid = 0;             /* XX get jobstep id */
-  in.iosetid = 2;               /* XX compute priority */
+  in.ioset_witer = witer_ms;
   in.phase_flag = phase ? 1 : 0;
 
   /* make RPC by hand instead of using rpc_send() because of the
@@ -471,8 +478,15 @@ icc_hint_io_begin(struct icc_context *icc, int phase, unsigned int *nslices)
 
 
 iccret_t
-icc_hint_io_end(struct icc_context *icc, int phase)
+icc_hint_io_end(struct icc_context *icc, unsigned long witer_ms, int phase)
 {
+  assert(icc);
+
+  if (witer_ms > UINT32_MAX) {
+    margo_error(icc->mid, "icc (hint_io_begin): IO-set characteristic time is too big");
+    return ICC_FAILURE;
+  }
+
   int rc = ICC_SUCCESS;
 
   int rpcret = RPC_SUCCESS;
@@ -480,7 +494,7 @@ icc_hint_io_end(struct icc_context *icc, int phase)
 
   in.jobid = icc->jobid;
   in.jobstepid = 0;             /* XX get jobstep id */
-  in.iosetid = 0;               /* XX compute ioset */
+  in.ioset_witer = witer_ms;
   in.phase_flag = phase ? 1 : 0;
 
   rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_HINT_IO_END], &in, &rpcret, RPC_TIMEOUT_MS_DEFAULT);

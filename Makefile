@@ -109,7 +109,7 @@ icrm.o: CPPFLAGS += $(CPPFLAGS_SLURM)
 
 server: icdb.o icrm.o rpc.o cbcommon.o cbserver.o hashmap.o
 server: CPPFLAGS += `$(PKG_CONFIG) --cflags margo uuid`
-server: LDLIBS += `$(PKG_CONFIG) --libs margo hiredis` $(LIBS_SLURM) -Wl,--no-undefined
+server: LDLIBS += -lm `$(PKG_CONFIG) --libs margo hiredis` $(LIBS_SLURM) -Wl,--no-undefined
 
 $(libicc_so): rpc.o cb.o cbcommon.o flexmpi.o icrm.o hashmap.o
 $(libicc_so): CPPFLAGS += `$(PKG_CONFIG) --cflags margo uuid`

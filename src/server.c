@@ -151,6 +151,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   /* iosets data */
   ABT_mutex_create(&d.iosetlock);
   ABT_cond_create(&d.iosetq);
+  d.ioset_isrunning = 0;
 
   ABT_rwlock_create(&d.iosets_lock);
   if (rc != ABT_SUCCESS) {

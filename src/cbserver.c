@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <inttypes.h>
+#include <math.h>               /* log10, lround */
 #include <margo.h>
 
 #include "cbserver.h"
@@ -7,6 +8,7 @@
 #include "icdb.h"
 #include "icrm.h"                 /* ressource manager */
 
+#define IOSETID_LEN 256
 
 #define MARGO_GET_INPUT(h,in,hret)  hret = margo_get_input(h, &in);     \
   if (hret != HG_SUCCESS) {                                             \
@@ -27,14 +29,6 @@
   if (ret != ABT_SUCCESS) {                                             \
     LOG_ERROR(mid, "Failed getting rank of ABT xstream ");              \
   }
-
-
-/**
- * Turn a signed integer into its decimal representation. Result must
- * be freed using free(3). Returns NULL in case of error.
- * XX small malloc, not good
- */
-static char * inttostr(long long x);
 
 
 void
@@ -443,6 +437,58 @@ malleability_region_cb(hg_handle_t h)
 }
 DEFINE_MARGO_RPC_HANDLER(malleability_region_cb);
 
+
+/**
+ * Compute the IO-set ID corresponding to a characteristic time of
+ * WITER_MS milliseconds.
+ */
+static int
+ioset_id(unsigned long witer_ms, char *iosetid, size_t len) {
+  unsigned int n;
+  long round;
+
+  /* XX TODO handle errors */
+  /* double sec = witer_ms/1000.0; */
+  /* double a = log10(sec); */
+  /* double b = lround(a); */
+
+  round = lround(log10(witer_ms/1000.0));
+
+  n = snprintf(iosetid, len, "%ld", round);
+  if (n >= len) {            /* output truncated */
+    return -1;
+  }
+
+  return 0;
+}
+
+static double
+ioset_prio(unsigned long witer_ms) {
+  return pow(10, lround(log10(witer_ms/1000.0)));
+}
+
+static double
+ioset_scale(hm_t *iosets) {
+  const char *setid;
+  struct ioset *const *set;
+  size_t curs = 0;
+  double prio_min = INFINITY;
+
+  /* find the lowest priority */
+  while ((curs = hm_next(iosets, curs, &setid, (const void **)&set)) != 0) {
+    if ((*set)->isrunning && (*set)->priority < prio_min)
+      prio_min = (*set)->priority;
+  }
+
+  if (prio_min == INFINITY) {
+    return 0;
+  }
+
+  /* scale it to 1 */
+  return 1 / prio_min;
+}
+
+
 void
 hint_io_begin_cb(hg_handle_t h)
 {
@@ -451,15 +497,12 @@ hint_io_begin_cb(hg_handle_t h)
   hint_io_in_t in;
   hint_io_out_t out;
   int ret;
-  char *iosetid;
 
   mid = margo_hg_handle_get_instance(h);
   assert(mid);
 
-  iosetid = NULL;
-
   out.rc = RPC_SUCCESS;
-  out.nslices = 1;
+  out.nslices = 0;
 
   MARGO_GET_INPUT(h, in, hret);
   if (hret != HG_SUCCESS) {
@@ -480,68 +523,80 @@ hint_io_begin_cb(hg_handle_t h)
   assert(data->iosetlock != NULL);
   assert(data->iosets != NULL);
 
-  if (in.phase_flag) {          /* beginning a new phase */
-    iosetid = inttostr((long long)in.iosetid);
-    if (!iosetid) {
-      out.rc = RPC_FAILURE;
-      LOG_ERROR(mid, "Could not convert IO-set \"%"PRIi64"\" to string", in.iosetid);
-      goto respond;
-    }
+  /* compute the IO-set ID */
+  char iosetid[IOSETID_LEN];
 
-    /* get a writer lock in case we need to initialize */
-    ABT_rwlock_wrlock(data->iosets_lock);
-
-    const struct ioset *set = hm_get(data->iosets, iosetid);
-
-    if (!set) {
-      struct ioset s;
-      /* lazily initialize ioset data */
-      s.setid = in.iosetid;
-      s.isrunning = calloc(1, sizeof(int)); /* yes, mallocing one int... */
-      ABT_mutex_create(&s.lock);
-      ABT_cond_create(&s.waitq);
-
-      int rc;
-      rc = hm_set(data->iosets, iosetid, &s, sizeof(s));
-      if (rc == -1) {
-        LOG_ERROR(mid, "Cannot set IO-set data");
-        out.rc = RPC_FAILURE;
-        ABT_rwlock_unlock(data->iosets_lock);
-        goto respond;
-      }
-
-      set = &s;
-    }
-
-    ABT_rwlock_unlock(data->iosets_lock);
-
-    /* If an application in the set is running already we go to sleep on
-     * cond. When it finishes running, the condition will be signaled to
-     * wake us up.
-     */
-
-    ABT_mutex_lock(set->lock);
-    while (*set->isrunning) {
-      ABT_cond_wait(set->waitq, set->lock);
-    }
-    *set->isrunning = 1;
-    ABT_mutex_unlock(set->lock);
+  if (ioset_id(in.ioset_witer, iosetid, IOSETID_LEN)) {
+    out.rc = RPC_FAILURE;
+    LOG_ERROR(mid, "Error computing IO-set from witer \"%"PRIu32"\"", in.ioset_witer);
+    goto respond;
   }
 
-  /* now check for slices */
+  /* get a writer lock in case we need to initialize */
+  ABT_rwlock_wrlock(data->iosets_lock);
+
+  struct ioset *set;
+  struct ioset *const *s = hm_get(data->iosets, iosetid);
+
+  if (!s) {
+    /* lazily initialize ioset data */
+    set = calloc(1, sizeof(struct ioset));
+    set->isrunning = 0;
+    set->priority = ioset_prio(in.ioset_witer);
+    ABT_mutex_create(&set->lock);
+    ABT_cond_create(&set->waitq);
+
+    int rc;
+    rc = hm_set(data->iosets, iosetid, &set, sizeof(s));
+    if (rc == -1) {
+      LOG_ERROR(mid, "Cannot set IO-set data");
+      out.rc = RPC_FAILURE;
+      ABT_rwlock_unlock(data->iosets_lock);
+      goto respond;
+    }
+  } else {
+    set = *s;
+  }
+
+  ABT_rwlock_unlock(data->iosets_lock);
+
+  if (in.phase_flag) {
+    /* new phase : If an application in the set is running already we
+     * go to sleep on cond. When it finishes running, the condition
+     * will be signaled to wake us up.
+     */
+    ABT_mutex_lock(set->lock);
+    while (set->isrunning) {
+      ABT_cond_wait(set->waitq, set->lock);
+    }
+    set->isrunning = 1;
+    ABT_mutex_unlock(set->lock);
+
+    margo_debug(mid, "%"PRIu32".%"PRIu32" IO phase begin (setid %s)",
+                in.jobid, in.jobstepid, iosetid);
+  }
+
   ABT_mutex_lock(data->iosetlock);
   while (data->ioset_isrunning) {
     ABT_cond_wait(data->iosetq, data->iosetlock);
   }
+
   data->ioset_isrunning = 1;
+
+  ABT_rwlock_rdlock(data->iosets_lock);
+  double scale = ioset_scale(data->iosets);
+  ABT_rwlock_unlock(data->iosets_lock);
+
+  if (scale == 0) {
+    out.rc = RPC_FAILURE;
+    LOG_ERROR(mid, "Wrong scale");
+  }
+
+  out.nslices = set->priority * scale;
+
   ABT_mutex_unlock(data->iosetlock);
 
-  margo_debug(mid, "%"PRIu32".%"PRIu32" IO phase begin (setid %"PRIi64")",
-              in.jobid, in.jobstepid, in.iosetid);
-
  respond:
-  if (iosetid) free(iosetid);
-
   MARGO_RESPOND(h, out, ret);
   MARGO_DESTROY_HANDLE(h, hret)
 }
@@ -585,67 +640,38 @@ hint_io_end_cb(hg_handle_t h)
   ABT_cond_signal(data->iosetq);
   ABT_mutex_unlock(data->iosetlock);
 
-  char *iosetid = NULL;
+  char iosetid[IOSETID_LEN];
+  if (ioset_id(in.ioset_witer, iosetid, IOSETID_LEN)) {
+      out.rc = RPC_FAILURE;
+      LOG_ERROR(mid, "Could compute IO-set from witer \"%"PRIu32"\"", in.ioset_witer);
+      goto respond;
+  }
 
   if (in.phase_flag) {          /* reaching end of IO phase */
-    iosetid = inttostr((long long)in.iosetid);
-    if (!iosetid) {
-      out.rc = RPC_FAILURE;
-      LOG_ERROR(mid, "Could not convert IO-set \"%"PRIi64"\" to string", in.iosetid);
-      goto respond;
-    }
 
     ABT_rwlock_rdlock(data->iosets_lock);
-
-    const struct ioset *set = hm_get(data->iosets, iosetid);
-
+    struct ioset *const *s = hm_get(data->iosets, iosetid);
     ABT_rwlock_unlock(data->iosets_lock);
 
-    if (!set) {
-      LOG_ERROR(mid, "No running IO-set with id \"%"PRIi64"\"", in.iosetid);
+    if (!s) {
+      LOG_ERROR(mid, "No running IO-set with id %s", iosetid);
       goto respond;
     }
+
+    struct ioset *set = *s;
 
     /* signal waiting app in the same set */
     ABT_mutex_lock(set->lock);
-    *set->isrunning = 0;
+    set->isrunning = 0;
     ABT_cond_signal(set->waitq);
     ABT_mutex_unlock(set->lock);
 
-    margo_debug(mid, "%"PRIu32".%"PRIu32" IO phase end (setid %"PRIi64")",
-                in.jobid, in.jobstepid, in.iosetid);
+    margo_debug(mid, "%"PRIu32".%"PRIu32" IO phase end (setid %s)",
+                in.jobid, in.jobstepid, iosetid);
   }
 
  respond:
-  if (iosetid) free(iosetid);
-
   MARGO_RESPOND(h, out, ret);
   MARGO_DESTROY_HANDLE(h, hret)
 }
 DEFINE_MARGO_RPC_HANDLER(hint_io_end_cb);
-
-
-static char *
-inttostr(long long x)
-{
-  char *res;
-  int nbytes, n;
-
-  nbytes = snprintf(NULL, 0, "%lld", x);
-  if (nbytes < 0) {
-    return NULL;
-  }
-
-  res = malloc(nbytes + 1);
-  if (!res) {
-    return NULL;
-  }
-
-  n = snprintf(res, nbytes + 1, "%lld", x);
-  if (n >= nbytes + 1) {            /* output truncated */
-    free(res);
-    return NULL;
-  }
-
-  return res;
-}

@@ -44,8 +44,8 @@ struct malleability_data {
 };
 
 struct ioset {
-  long long setid;
-  int       *isrunning;         /* app in the same set is running already */
+  double    priority;
+  int       isrunning;         /* an app in the same set is running */
   ABT_cond  waitq;              /* waiting queue for app in this set */
   ABT_mutex lock;
 };
