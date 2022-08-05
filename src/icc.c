@@ -83,14 +83,19 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
 
   /* resource manager jobid */
   char *jobid;
+  char *jobstepid;
   jobid = getenv("SLURM_JOB_ID");
   if (!jobid) {
     jobid = getenv("SLURM_JOBID");
   }
+  jobstepid = getenv("SLURM_STEP_ID");
+  if (!jobstepid) {
+    jobstepid = getenv("SLURM_STEPID");
+  }
 
   /* jobid is only required for registered clients */
-  if (icc->bidirectional && !jobid) {
-      margo_error(MARGO_INSTANCE_NULL, "icc (init): No JOB_ID found");
+  if (icc->bidirectional && !(jobid && jobstepid)) {
+      margo_error(MARGO_INSTANCE_NULL, "icc (init): job ID not found");
       rc = ICC_FAILURE;
       goto error;
   }
@@ -99,6 +104,15 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
     rc = _strtouint32(jobid, &icc->jobid);
     if (rc) {
       margo_error(MARGO_INSTANCE_NULL, "icc (init): Error converting job id \"%s\": %s", jobid, strerror(-rc));
+      rc = ICC_FAILURE;
+      goto error;
+    }
+  }
+
+  if (jobstepid) {
+    rc = _strtouint32(jobstepid, &icc->jobstepid);
+    if (rc) {
+      margo_error(MARGO_INSTANCE_NULL, "icc (init): Error converting job step id \"%s\": %s", jobstepid, strerror(-rc));
       rc = ICC_FAILURE;
       goto error;
     }
@@ -423,7 +437,7 @@ icc_hint_io_begin(struct icc_context *icc, unsigned long witer_ms, unsigned int 
 
   hint_io_in_t in;
   in.jobid = icc->jobid;
-  in.jobstepid = 0;             /* XX get jobstep id */
+  in.jobstepid = icc->jobstepid;
   in.ioset_witer = witer_ms;
 
   /* make RPC by hand instead of using rpc_send() because of the
@@ -492,7 +506,7 @@ icc_hint_io_end(struct icc_context *icc, unsigned long witer_ms, int last)
   hint_io_in_t in;
 
   in.jobid = icc->jobid;
-  in.jobstepid = 0;             /* XX get jobstep id */
+  in.jobstepid = icc->jobstepid;
   in.ioset_witer = witer_ms;
   in.phase_flag = last ? 1 : 0;
 

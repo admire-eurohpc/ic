@@ -18,7 +18,8 @@ struct icc_context {
   uint16_t          provider_id;        /* Margo provider ID (unused) */
   uint8_t           bidirectional;
   char              registered;         /* has the client been registered? */
-  uint32_t          jobid;              /* resource manager jobid */
+  uint32_t          jobid;              /* resource manager job id */
+  uint32_t          jobstepid;          /* resource manager jobstep id */
   char              clid[UUID_STR_LEN]; /* client uuid */
   enum icc_client_type type;            /* client type */
 
