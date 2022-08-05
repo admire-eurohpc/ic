@@ -464,7 +464,7 @@ ioset_id(unsigned long witer_ms, char *iosetid, size_t len) {
 
 static double
 ioset_prio(unsigned long witer_ms) {
-  return pow(10, lround(log10(witer_ms/1000.0)));
+  return pow(10, -lround(log10(witer_ms/1000.0)));
 }
 
 static double
@@ -476,7 +476,7 @@ ioset_scale(hm_t *iosets) {
 
   /* find the lowest priority */
   while ((curs = hm_next(iosets, curs, &setid, (const void **)&set)) != 0) {
-    if ((*set)->isrunning && (*set)->priority < prio_min)
+    if ((*set)->jobid != 0 && (*set)->priority < prio_min)
       prio_min = (*set)->priority;
   }
 
@@ -541,13 +541,14 @@ hint_io_begin_cb(hg_handle_t h)
   if (!s) {
     /* lazily initialize ioset data */
     set = calloc(1, sizeof(struct ioset));
-    set->isrunning = 0;
     set->priority = ioset_prio(in.ioset_witer);
+    set->jobid = in.jobid;
+    set->jobstepid = in.jobstepid;
     ABT_mutex_create(&set->lock);
     ABT_cond_create(&set->waitq);
 
     int rc;
-    rc = hm_set(data->iosets, iosetid, &set, sizeof(s));
+    rc = hm_set(data->iosets, iosetid, &set, sizeof(set));
     if (rc == -1) {
       LOG_ERROR(mid, "Cannot set IO-set data");
       out.rc = RPC_FAILURE;
@@ -560,21 +561,21 @@ hint_io_begin_cb(hg_handle_t h)
 
   ABT_rwlock_unlock(data->iosets_lock);
 
-  if (in.phase_flag) {
-    /* new phase : If an application in the set is running already we
-     * go to sleep on cond. When it finishes running, the condition
-     * will be signaled to wake us up.
-     */
-    ABT_mutex_lock(set->lock);
-    while (set->isrunning) {
-      ABT_cond_wait(set->waitq, set->lock);
-    }
-    set->isrunning = 1;
-    ABT_mutex_unlock(set->lock);
+  /* if there already is an application in the same set running, we go
+   * to sleep on cond. When it finishes running, the condition will be
+   * signaled to wake us up.
+   */
 
-    margo_debug(mid, "%"PRIu32".%"PRIu32" IO phase begin (setid %s)",
-                in.jobid, in.jobstepid, iosetid);
+  ABT_mutex_lock(set->lock);
+  while (set->jobid != 0 &&
+         (set->jobid != in.jobid || set->jobstepid != in.jobstepid)) {
+    ABT_cond_wait(set->waitq, set->lock);
   }
+  set->jobid = in.jobid;
+  set->jobstepid = in.jobstepid;
+  ABT_mutex_unlock(set->lock);
+
+  /* we are the running app, wait for our share */
 
   ABT_mutex_lock(data->iosetlock);
   while (data->ioset_isrunning) {
@@ -596,9 +597,12 @@ hint_io_begin_cb(hg_handle_t h)
 
   ABT_mutex_unlock(data->iosetlock);
 
+  margo_debug(mid, "%"PRIu32".%"PRIu32" (set ID %s): %u IO slice%s",
+              in.jobid, in.jobstepid, iosetid, out.nslices, out.nslices > 1 ? "s" : "");
+
  respond:
   MARGO_RESPOND(h, out, ret);
-  MARGO_DESTROY_HANDLE(h, hret)
+  MARGO_DESTROY_HANDLE(h, hret);
 }
 DEFINE_MARGO_RPC_HANDLER(hint_io_begin_cb);
 
@@ -647,7 +651,7 @@ hint_io_end_cb(hg_handle_t h)
       goto respond;
   }
 
-  if (in.phase_flag) {          /* reaching end of IO phase */
+  if (in.phase_flag) {          /* reached end of IO phase */
 
     ABT_rwlock_rdlock(data->iosets_lock);
     struct ioset *const *s = hm_get(data->iosets, iosetid);
@@ -662,16 +666,19 @@ hint_io_end_cb(hg_handle_t h)
 
     /* signal waiting app in the same set */
     ABT_mutex_lock(set->lock);
-    set->isrunning = 0;
-    ABT_cond_signal(set->waitq);
+    if (set->jobid == in.jobid && set->jobstepid == in.jobstepid) {
+      set->jobid = 0;
+      set->jobstepid = 0;
+      ABT_cond_signal(set->waitq);
+    }
     ABT_mutex_unlock(set->lock);
 
-    margo_debug(mid, "%"PRIu32".%"PRIu32" IO phase end (setid %s)",
+    margo_debug(mid, "%"PRIu32".%"PRIu32" (set ID %s): IO phase end ",
                 in.jobid, in.jobstepid, iosetid);
   }
 
  respond:
   MARGO_RESPOND(h, out, ret);
-  MARGO_DESTROY_HANDLE(h, hret)
+  MARGO_DESTROY_HANDLE(h, hret);
 }
 DEFINE_MARGO_RPC_HANDLER(hint_io_end_cb);

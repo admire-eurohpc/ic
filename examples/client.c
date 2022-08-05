@@ -92,15 +92,24 @@ main(int argc, char **argv)
   }
   else if (typeid == ICC_TYPE_IOSETS) {
     unsigned int nslices = 0;
+
     fputs("[IO-sets] IO phase begin\n", stderr); /* write to stderr to avoid buffering */
-    ret = icc_hint_io_begin(icc, witer, 1, &nslices);
+
+    ret = icc_hint_io_begin(icc, witer, &nslices);
     assert(ret == ICC_SUCCESS);
 
-    fprintf(stderr, "[IO-sets] Will write %u slice%s\n", nslices, nslices > 1 ? "s" : "");
-    icc_sleep(icc, 3000);
+    fprintf(stderr, "[IO-sets] %u IO slice%s\n", nslices, nslices > 1 ? "s" : "");
+    icc_sleep(icc, 1000 * nslices);
 
-    /* ret = icc_hint_io_begin(icc, witer, 0, &nslices); */
-    /* ret = icc_hint_io_end(icc, witer, 0); */
+    ret = icc_hint_io_end(icc, witer, 0);
+    assert(ret == ICC_SUCCESS);
+
+    ret = icc_hint_io_begin(icc, witer, &nslices);
+    assert(ret == ICC_SUCCESS);
+
+    fprintf(stderr, "[IO-sets] %u IO slice%s\n", nslices, nslices > 1 ? "s" : "");
+    icc_sleep(icc, 1000 * nslices);
+
 
     fputs("[IO-sets] IO phase end\n", stderr);
     ret = icc_hint_io_end(icc, witer, 1);

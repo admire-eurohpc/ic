@@ -412,7 +412,7 @@ icc_reconfig_pending(struct icc_context *icc, enum icc_reconfig_type *reconfigty
 
 
 iccret_t
-icc_hint_io_begin(struct icc_context *icc, unsigned long witer_ms, int phase, unsigned int *nslices)
+icc_hint_io_begin(struct icc_context *icc, unsigned long witer_ms, unsigned int *nslices)
 {
   assert(icc);
 
@@ -425,7 +425,6 @@ icc_hint_io_begin(struct icc_context *icc, unsigned long witer_ms, int phase, un
   in.jobid = icc->jobid;
   in.jobstepid = 0;             /* XX get jobstep id */
   in.ioset_witer = witer_ms;
-  in.phase_flag = phase ? 1 : 0;
 
   /* make RPC by hand instead of using rpc_send() because of the
      custom return struct */
@@ -478,7 +477,7 @@ icc_hint_io_begin(struct icc_context *icc, unsigned long witer_ms, int phase, un
 
 
 iccret_t
-icc_hint_io_end(struct icc_context *icc, unsigned long witer_ms, int phase)
+icc_hint_io_end(struct icc_context *icc, unsigned long witer_ms, int last)
 {
   assert(icc);
 
@@ -495,7 +494,7 @@ icc_hint_io_end(struct icc_context *icc, unsigned long witer_ms, int phase)
   in.jobid = icc->jobid;
   in.jobstepid = 0;             /* XX get jobstep id */
   in.ioset_witer = witer_ms;
-  in.phase_flag = phase ? 1 : 0;
+  in.phase_flag = last ? 1 : 0;
 
   rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_HINT_IO_END], &in, &rpcret, RPC_TIMEOUT_MS_DEFAULT);
   if (rc || rpcret) {

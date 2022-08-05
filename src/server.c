@@ -190,7 +190,14 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   ABT_cond_free(&d.iosetq);
   ABT_mutex_free(&d.iosetlock);
   ABT_rwlock_free(&d.iosets_lock);
-  /* XX free int + mutex + cond in hm */
+
+  /* free the IO-set map */
+  const char *setid;
+  struct ioset *const *set;
+  size_t curs = 0;
+  while ((curs = hm_next(d.iosets, curs, &setid, (const void **)&set)) != 0) {
+    free(*set);
+  }
   hm_free(d.iosets);
 
   return 0;
