@@ -53,7 +53,7 @@ depends := $(sources:.c=.d)
 vpath %.c $(sourcedir) $(exampledir)
 
 CPPFLAGS := -I$(includedir) -MMD
-CFLAGS := -std=gnu99 -Wall -Wextra -Werror=uninitialized -O0 -Wconversion -g
+CFLAGS := -std=gnu99 -Wall -Wextra -Werror=uninitialized -O2 -g
 
 
 .PHONY: all clean install uninstall
