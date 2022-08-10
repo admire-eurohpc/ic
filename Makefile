@@ -42,10 +42,10 @@ testapp_bin := testapp
 
 sources := hashmap.c server.c rpc.c cb.c cbcommon.c icdb.c icrm.c icc.c flexmpi.c
 sources += slurmjobmon.c slurmadhoccli.c jobcleaner.c
-sources += client.c testapp.c spawn.c synthio.c
+sources += client.c testapp.c spawn.c synthio.c writer.c
 
 # keep libicc in front
-binaries := $(libicc_so) server client jobcleaner $(libslurmjobmon_so) $(libslurmadhoccli_so) spawn synthio
+binaries := $(libicc_so) server client jobcleaner $(libslurmjobmon_so) $(libslurmadhoccli_so) spawn synthio writer
 
 objects := $(sources:.c=.o)
 depends := $(sources:.c=.d)
@@ -53,7 +53,7 @@ depends := $(sources:.c=.d)
 vpath %.c $(sourcedir) $(exampledir)
 
 CPPFLAGS := -I$(includedir) -MMD
-CFLAGS := -std=gnu99 -Wall -Wextra -Werror=uninitialized -O2 -g
+CFLAGS := -std=gnu99 -Wall -Wextra -Werror=uninitialized -O0 -Wconversion -g
 
 
 .PHONY: all clean install uninstall
@@ -124,6 +124,9 @@ spawn: LDLIBS += `$(PKG_CONFIG) --libs mpich` -L. -licc -Wl,--no-undefined,-rpat
 
 synthio: CPPFLAGS += `$(PKG_CONFIG) --cflags mpich`
 synthio: LDLIBS += `$(PKG_CONFIG) --libs mpich` -L. -licc -Wl,--no-undefined,-rpath-link=${PREFIX}/lib
+
+writer: CPPFLAGS += `$(PKG_CONFIG) --cflags mpich`
+writer: LDLIBS += `$(PKG_CONFIG) --libs mpich` -L. -licc -Wl,--no-undefined,-rpath-link=${PREFIX}/lib
 
 # $(testapp_bin): CFLAGS += `$(PKG_CONFIG) --cflags mpi`
 
