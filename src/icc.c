@@ -94,7 +94,7 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
   }
 
   /* jobid is only required for registered clients */
-  if (icc->bidirectional && !(jobid && jobstepid)) {
+  if (icc->bidirectional && !jobid) {
       margo_error(MARGO_INSTANCE_NULL, "icc (init): job ID not found");
       rc = ICC_FAILURE;
       goto error;
@@ -116,6 +116,8 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
       rc = ICC_FAILURE;
       goto error;
     }
+  } else {
+    icc->jobstepid = 0;
   }
 
   /* client UUID, XX could be replaced with jobid.jobstepid? */
