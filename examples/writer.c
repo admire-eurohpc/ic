@@ -178,6 +178,7 @@ int main(int argc, char *argv[])
     for (unsigned int j = 0; j < NSLICES_TOTAL; j++) {
       if (nslices == 0) {
         ICC_HINT_IO_BEGIN(rank, icc, witer.tv_sec, &nslices);
+        nslices = nslices > NSLICES_TOTAL ? NSLICES_TOTAL : nslices;
       }
       MPI_Barrier(MPI_COMM_WORLD); /* wait for authorization from root rank */
 
