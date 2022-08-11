@@ -13,18 +13,52 @@
 #include <time.h>               /* nanosleep */
 
 #include <mpi.h>
+#include <icc.h>
 
 
 #define NTOTAL_DEFAULT INT_MAX  /* (2Gi -1) */
 #define NPHASES_DEFAULT 1UL
-#define TIMESPEC_DIFF(end, start,r)                     \
-  (r).tv_sec = (end).tv_sec - (start).tv_sec;           \
-  (r).tv_nsec = (end).tv_nsec - (start).tv_nsec;        \
-  if ((r).tv_nsec < 0) {                                \
-    (r).tv_sec--;                                       \
-    (r).tv_nsec += 1000000000L;                         \
+#define NSLICES_TOTAL 4
+
+#define TIMESPEC_DIFF(end,start,r) {                    \
+    (r).tv_sec = (end).tv_sec - (start).tv_sec;         \
+    (r).tv_nsec = (end).tv_nsec - (start).tv_nsec;      \
+    if ((r).tv_nsec < 0) {                              \
+      (r).tv_sec--;                                     \
+      (r).tv_nsec += 1000000000L;                       \
+    }                                                   \
   }
 
+#define TIMESPEC_DIFF_ACCUMULATE(end,start,acc) {       \
+    struct timespec tmp;                                \
+    TIMESPEC_DIFF(end, start, tmp);                     \
+    (acc).tv_sec += tmp.tv_sec;                         \
+    (acc).tv_nsec += tmp.tv_nsec;                       \
+    if (acc.tv_nsec >= 1000000000L) {                   \
+      (acc).tv_sec++;                                   \
+      (acc).tv_nsec -= 1000000000L;                     \
+    }                                                   \
+  }
+
+#define TIMESPEC_GET(t)                                                 \
+  if (clock_gettime(CLOCK_MONOTONIC, &(t))) {                           \
+    fprintf(stderr, "clock_gettime error: %s\n", strerror(errno));      \
+    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);                            \
+  }
+
+#define ICC_HINT_IO_BEGIN(rank,icc,witer,nslices) if ((rank) == 0) {    \
+    if (icc_hint_io_begin((icc), (unsigned)(witer), (nslices))) {      \
+      fputs("icc_hint_io_begin error\n", stderr);                       \
+      MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);                          \
+    }                                                                   \
+  }
+
+#define ICC_HINT_IO_END(rank,icc,witer,islast) if ((rank) == 0) {       \
+    if (icc_hint_io_end((icc), (unsigned)(witer), (islast))) {          \
+      fputs("icc_hint_io_end error\n", stderr);                         \
+      MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);                          \
+    }                                                                   \
+  }
 
 static void
 usage(char *name)
@@ -126,17 +160,41 @@ int main(int argc, char *argv[])
     MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   }
 
-  struct timespec start, end, res;
-  for (unsigned int i = 0; i < nphases; i++) {
-    /* write the content of the buffer directly, we do not care about
-       the content */
+  /* only root rank talks to the IC */
+  struct icc_context *icc;
+  if (rank == 0) {
+    icc_init(ICC_LOG_DEBUG, ICC_TYPE_IOSETS, &icc);
+    if (!icc) {
+      fputs("Could not initialize libicc\n", stderr);
+      MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+    }
+  }
 
-    rc = clock_gettime(CLOCK_MONOTONIC, &start);
-    MPI_File_write_shared(fh, buf, (int)nbytes, MPI_BYTE, MPI_STATUS_IGNORE);
-    rc = clock_gettime(CLOCK_MONOTONIC, &end);
+  for (unsigned int i = 0; i < nphases; i++) {
+    struct timespec start, end, res = { 0 };
+    unsigned int nslices = 0;
+
+    for (unsigned int j = 0; j < NSLICES_TOTAL; j++) {
+      if (nslices == 0) {
+        ICC_HINT_IO_BEGIN(rank, icc, witer.tv_sec, &nslices);
+      }
+      MPI_Barrier(MPI_COMM_WORLD); /* wait for authorization from root rank */
+
+      TIMESPEC_GET(start);
+
+      /* we don't care about the content of the buffer, write it directly*/
+      MPI_File_write_shared(fh, buf, (int)nbytes, MPI_BYTE, MPI_STATUS_IGNORE);
+      nslices--;
+
+      TIMESPEC_GET(end);
+      TIMESPEC_DIFF_ACCUMULATE(end, start, res);
+
+      if (nslices == 0) {
+        ICC_HINT_IO_END(rank, icc, witer.tv_sec, j == NSLICES_TOTAL - 1 ? 1 : 0);
+      }
+    }
 
     if (rank == 0) {
-      TIMESPEC_DIFF(end, start, res);
       TIMESPEC_DIFF(witer, res, res);
       if (res.tv_sec <= 0) {
         fprintf(stderr, "Warning: witer is too small (%lds)\n", witer.tv_sec);
@@ -151,8 +209,13 @@ int main(int argc, char *argv[])
     MPI_Barrier(MPI_COMM_WORLD);
   }
 
+  if (rank == 0) {
+    icc_fini(icc);
+  }
+
   free(buf);
   MPI_File_close(&fh);
   MPI_Finalize();
   return EXIT_SUCCESS;
 }
+

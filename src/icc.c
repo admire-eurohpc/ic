@@ -430,6 +430,10 @@ icc_hint_io_begin(struct icc_context *icc, unsigned long witer_ms, unsigned int 
 {
   assert(icc);
 
+  if (!nslices) {
+    return ICC_EINVAL;
+  }
+
   if (witer_ms > UINT32_MAX) {
     margo_error(icc->mid, "icc (hint_io_begin): IO-set characteristic time is too big");
     return ICC_FAILURE;
@@ -438,7 +442,7 @@ icc_hint_io_begin(struct icc_context *icc, unsigned long witer_ms, unsigned int 
   hint_io_in_t in;
   in.jobid = icc->jobid;
   in.jobstepid = icc->jobstepid;
-  in.ioset_witer = witer_ms;
+  in.ioset_witer = (uint32_t)witer_ms;
 
   /* make RPC by hand instead of using rpc_send() because of the
      custom return struct */
@@ -491,7 +495,7 @@ icc_hint_io_begin(struct icc_context *icc, unsigned long witer_ms, unsigned int 
 
 
 iccret_t
-icc_hint_io_end(struct icc_context *icc, unsigned long witer_ms, int last)
+icc_hint_io_end(struct icc_context *icc, unsigned long witer_ms, int islast)
 {
   assert(icc);
 
@@ -507,8 +511,8 @@ icc_hint_io_end(struct icc_context *icc, unsigned long witer_ms, int last)
 
   in.jobid = icc->jobid;
   in.jobstepid = icc->jobstepid;
-  in.ioset_witer = witer_ms;
-  in.phase_flag = last ? 1 : 0;
+  in.ioset_witer = (uint32_t)witer_ms;
+  in.phase_flag = islast ? 1 : 0;
 
   rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_HINT_IO_END], &in, &rpcret, RPC_TIMEOUT_MS_DEFAULT);
   if (rc || rpcret) {
