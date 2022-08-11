@@ -9,7 +9,7 @@
 #include <limits.h>             /* INT_MAX */
 #include <stdio.h>              /* (f)printf */
 #include <stdlib.h>             /* strtol */
-#include <string.h>             /* strerror */
+#include <string.h>             /* strerror, memset */
 #include <time.h>               /* nanosleep */
 
 #include <mpi.h>
@@ -154,11 +154,12 @@ int main(int argc, char *argv[])
     MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   }
 
-  int *buf = malloc(nbytes);
+  char *buf = malloc(nbytes);
   if (!buf) {
     fputs("Out of memory\n", stderr);
     MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   }
+  memset(buf, rank, nbytes);
 
   /* only root rank talks to the IC */
   struct icc_context *icc;
@@ -182,7 +183,6 @@ int main(int argc, char *argv[])
 
       TIMESPEC_GET(start);
 
-      /* we don't care about the content of the buffer, write it directly*/
       MPI_File_write_shared(fh, buf, (int)nbytes, MPI_BYTE, MPI_STATUS_IGNORE);
       nslices--;
 
