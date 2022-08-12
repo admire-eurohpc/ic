@@ -77,8 +77,7 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
   icc->type = typeid;
 
   /*  apps that must be able to both receive AND send RPCs to the IC */
-  if (typeid == ICC_TYPE_MPI || typeid == ICC_TYPE_FLEXMPI ||
-      typeid == ICC_TYPE_IOSETS)
+  if (typeid == ICC_TYPE_MPI || typeid == ICC_TYPE_FLEXMPI)
     icc->bidirectional = 1;
 
   /* resource manager jobid */
