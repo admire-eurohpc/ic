@@ -655,10 +655,15 @@ _setup_margo(enum icc_log_level log_level, struct icc_context *icc)
 
   assert(icc);
 
-  /* use 2 extra threads: 1 for RPC network progress, 1 for background
-     RPC callbacks */
-  icc->mid = margo_init(HG_PROTOCOL,
-                        icc->bidirectional ? MARGO_SERVER_MODE : MARGO_CLIENT_MODE, 1, 1);
+  if (icc->bidirectional) {
+    /* bidirectional: 2 extra ULTs: 1 for RPC network progress, 1 for
+       background RPC callbacks */
+    icc->mid = margo_init(HG_PROTOCOL, MARGO_SERVER_MODE, 1, 1);
+  } else {
+    /* client only: a single common ULT should be enough*/
+    icc->mid = margo_init(HG_PROTOCOL, MARGO_CLIENT_MODE, 0, 0);
+  }
+
   if (!icc->mid) {
     rc = ICC_FAILURE;
     goto end;
