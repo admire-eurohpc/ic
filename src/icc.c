@@ -772,14 +772,14 @@ _setup_icrm(struct icc_context *icc)
   icc->icrm_terminate = 0;
 
   /* setup a blocking pool to handle communication with the RM */
-  rc = ABT_pool_create_basic(ABT_POOL_FIFO, ABT_POOL_ACCESS_MPMC, ABT_TRUE,
+  rc = ABT_pool_create_basic(ABT_POOL_FIFO_WAIT, ABT_POOL_ACCESS_MPMC, ABT_TRUE,
                              &icc->icrm_pool);
   if (rc != ABT_SUCCESS) {
     margo_debug(icc->mid, "ABT_pool_create_basic error: ret=%d", rc);
     return ICC_FAILURE;
   }
 
-  rc = ABT_xstream_create_basic(ABT_SCHED_DEFAULT, 1, &icc->icrm_pool,
+  rc = ABT_xstream_create_basic(ABT_SCHED_BASIC_WAIT, 1, &icc->icrm_pool,
                                 ABT_SCHED_CONFIG_NULL, &icc->icrm_xstream);
   if (rc != ABT_SUCCESS) {
     margo_debug(icc->mid, "ABT_xstream_create_basic error: ret=%d", rc);
