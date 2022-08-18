@@ -11,6 +11,7 @@
 - icc: RPC to IC on spawn/shrink done
 - flexmpi: simplify func handling, private sock + func enough
 - server: prefix LOG_ERROR with jobid/clid?
+- server: cleanup on error is not done
 - icdb: handle clients as a struct, commit func?
 - icdb: status in context redundant?
 - icdb: return icdberr_t from funcs + ERRSTR_LEN + context type _t

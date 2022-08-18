@@ -752,13 +752,17 @@ hint_io_end_cb(hg_handle_t h)
     TIMESPEC_SET(ioend);
 
     /* appid, waitstart, waitend/iostart, ioend, nbytes */
-    fprintf(data->ioset_time_out,
+    fprintf(data->ioset_outfile,
             "\"%s\",%lld.%.9ld,%lld.%.9ld,%lld.%.9ld,%"PRIu64"\n",
             appid,
             (long long)(*t)->waitstart.tv_sec, (*t)->waitstart.tv_nsec,
             (long long)(*t)->iostart.tv_sec, (*t)->iostart.tv_nsec,
             (long long)ioend.tv_sec, ioend.tv_nsec,
             in.nbytes);
+
+    if(fflush(data->ioset_outfile)) {
+      LOG_ERROR(mid, "fflush IO-set result file: %s", strerror(errno));
+    }
 
 
     ABT_rwlock_rdlock(data->iosets_lock);

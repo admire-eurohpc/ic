@@ -70,7 +70,7 @@ struct cb_data {
 
   hm_t      *ioset_time;     /*  map of elapsed IO/CPU time, lock! */
   ABT_rwlock ioset_time_lock;
-  FILE      *ioset_time_out; /*  ioset result file */
+  FILE      *ioset_outfile;  /*  ioset result file */
 };
 
 #endif

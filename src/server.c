@@ -18,6 +18,7 @@
 /* malleability manager stub */
 #define NCLIENTS     4
 #define NCLIENTS_MAX 1024
+#define IOSET_OUTFILE "iosets_out.csv"
 
 static void malleability_th(void *arg);
 
@@ -201,7 +202,11 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
     goto error;
   }
 
-  d.ioset_time_out = stderr;
+  d.ioset_outfile = fopen(IOSET_OUTFILE, "w+");
+  if (!d.ioset_outfile) {
+    LOG_ERROR(mid, "fopen \"%s\" fail: %s", IOSET_OUTFILE, strerror(errno));
+    goto error;
+  }
 
   margo_register_data(mid, rpc_ids[RPC_CLIENT_REGISTER], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_CLIENT_DEREGISTER], &d, NULL);
@@ -247,7 +252,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
     free(*time);
   }
   hm_free(d.ioset_time);
-  fclose(d.ioset_time_out);
+  fclose(d.ioset_outfile);
 
   return 0;
 
