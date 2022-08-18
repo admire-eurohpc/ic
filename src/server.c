@@ -207,6 +207,8 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
     LOG_ERROR(mid, "fopen \"%s\" fail: %s", IOSET_OUTFILE, strerror(errno));
     goto error;
   }
+  fputs("\"appid\",witer,waitstart,iostart,ioend,nbytes\n", d.ioset_outfile);
+
 
   margo_register_data(mid, rpc_ids[RPC_CLIENT_REGISTER], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_CLIENT_DEREGISTER], &d, NULL);

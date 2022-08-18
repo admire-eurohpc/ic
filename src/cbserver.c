@@ -751,10 +751,10 @@ hint_io_end_cb(hg_handle_t h)
     struct timespec ioend;
     TIMESPEC_SET(ioend);
 
-    /* appid, waitstart, waitend/iostart, ioend, nbytes */
+    /* appid, witer,waitstart, waitend/iostart, ioend, nbytes */
     fprintf(data->ioset_outfile,
-            "\"%s\",%lld.%.9ld,%lld.%.9ld,%lld.%.9ld,%"PRIu64"\n",
-            appid,
+            "\"%s\",%"PRIu32",%lld.%.9ld,%lld.%.9ld,%lld.%.9ld,%"PRIu64"\n",
+            appid, in.ioset_witer,
             (long long)(*t)->waitstart.tv_sec, (*t)->waitstart.tv_nsec,
             (long long)(*t)->iostart.tv_sec, (*t)->iostart.tv_nsec,
             (long long)ioend.tv_sec, ioend.tv_nsec,
