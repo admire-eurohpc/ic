@@ -11,6 +11,7 @@
 #include "cbcommon.h"
 #include "cbserver.h"
 
+/* #include <scord.h> */
 
 #define NTHREADS 8              /* threads set aside for RPC handling */
 
@@ -26,6 +27,31 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
 {
   margo_instance_id mid;
   int rc;
+
+  /* ADM_server_t scord_server = ADM_server_create("tcp", "ofi+tcp://127.0.0.1:52000"); */
+  /* if (!scord_server) { */
+  /*   fprintf(stderr, "scord server"); */
+  /* } */
+
+  /* ADM_adhoc_context_t adhoc_ctx; */
+  /* adhoc_ctx.c_mode = ADM_ADHOC_MODE_IN_JOB_SHARED; */
+  /* adhoc_ctx.c_access = ADM_ADHOC_ACCESS_RDWR; */
+  /* adhoc_ctx.c_nodes = 3; */
+  /* adhoc_ctx.c_walltime = 3600; */
+  /* adhoc_ctx.c_should_bg_flush = 0; */
+
+  /* /\* no inputs or outputs *\/ */
+  /* ADM_job_requirements_t scord_reqs; */
+  /* scord_reqs = ADM_job_requirements_create(NULL, 0, NULL, 0, &adhoc_ctx); */
+  /* if (!scord_reqs) { */
+  /*   fprintf(stderr, "scord job reqs"); */
+  /* } */
+
+  /* ADM_job_t scord_job; */
+  /* ADM_register_job(scord_server, scord_reqs, &scord_job); */
+
+  /* ADM_job_requirements_destroy(scord_reqs); */
+  /* ADM_server_destroy(scord_server); */
 
   assert(NTHREADS > 0);
 
@@ -164,6 +190,19 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
     goto error;
   }
 
+  ABT_rwlock_create(&d.ioset_time_lock);
+  if (rc != ABT_SUCCESS) {
+    LOG_ERROR(mid, "Could not create IO-set lock");
+    goto error;
+  }
+  d.ioset_time = hm_create();
+  if (!d.ioset_time) {
+    LOG_ERROR(mid, "Could not create IO-set timing map");
+    goto error;
+  }
+
+  d.ioset_time_out = stderr;
+
   margo_register_data(mid, rpc_ids[RPC_CLIENT_REGISTER], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_CLIENT_DEREGISTER], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_JOBCLEAN], &d, NULL);
@@ -190,6 +229,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   ABT_cond_free(&d.iosetq);
   ABT_mutex_free(&d.iosetlock);
   ABT_rwlock_free(&d.iosets_lock);
+  ABT_rwlock_free(&d.ioset_time_lock);
 
   /* free the IO-set map */
   const char *setid;
@@ -199,6 +239,15 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
     free(*set);
   }
   hm_free(d.iosets);
+
+  const char *appid;
+  struct ioset_time *const *time;
+  curs = 0;
+  while ((curs = hm_next(d.ioset_time, curs, &appid, (const void **)&time)) != 0) {
+    free(*time);
+  }
+  hm_free(d.ioset_time);
+  fclose(d.ioset_time_out);
 
   return 0;
 

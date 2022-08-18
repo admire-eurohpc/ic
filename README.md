@@ -1,4 +1,4 @@
-# libicc: Intelligent controller communication library
+# libicc: The intelligent controller communication library
 
 ## Dependencies
 
@@ -9,7 +9,7 @@ work:
 - mercury   2.0.1
 - argobots  1.1
 - json-c    0.15
-- margo     0.9.5
+- margo     0.9.5 & 0.9.6
 - redis     6.2
 - hiredis   1.0.2
 - slurm     20.11.4
@@ -101,7 +101,7 @@ the libraries have been installed to the directories searched by
 pkg-config:
 
 ```
-./configure --prefix=/usr/local PKG_CONFIG_PATH=/usr/local
+./configure --prefix=/usr/local PKG_CONFIG_PATH=/usr/local:$PKG_CONFIG_PATH
 make
 make install
 ```
@@ -136,14 +136,14 @@ Note that the PREFIX environment variable must be set at compilation
 time, so that the pkg-config file takes it into account.
 
 
-## libicc compilation
+## Compiling libicc
 
 libicc is developed in the ADMIRE Git repository, in the `src/ic`
-directory. The library, the server executable and the example client
-executable can be compiled compiled with:
-
+directory. Assuming all the required libraries are in `/usr/local`,
+the library, the server executable and the example clients executables
+can be compiled and installed with:
 ```
-make all PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
+make install PREFIX=/usr/local PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
 ```
 
 
@@ -179,26 +179,9 @@ If the shared library libicc.so is in the same directory as the client
 executable, it will get picked up. Otherwise, the environment variable
 `LD_LIBRARY_PATH` must be adjusted.
 
-
-To make things easier to test two scripts `icc_server.sh` and
-`icc_client.sh` are provided. On the
-[PlaFRIM](https://www.plafrim.fr/) cluster they are in the
-`/projets/admire/local/bin` directory , they respectively launch the
-ICC server and an ICC client with the right environment
-variables. With these script The ICC server runs for 10 minutes and
-the ICC client makes a single RPC and exits. They can be run using the
-`sbatch` command or directly:
-
-```
-/projets/admire/local/bin/icc_server.sh
-```
-
-and once the server is running:
-
-```
-/projets/admire/local/bin/icc_client.sh
-```
-
+The script `icc_server.sh` in the `ic/scripts` directory launches the
+ICC server and the database with the right environment variables. It
+can be launched using sbatch or directly within a Slurm allocation
 
 ## Using libicc
 - See icc.h for the API. Libicc functions are prefixed by `icc_`.
@@ -227,7 +210,8 @@ The workflow is as follow:
 
 ### Database
 The choice has been made to use Redis, a non-relational database. What
-follows is an effort to document the “schema” accessible to the intelligent controller
+follows is an effort to document the “schema” accessible to the
+intelligent controller
 
 - IC clients (e.g connecting application) have their information
   stored in `client:<clid>`, where `clid` is an uuid string uniquely

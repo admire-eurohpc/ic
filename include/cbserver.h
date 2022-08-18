@@ -51,6 +51,11 @@ struct ioset {
   ABT_mutex lock;
 };
 
+struct ioset_time {
+  struct timespec iostart;      /* IO start time */
+  struct timespec waitstart;    /* IO-set wait time */
+};
+
 struct cb_data {
   struct icdb_context **icdbs;  /* DB connection pool */
   hg_id_t             *rpcids;  /* RPC handles */
@@ -62,6 +67,10 @@ struct cb_data {
 
   hm_t      *iosets;         /* map of struct ioset, lock! */
   ABT_rwlock iosets_lock;
+
+  hm_t      *ioset_time;     /*  map of elapsed IO/CPU time, lock! */
+  ABT_rwlock ioset_time_lock;
+  FILE      *ioset_time_out; /*  ioset result file */
 };
 
 #endif

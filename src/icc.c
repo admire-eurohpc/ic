@@ -427,7 +427,7 @@ icc_reconfig_pending(struct icc_context *icc, enum icc_reconfig_type *reconfigty
 
 
 iccret_t
-icc_hint_io_begin(struct icc_context *icc, unsigned long witer_ms, unsigned int *nslices)
+icc_hint_io_begin(struct icc_context *icc, unsigned long witer_ms, int isfirst, unsigned int *nslices)
 {
   assert(icc);
 
@@ -444,6 +444,7 @@ icc_hint_io_begin(struct icc_context *icc, unsigned long witer_ms, unsigned int 
   in.jobid = icc->jobid;
   in.jobstepid = icc->jobstepid;
   in.ioset_witer = (uint32_t)witer_ms;
+  in.iterflag = isfirst ? 1 : 0;
 
   /* make RPC by hand instead of using rpc_send() because of the
      custom return struct */
@@ -513,7 +514,7 @@ icc_hint_io_end(struct icc_context *icc, unsigned long witer_ms, int islast)
   in.jobid = icc->jobid;
   in.jobstepid = icc->jobstepid;
   in.ioset_witer = (uint32_t)witer_ms;
-  in.phase_flag = islast ? 1 : 0;
+  in.iterflag = islast ? 1 : 0;
 
   rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_HINT_IO_END], &in, &rpcret, RPC_TIMEOUT_MS_DEFAULT);
   if (rc || rpcret) {

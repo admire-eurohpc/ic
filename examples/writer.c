@@ -17,7 +17,7 @@
 
 
 #define NTOTAL_DEFAULT INT_MAX  /* (2Gi -1) */
-#define NPHASES_DEFAULT 1UL
+#define NPHASES_DEFAULT 2UL
 #define NSLICES_TOTAL 4
 
 #define TIMESPEC_DIFF(end,start,r) {                    \
@@ -46,8 +46,8 @@
     MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);                            \
   }
 
-#define ICC_HINT_IO_BEGIN(rank,icc,witer,nslices) if ((rank) == 0) {    \
-    if (icc_hint_io_begin((icc), (unsigned)(witer), (nslices))) {      \
+#define ICC_HINT_IO_BEGIN(rank,icc,witer,iter,nslices) if ((rank) == 0) { \
+    if (icc_hint_io_begin((icc), (unsigned)(witer), (iter), (nslices))) { \
       fputs("icc_hint_io_begin error\n", stderr);                       \
       MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);                          \
     }                                                                   \
@@ -177,7 +177,7 @@ int main(int argc, char *argv[])
 
     for (unsigned int j = 0; j < NSLICES_TOTAL; j++) {
       if (nslices == 0) {
-        ICC_HINT_IO_BEGIN(rank, icc, witer.tv_sec, &nslices);
+        ICC_HINT_IO_BEGIN(rank, icc, witer.tv_sec, j == 0, &nslices);
         nslices = nslices > NSLICES_TOTAL ? NSLICES_TOTAL : nslices;
       }
       MPI_Barrier(MPI_COMM_WORLD); /* wait for authorization from root rank */

@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <errno.h>
 #include <inttypes.h>
 #include <math.h>               /* log10, lround */
 #include <margo.h>
@@ -9,6 +10,8 @@
 #include "icrm.h"                 /* ressource manager */
 
 #define IOSETID_LEN 256
+#define APPID_LEN 256
+
 
 #define MARGO_GET_INPUT(h,in,hret)  hret = margo_get_input(h, &in);     \
   if (hret != HG_SUCCESS) {                                             \
@@ -28,6 +31,20 @@
 #define ABT_GET_XRANK(ret,xrank) ret = ABT_self_get_xstream_rank(&xrank); \
   if (ret != ABT_SUCCESS) {                                             \
     LOG_ERROR(mid, "Failed getting rank of ABT xstream ");              \
+  }
+
+#define TIMESPEC_SET(t)                                                 \
+  if (clock_gettime(CLOCK_MONOTONIC, &(t))) {                           \
+    LOG_ERROR(mid, "clock_gettime: %s", strerror(errno));               \
+  }
+
+#define TIMESPEC_DIFF(end,start,r) {                    \
+    (r).tv_sec = (end).tv_sec - (start).tv_sec;         \
+    (r).tv_nsec = (end).tv_nsec - (start).tv_nsec;      \
+    if ((r).tv_nsec < 0) {                              \
+      (r).tv_sec--;                                     \
+      (r).tv_nsec += 1000000000L;                       \
+    }                                                   \
   }
 
 
@@ -488,6 +505,15 @@ ioset_scale(hm_t *iosets) {
   return 1 / prio_min;
 }
 
+static int
+ioset_appid(unsigned long jobid, unsigned long jobstepid, char *appid, size_t len) {
+  int n;
+  n = snprintf(appid, len, "%lu.%lu", jobid, jobstepid);
+  if (n < 0 || (unsigned)n >= len) {
+    return -1;
+  }
+  return 0;
+}
 
 void
 hint_io_begin_cb(hg_handle_t h)
@@ -541,6 +567,12 @@ hint_io_begin_cb(hg_handle_t h)
   if (!s) {
     /* lazily initialize ioset data */
     set = calloc(1, sizeof(struct ioset));
+    if (!set) {
+      LOG_ERROR(mid, "Out of memory");
+      out.rc = RPC_FAILURE;
+      ABT_rwlock_unlock(data->iosets_lock);
+      goto respond;
+    }
     set->priority = ioset_prio(in.ioset_witer);
     set->jobid = in.jobid;
     set->jobstepid = in.jobstepid;
@@ -561,21 +593,69 @@ hint_io_begin_cb(hg_handle_t h)
 
   ABT_rwlock_unlock(data->iosets_lock);
 
+  /* get ioset time record */
+  int rc;
+  char appid[APPID_LEN];
+  rc = ioset_appid(in.jobid, in.jobstepid, appid, APPID_LEN);
+  if (rc) {
+    LOG_ERROR(mid, "Could compute application ID from %lu.%lu", in.jobid, in.jobstepid);
+    out.rc = RPC_FAILURE;
+    goto respond;
+  }
+
+  ABT_rwlock_wrlock(data->ioset_time_lock);
+
+  struct ioset_time *time;
+  struct ioset_time *const *t = hm_get(data->ioset_time, appid);
+  if (!t) {
+    time = calloc(1, sizeof(struct ioset_time));
+    if (!time) {
+      LOG_ERROR(mid, "Out of memory");
+      out.rc = RPC_FAILURE;
+      ABT_rwlock_unlock(data->ioset_time_lock);
+      goto respond;
+    }
+
+    int rc = hm_set(data->ioset_time, appid, &time, sizeof(time));
+    if (rc == -1) {
+      LOG_ERROR(mid, "Cannot set IO-set time data");
+      out.rc = RPC_FAILURE;
+      ABT_rwlock_unlock(data->ioset_time_lock);
+      goto respond;
+    }
+  } else {
+    time = *t;
+  }
+
+  ABT_rwlock_unlock(data->ioset_time_lock);
+
+  /* record wait start time */
+  if (in.iterflag) {
+    TIMESPEC_SET(time->waitstart);
+  }
+
   /* if there already is an application in the same set running, we go
    * to sleep on cond. When it finishes running, the condition will be
    * signaled to wake us up.
    */
 
   ABT_mutex_lock(set->lock);
+
   while (set->jobid != 0 &&
          (set->jobid != in.jobid || set->jobstepid != in.jobstepid)) {
     ABT_cond_wait(set->waitq, set->lock);
   }
   set->jobid = in.jobid;
   set->jobstepid = in.jobstepid;
+
   ABT_mutex_unlock(set->lock);
 
-  /* we are the running app, wait for our share */
+  /* we are the running app in the set, wait for our share */
+
+  /* record wait end/io start time */
+  if (in.iterflag) {
+      TIMESPEC_SET(time->iostart);
+  }
 
   ABT_mutex_lock(data->iosetlock);
   while (data->ioset_isrunning) {
@@ -651,7 +731,33 @@ hint_io_end_cb(hg_handle_t h)
       goto respond;
   }
 
-  if (in.phase_flag) {          /* reached end of IO phase */
+  if (in.iterflag) {          /* reached end of IO phase */
+    int rc;
+    char appid[APPID_LEN];
+    rc = ioset_appid(in.jobid, in.jobstepid, appid, APPID_LEN);
+    if (rc) {
+      LOG_ERROR(mid, "Could compute application ID from %lu.%lu", in.jobid, in.jobstepid);
+      out.rc = RPC_FAILURE;
+      goto respond;
+    }
+
+    /* print out elapsed time */
+    ABT_rwlock_rdlock(data->ioset_time_lock);
+    struct ioset_time *const *t = hm_get(data->ioset_time, appid);
+    ABT_rwlock_unlock(data->ioset_time_lock);
+    if (!t) {
+      LOG_ERROR(mid, "No IO-set timing data for app  %s", appid);
+    }
+    struct timespec ioend;
+    TIMESPEC_SET(ioend);
+
+    /* appid, waitstart, waitend/iostart, ioend, nbytes */
+    fprintf(data->ioset_time_out, "\"%s\",%lld.%.9ld,%lld.%.9ld,%lld.%.9ld\n",
+            appid,
+            (long long)(*t)->waitstart.tv_sec, (*t)->waitstart.tv_nsec,
+            (long long)(*t)->iostart.tv_sec, (*t)->iostart.tv_nsec,
+            (long long)ioend.tv_sec, ioend.tv_nsec);
+
 
     ABT_rwlock_rdlock(data->iosets_lock);
     struct ioset *const *s = hm_get(data->iosets, iosetid);

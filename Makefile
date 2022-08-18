@@ -53,7 +53,7 @@ depends := $(sources:.c=.d)
 vpath %.c $(sourcedir) $(exampledir)
 
 CPPFLAGS := -I$(includedir) -MMD
-CFLAGS := -std=gnu99 -Wall -Wextra -Werror=uninitialized -O2 -g
+CFLAGS := -std=gnu99 -Wall -Wextra -Werror=uninitialized -O0 -g
 
 
 .PHONY: all clean install uninstall
@@ -128,7 +128,8 @@ synthio: LDLIBS += `$(PKG_CONFIG) --libs mpich` -L. -licc -Wl,--no-undefined,-rp
 writer: CPPFLAGS += `$(PKG_CONFIG) --cflags mpich`
 writer: LDLIBS += `$(PKG_CONFIG) --libs mpich` -L. -licc -Wl,--no-undefined,-rpath-link=${PREFIX}/lib
 
-# $(testapp_bin): CFLAGS += `$(PKG_CONFIG) --cflags mpi`
+scord_client: CPPFLAGS +=  `$(PKG_CONFIG) --cflags scord`
+scord_client: LDLIBS +=  `$(PKG_CONFIG) --libs scord` -Wl,--no-undefined,-rpath-link=${PREFIX}/lib
 
 # $(testapp_bin): CPPFLAGS += `$(PKG_CONFIG) --cflags mpi`
 # $(testapp_bin): LDLIBS += `$(PKG_CONFIG) --libs mpi margo` -L. -licc

@@ -95,7 +95,7 @@ main(int argc, char **argv)
 
     fputs("[IO-sets] IO phase begin\n", stderr); /* write to stderr to avoid buffering */
 
-    ret = icc_hint_io_begin(icc, witer, &nslices);
+    ret = icc_hint_io_begin(icc, witer, 1, &nslices);
     assert(ret == ICC_SUCCESS);
 
     fprintf(stderr, "[IO-sets] %u IO slice%s\n", nslices, nslices > 1 ? "s" : "");
@@ -104,7 +104,7 @@ main(int argc, char **argv)
     ret = icc_hint_io_end(icc, witer, 0);
     assert(ret == ICC_SUCCESS);
 
-    ret = icc_hint_io_begin(icc, witer, &nslices);
+    ret = icc_hint_io_begin(icc, witer, 0, &nslices);
     assert(ret == ICC_SUCCESS);
 
     fprintf(stderr, "[IO-sets] %u IO slice%s\n", nslices, nslices > 1 ? "s" : "");
