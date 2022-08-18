@@ -445,6 +445,7 @@ icc_hint_io_begin(struct icc_context *icc, unsigned long witer_ms, int isfirst, 
   in.jobstepid = icc->jobstepid;
   in.ioset_witer = (uint32_t)witer_ms;
   in.iterflag = isfirst ? 1 : 0;
+  in.nbytes = 0;
 
   /* make RPC by hand instead of using rpc_send() because of the
      custom return struct */
@@ -497,12 +498,17 @@ icc_hint_io_begin(struct icc_context *icc, unsigned long witer_ms, int isfirst, 
 
 
 iccret_t
-icc_hint_io_end(struct icc_context *icc, unsigned long witer_ms, int islast)
+icc_hint_io_end(struct icc_context *icc, unsigned long witer_ms, int islast, unsigned long long nbytes)
 {
   assert(icc);
 
   if (witer_ms > UINT32_MAX) {
-    margo_error(icc->mid, "icc (hint_io_begin): IO-set characteristic time is too big");
+    margo_error(icc->mid, "icc (hint_io_end): IO-set characteristic time is too big");
+    return ICC_FAILURE;
+  }
+
+  if (nbytes > UINT64_MAX) {
+    margo_error(icc->mid, "icc (hint_io_end): nbytes too big to serialize");
     return ICC_FAILURE;
   }
 
@@ -515,6 +521,7 @@ icc_hint_io_end(struct icc_context *icc, unsigned long witer_ms, int islast)
   in.jobstepid = icc->jobstepid;
   in.ioset_witer = (uint32_t)witer_ms;
   in.iterflag = islast ? 1 : 0;
+  in.nbytes = nbytes;
 
   rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_HINT_IO_END], &in, &rpcret, RPC_TIMEOUT_MS_DEFAULT);
   if (rc || rpcret) {

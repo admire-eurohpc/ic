@@ -169,7 +169,7 @@ iccret_t icc_hint_io_begin(struct icc_context *icc, unsigned long witer_ms,
  * characteristic time of the application in milliseconds. Set the
  * ISLAST flag if it is the last slice in an IO phase.
  */
-iccret_t icc_hint_io_end(struct icc_context *icc, unsigned long witer_ms, int islast);
+iccret_t icc_hint_io_end(struct icc_context *icc, unsigned long witer_ms, int islast, unsigned long long nbytes);
 
 
 /**

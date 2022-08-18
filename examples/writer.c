@@ -16,7 +16,7 @@
 #include <icc.h>
 
 
-#define NTOTAL_DEFAULT INT_MAX  /* (2Gi -1) */
+#define ITERSIZE_DEFAULT INT_MAX /* nbytes written in an iteration (2Gi -1) */
 #define NPHASES_DEFAULT 2UL
 #define NSLICES_TOTAL 4
 
@@ -53,8 +53,8 @@
     }                                                                   \
   }
 
-#define ICC_HINT_IO_END(rank,icc,witer,islast) if ((rank) == 0) {       \
-    if (icc_hint_io_end((icc), (unsigned)(witer), (islast))) {          \
+#define ICC_HINT_IO_END(rank,icc,witer,islast,nbytes) if ((rank) == 0) { \
+    if (icc_hint_io_end((icc), (unsigned)(witer), (islast), (nbytes))) { \
       fputs("icc_hint_io_end error\n", stderr);                         \
       MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);                          \
     }                                                                   \
@@ -73,7 +73,7 @@ int main(int argc, char *argv[])
   long int witer_s = 0;
   struct timespec witer = { 0 };
 
-  unsigned long ntotal = NTOTAL_DEFAULT;
+  unsigned long itersize = ITERSIZE_DEFAULT;
   unsigned long nphases = NPHASES_DEFAULT;
 
   static struct option longopts[] = {
@@ -97,7 +97,7 @@ int main(int argc, char *argv[])
       witer.tv_sec = witer_s;   /* assumes time_t is at least a long */
       break;
     case 's':
-      ntotal = strtoul(optarg, &endptr, 0);
+      itersize = strtoul(optarg, &endptr, 0);
       if (errno != 0 || endptr == optarg || *endptr != '\0') {
         fputs("Invalid argument: size\n", stderr);
         exit(EXIT_FAILURE);
@@ -146,7 +146,7 @@ int main(int argc, char *argv[])
 
   MPI_File_set_errhandler(fh, MPI_ERRORS_ARE_FATAL);
 
-  unsigned long nbytes = ntotal / (unsigned)nprocs;
+  unsigned long nbytes = itersize / (unsigned)nprocs;
 
   /* MPI takes an int number of elements, make sure we can cast safely */
   if (nbytes > INT_MAX) {
@@ -191,7 +191,17 @@ int main(int argc, char *argv[])
       TIMESPEC_DIFF_ACCUMULATE(end, start, res);
 
       if (nslices == 0) {
-        ICC_HINT_IO_END(rank, icc, witer.tv_sec, j == NSLICES_TOTAL - 1 ? 1 : 0);
+        int islast = 0;
+        unsigned long long nbytes = 0;
+        if (j == NSLICES_TOTAL - 1) { /* all slices have been written */
+          islast = 1;
+          nbytes = NSLICES_TOTAL * itersize; /* XX overflow */
+          if (nbytes < itersize) {
+            fprintf(stderr, "Number of bytes overflows\n");
+            nbytes = 0;
+          }
+        }
+        ICC_HINT_IO_END(rank, icc, witer.tv_sec, islast, nbytes);
       }
     }
 
