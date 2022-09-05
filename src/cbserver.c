@@ -736,7 +736,7 @@ hint_io_end_cb(hg_handle_t h)
     char appid[APPID_LEN];
     rc = ioset_appid(in.jobid, in.jobstepid, appid, APPID_LEN);
     if (rc) {
-      LOG_ERROR(mid, "Could compute application ID from %lu.%lu", in.jobid, in.jobstepid);
+      LOG_ERROR(mid, "Could not compute application ID from %lu.%lu", in.jobid, in.jobstepid);
       out.rc = RPC_FAILURE;
       goto respond;
     }
@@ -763,7 +763,6 @@ hint_io_end_cb(hg_handle_t h)
     if(fflush(data->ioset_outfile)) {
       LOG_ERROR(mid, "fflush IO-set result file: %s", strerror(errno));
     }
-
 
     ABT_rwlock_rdlock(data->iosets_lock);
     struct ioset *const *s = hm_get(data->iosets, iosetid);
