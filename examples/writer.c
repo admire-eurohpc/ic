@@ -16,8 +16,8 @@
 #include <icc.h>
 
 
-#define ITERSIZE_DEFAULT INT_MAX /* nbytes written in an iteration (2Gi -1) */
-#define NPHASES_DEFAULT 2UL
+#define DURATION_DEFAULT 200    /* total duration of the application in sec */
+#define IOSHARE_DEFAULT 20      /* percent of the characteristic time spent in IO */
 #define NSLICES_TOTAL 4
 
 #define TIMESPEC_DIFF(end,start,r) {                    \
@@ -63,7 +63,7 @@
 static void
 usage(char *name)
 {
-  fprintf(stderr, "Usage: %s --witer [--size --phases] FILEPATH\n", name);
+  fprintf(stderr, "Usage: %s --witer --bandwidth (MiB/s) [--duration (s) --ioshare(%%] FILEPATH\n", name);
 }
 
 
@@ -73,20 +73,22 @@ int main(int argc, char *argv[])
   long int witer_s = 0;
   struct timespec witer = { 0 };
 
-  unsigned long itersize = ITERSIZE_DEFAULT;
-  unsigned long nphases = NPHASES_DEFAULT;
+  long duration = DURATION_DEFAULT;
+  long bandwidth = 0;
+  long ioshare = IOSHARE_DEFAULT;
 
   static struct option longopts[] = {
-    { "witer",  required_argument, NULL, 'w' },
-    { "size",   required_argument, NULL, 's' },
-    { "phases", required_argument, NULL, 'n' },
-    { NULL,     0,                 NULL,  0  },
+    { "witer",     required_argument, NULL, 'w' },
+    { "duration",  required_argument, NULL, 'h' },
+    { "bandwdith", required_argument, NULL, 'b' },
+    { "ioshare",   required_argument, NULL, 'i' },
+    { NULL,        0,                 NULL,  0  },
   };
 
   int ch;
   char *endptr;
 
-  while ((ch = getopt_long(argc, argv, "w:s:n:", longopts, NULL)) != -1) {
+  while ((ch = getopt_long(argc, argv, "w:h:b:i:", longopts, NULL)) != -1) {
     switch (ch) {
     case 'w':
       witer_s = strtol(optarg, &endptr, 0);
@@ -96,17 +98,24 @@ int main(int argc, char *argv[])
       }
       witer.tv_sec = witer_s;   /* assumes time_t is at least a long */
       break;
-    case 's':
-      itersize = strtoul(optarg, &endptr, 0);
+    case 'h':
+      duration = strtol(optarg, &endptr, 0);
       if (errno != 0 || endptr == optarg || *endptr != '\0') {
-        fputs("Invalid argument: size\n", stderr);
+        fputs("Invalid argument: duration\n", stderr);
         exit(EXIT_FAILURE);
       }
       break;
-    case 'n':
-      nphases = strtoul(optarg, &endptr, 0);
+    case 'b':
+      bandwidth = strtol(optarg, &endptr, 0);
       if (errno != 0 || endptr == optarg || *endptr != '\0') {
-        fputs("Invalid argument: phases\n", stderr);
+        fputs("Invalid argument: bandwidth\n", stderr);
+        exit(EXIT_FAILURE);
+      }
+      break;
+    case 'i':
+      ioshare = strtol(optarg, &endptr, 0);
+      if (errno != 0 || endptr == optarg || *endptr != '\0') {
+        fputs("Invalid argument: ioshare\n", stderr);
         exit(EXIT_FAILURE);
       }
       break;
@@ -120,6 +129,16 @@ int main(int argc, char *argv[])
 
   if (witer.tv_sec <= 0) {
     fputs("Invalid argument: witer\n", stderr);
+    exit(EXIT_FAILURE);
+  }
+
+  if (bandwidth <= 0) {
+    fputs("Invalid argument: bandwidth\n", stderr);
+    exit(EXIT_FAILURE);
+  }
+
+  if (ioshare < 0 || ioshare > 100) {
+    fputs("Invalid argument: ioshare, percent between 0 and 100\n", stderr);
     exit(EXIT_FAILURE);
   }
 
@@ -146,20 +165,23 @@ int main(int argc, char *argv[])
 
   MPI_File_set_errhandler(fh, MPI_ERRORS_ARE_FATAL);
 
-  unsigned long nbytes = itersize / (unsigned)nprocs;
+  /* XX detect possible wrapping */
+  unsigned long long tmp = bandwidth * witer.tv_sec * ioshare / (nprocs * 100);
+  tmp *= 1024 * 1024;         /* to Mib */
 
   /* MPI takes an int number of elements, make sure we can cast safely */
-  if (nbytes > INT_MAX) {
-    fprintf(stderr, "Too many bytes to write (%lu)\n", nbytes);
+  if (tmp > INT_MAX || tmp > SIZE_MAX) {
+    fprintf(stderr, "Wrong number of bytes computed: %llu\n", tmp);
     MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   }
+  int nbytes = (int)tmp;
 
-  char *buf = malloc(nbytes);
+  char *buf = malloc((size_t)nbytes);
   if (!buf) {
     fputs("Out of memory\n", stderr);
     MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   }
-  memset(buf, rank, nbytes);
+  memset(buf, rank, (size_t)nbytes);
 
   /* only root rank talks to the IC */
   struct icc_context *icc;
@@ -171,7 +193,9 @@ int main(int argc, char *argv[])
     }
   }
 
-  for (unsigned int i = 0; i < nphases; i++) {
+  long int niter = duration / witer.tv_sec;
+
+  for (long int i = 0; i < niter; i++) {
     struct timespec start, end, res = { 0 };
     unsigned int nslices = 0;
 
@@ -192,16 +216,16 @@ int main(int argc, char *argv[])
 
       if (nslices == 0) {
         int islast = 0;
-        unsigned long long nbytes = 0;
+        long long nbytes_total = 0;
         if (j == NSLICES_TOTAL - 1) { /* all slices have been written */
           islast = 1;
-          nbytes = NSLICES_TOTAL * itersize; /* XX overflow */
-          if (nbytes < itersize) {
+          nbytes_total = NSLICES_TOTAL * nbytes * nprocs;
+          if (nbytes < NSLICES_TOTAL) {
             fprintf(stderr, "Number of bytes overflows\n");
             nbytes = 0;
           }
         }
-        ICC_HINT_IO_END(rank, icc, witer.tv_sec, islast, nbytes);
+        ICC_HINT_IO_END(rank, icc, witer.tv_sec, islast, (unsigned long long)nbytes_total);
       }
     }
 

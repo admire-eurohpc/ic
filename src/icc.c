@@ -440,6 +440,8 @@ icc_hint_io_begin(struct icc_context *icc, unsigned long witer_ms, int isfirst, 
     return ICC_FAILURE;
   }
 
+  int rc = ICC_SUCCESS;
+
   hint_io_in_t in;
   in.jobid = icc->jobid;
   in.jobstepid = icc->jobstepid;
@@ -477,6 +479,7 @@ icc_hint_io_begin(struct icc_context *icc, unsigned long witer_ms, int isfirst, 
   else {
     if (resp.rc != RPC_SUCCESS) {
       margo_error(icc->mid, "icc (hint_io_begin): RPC error: %d", resp.rc);
+      rc = ICC_FAILURE;
     } else {
       *nslices = resp.nslices;
     }
@@ -493,7 +496,7 @@ icc_hint_io_begin(struct icc_context *icc, unsigned long witer_ms, int isfirst, 
     return ICC_FAILURE;
   }
 
-  return ICC_SUCCESS;
+  return rc;
 }
 
 
