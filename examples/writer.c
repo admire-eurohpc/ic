@@ -60,6 +60,11 @@
     }                                                                   \
   }
 
+#define SAFE_LLMUL(a,b,res) if (__builtin_smulll_overflow(a, b, res)) { \
+      fputs("multiplication overflows\n", stderr);                      \
+      MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);                          \
+}
+
 static void
 usage(char *name)
 {
@@ -165,23 +170,26 @@ int main(int argc, char *argv[])
 
   MPI_File_set_errhandler(fh, MPI_ERRORS_ARE_FATAL);
 
-  /* XX detect possible wrapping */
-  unsigned long long tmp = bandwidth * witer.tv_sec * ioshare / (nprocs * 100);
-  tmp *= 1024 * 1024;         /* to Mib */
+  long long tmp;
+
+  SAFE_LLMUL(bandwidth, witer.tv_sec, &tmp);
+  SAFE_LLMUL(tmp, ioshare / 100, &tmp);
+  SAFE_LLMUL(tmp, 1048576, &tmp);     /* to Mib */
+  tmp /= nprocs;
 
   /* MPI takes an int number of elements, make sure we can cast safely */
-  if (tmp > INT_MAX || tmp > SIZE_MAX) {
+  if (tmp < 0 || tmp > INT_MAX || (unsigned long long)tmp > SIZE_MAX) {
     fprintf(stderr, "Wrong number of bytes computed: %llu\n", tmp);
     MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   }
-  int nbytes = (int)tmp;
+  int count = (int)tmp;
 
-  char *buf = malloc((size_t)nbytes);
+  char *buf = malloc((size_t)count);
   if (!buf) {
     fputs("Out of memory\n", stderr);
     MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   }
-  memset(buf, rank, (size_t)nbytes);
+  memset(buf, rank, (size_t)count);
 
   /* only root rank talks to the IC */
   struct icc_context *icc;
@@ -208,23 +216,21 @@ int main(int argc, char *argv[])
 
       TIMESPEC_GET(start);
 
-      MPI_File_write_shared(fh, buf, (int)nbytes, MPI_BYTE, MPI_STATUS_IGNORE);
+      MPI_File_write_shared(fh, buf, (int)count, MPI_BYTE, MPI_STATUS_IGNORE);
       nslices--;
 
       TIMESPEC_GET(end);
       TIMESPEC_DIFF_ACCUMULATE(end, start, res);
 
-      if (nslices == 0) {
+      if (nslices == 0 && j == NSLICES_TOTAL - 1) { /* all slices have been written */
         int islast = 0;
         long long nbytes_total = 0;
-        if (j == NSLICES_TOTAL - 1) { /* all slices have been written */
-          islast = 1;
-          nbytes_total = NSLICES_TOTAL * nbytes * nprocs;
-          if (nbytes < NSLICES_TOTAL) {
-            fprintf(stderr, "Number of bytes overflows\n");
-            nbytes = 0;
-          }
-        }
+        islast = 1;
+        nbytes_total = 0;
+
+        SAFE_LLMUL(NSLICES_TOTAL, count, &nbytes_total);
+        SAFE_LLMUL(nbytes_total, nprocs, &nbytes_total);
+
         ICC_HINT_IO_END(rank, icc, witer.tv_sec, islast, (unsigned long long)nbytes_total);
       }
     }
