@@ -427,7 +427,7 @@ icc_reconfig_pending(struct icc_context *icc, enum icc_reconfig_type *reconfigty
 
 
 iccret_t
-icc_hint_io_begin(struct icc_context *icc, unsigned long witer_ms, int isfirst, unsigned int *nslices)
+icc_hint_io_begin(struct icc_context *icc, unsigned long witer, int isfirst, unsigned int *nslices)
 {
   assert(icc);
 
@@ -435,7 +435,7 @@ icc_hint_io_begin(struct icc_context *icc, unsigned long witer_ms, int isfirst, 
     return ICC_EINVAL;
   }
 
-  if (witer_ms > UINT32_MAX) {
+  if (witer > UINT32_MAX) {
     margo_error(icc->mid, "icc (hint_io_begin): IO-set characteristic time is too big");
     return ICC_FAILURE;
   }
@@ -445,7 +445,7 @@ icc_hint_io_begin(struct icc_context *icc, unsigned long witer_ms, int isfirst, 
   hint_io_in_t in;
   in.jobid = icc->jobid;
   in.jobstepid = icc->jobstepid;
-  in.ioset_witer = (uint32_t)witer_ms;
+  in.ioset_witer = (uint32_t)witer;
   in.iterflag = isfirst ? 1 : 0;
   in.nbytes = 0;
 
@@ -501,11 +501,11 @@ icc_hint_io_begin(struct icc_context *icc, unsigned long witer_ms, int isfirst, 
 
 
 iccret_t
-icc_hint_io_end(struct icc_context *icc, unsigned long witer_ms, int islast, unsigned long long nbytes)
+icc_hint_io_end(struct icc_context *icc, unsigned long witer, int islast, unsigned long long nbytes)
 {
   assert(icc);
 
-  if (witer_ms > UINT32_MAX) {
+  if (witer > UINT32_MAX) {
     margo_error(icc->mid, "icc (hint_io_end): IO-set characteristic time is too big");
     return ICC_FAILURE;
   }
@@ -522,7 +522,7 @@ icc_hint_io_end(struct icc_context *icc, unsigned long witer_ms, int islast, uns
 
   in.jobid = icc->jobid;
   in.jobstepid = icc->jobstepid;
-  in.ioset_witer = (uint32_t)witer_ms;
+  in.ioset_witer = (uint32_t)witer;
   in.iterflag = islast ? 1 : 0;
   in.nbytes = nbytes;
 

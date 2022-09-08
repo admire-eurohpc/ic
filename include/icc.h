@@ -151,8 +151,8 @@ int icc_release_nodes(struct icc_context *icc);
 
 
 /**
- * Inform the IC of the beginning of an IO slice. WITER_MS is the
- * IO-set characteristic time of the application, in milliseconds.
+ * Inform the IC of the beginning of an IO slice. WITE is the
+ * IO-set characteristic time of the application, in seconds.
  *
  * Set the ISFIRST flag if it is the first slice in an IO phase.
 
@@ -160,16 +160,16 @@ int icc_release_nodes(struct icc_context *icc);
  * setting NSLICES to the number of slices the application is allowed
  * to write before having to ask for permission again.
  */
-iccret_t icc_hint_io_begin(struct icc_context *icc, unsigned long witer_ms,
+iccret_t icc_hint_io_begin(struct icc_context *icc, unsigned long witer,
                            int isfirst, unsigned int *nslices);
 
 
 /**
- * Inform the IC of the end of an IO slice. WITER_MS is the IO-set
- * characteristic time of the application in milliseconds. Set the
+ * Inform the IC of the end of an IO slice. WITER is the IO-set
+ * characteristic time of the application in seconds. Set the
  * ISLAST flag if it is the last slice in an IO phase.
  */
-iccret_t icc_hint_io_end(struct icc_context *icc, unsigned long witer_ms, int islast, unsigned long long nbytes);
+iccret_t icc_hint_io_end(struct icc_context *icc, unsigned long witer, int islast, unsigned long long nbytes);
 
 
 /**

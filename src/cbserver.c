@@ -457,19 +457,19 @@ DEFINE_MARGO_RPC_HANDLER(malleability_region_cb);
 
 /**
  * Compute the IO-set ID corresponding to a characteristic time of
- * WITER_MS milliseconds.
+ * WITER seconds.
  */
 static int
-ioset_id(unsigned long witer_ms, char *iosetid, size_t len) {
+ioset_id(unsigned long witer, char *iosetid, size_t len) {
   unsigned int n;
   long round;
 
   /* XX TODO handle errors */
-  /* double sec = witer_ms/1000.0; */
+  /* double sec = witer/1000.0; */
   /* double a = log10(sec); */
   /* double b = lround(a); */
 
-  round = lround(log10(witer_ms/1000.0));
+  round = lround(log10(witer));
 
   n = snprintf(iosetid, len, "%ld", round);
   if (n >= len) {            /* output truncated */
@@ -480,8 +480,8 @@ ioset_id(unsigned long witer_ms, char *iosetid, size_t len) {
 }
 
 static double
-ioset_prio(unsigned long witer_ms) {
-  return pow(10, -lround(log10(witer_ms/1000.0)));
+ioset_prio(unsigned long witer) {
+  return pow(10, -lround(log10(witer)));
 }
 
 static double
