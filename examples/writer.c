@@ -224,14 +224,15 @@ int main(int argc, char *argv[])
       TIMESPEC_GET(end);
       TIMESPEC_DIFF_ACCUMULATE(end, start, res);
 
-      if (nslices == 0 && j == NSLICES_TOTAL - 1) { /* all slices have been written */
+      if (nslices == 0) { /* all slices have been written */
         int islast = 0;
         long long nbytes_total = 0;
-        islast = 1;
-        nbytes_total = 0;
 
-        SAFE_LLMUL(NSLICES_TOTAL, count, &nbytes_total);
-        SAFE_LLMUL(nbytes_total, nprocs, &nbytes_total);
+        if (j == NSLICES_TOTAL - 1) {
+          islast = 1;
+          SAFE_LLMUL(NSLICES_TOTAL, count, &nbytes_total);
+          SAFE_LLMUL(nbytes_total, nprocs, &nbytes_total);
+        }
 
         ICC_HINT_IO_END(rank, icc, witer.tv_sec, islast, (unsigned long long)nbytes_total);
       }
