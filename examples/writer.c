@@ -173,23 +173,25 @@ int main(int argc, char *argv[])
   long long tmp;
 
   SAFE_LLMUL(bandwidth, witer.tv_sec, &tmp);
-  SAFE_LLMUL(tmp, ioshare / 100, &tmp);
+  SAFE_LLMUL(tmp, ioshare, &tmp);
+  tmp /= 100;                         /* ioshare is % */
   SAFE_LLMUL(tmp, 1048576, &tmp);     /* to Mib */
   tmp /= nprocs;
+  tmp /= sizeof(long);
 
   /* MPI takes an int number of elements, make sure we can cast safely */
   if (tmp < 0 || tmp > INT_MAX || (unsigned long long)tmp > SIZE_MAX) {
     fprintf(stderr, "Wrong number of bytes computed: %llu\n", tmp);
     MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   }
-  int count = (int)tmp;
 
-  char *buf = malloc((size_t)count);
+  int count = (int)tmp;
+  char *buf = reallocarray(NULL, (size_t)count, sizeof(long));
   if (!buf) {
-    fputs("Out of memory\n", stderr);
+    fputs("memory allocation error\n", stderr);
     MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   }
-  memset(buf, rank, (size_t)count);
+  memset(buf, rank, (size_t)count * sizeof(long));   /* mult was checked by reallocarray already */
 
   /* only root rank talks to the IC */
   struct icc_context *icc;
@@ -216,7 +218,7 @@ int main(int argc, char *argv[])
 
       TIMESPEC_GET(start);
 
-      MPI_File_write_shared(fh, buf, (int)count, MPI_BYTE, MPI_STATUS_IGNORE);
+      MPI_File_write_shared(fh, buf, (int)count, MPI_LONG, MPI_STATUS_IGNORE);
       nslices--;
 
       TIMESPEC_GET(end);
