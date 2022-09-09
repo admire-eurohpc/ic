@@ -214,11 +214,13 @@ int main(int argc, char *argv[])
         ICC_HINT_IO_BEGIN(rank, icc, witer.tv_sec, j == 0, &nslices);
         nslices = nslices > NSLICES_TOTAL ? NSLICES_TOTAL : nslices;
       }
-      MPI_Barrier(MPI_COMM_WORLD); /* wait for authorization from root rank */
+      /* rewind file pointer + collective: wait for authorization from root rank */
+      MPI_File_seek_shared(fh, 0, MPI_SEEK_SET);
 
       TIMESPEC_GET(start);
 
       MPI_File_write_shared(fh, buf, (int)count, MPI_LONG, MPI_STATUS_IGNORE);
+
       nslices--;
 
       TIMESPEC_GET(end);
