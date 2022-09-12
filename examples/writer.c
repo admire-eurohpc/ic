@@ -177,7 +177,7 @@ int main(int argc, char *argv[])
   tmp /= 100;                         /* ioshare is % */
   SAFE_LLMUL(tmp, 1048576, &tmp);     /* to Mib */
   tmp /= nprocs;
-  tmp /= sizeof(long);
+  tmp /= (ssize_t)sizeof(long);
 
   /* MPI takes an int number of elements, make sure we can cast safely */
   if (tmp < 0 || tmp > INT_MAX || (unsigned long long)tmp > SIZE_MAX) {
