@@ -39,16 +39,17 @@ icc_server_bin := icc_server
 icc_client_bin := icc_client
 icc_jobcleaner_bin := icc_jobcleaner
 
+libslurmadmcli_so := libslurmadmcli.so
 libslurmadhoccli_so := libslurmadhoccli.so
 libslurmjobmon_so := libslurmjobmon.so
 testapp_bin := testapp
 
 sources := hashmap.c server.c rpc.c cb.c cbcommon.c icdb.c icrm.c icc.c flexmpi.c
-sources += slurmjobmon.c slurmadhoccli.c jobcleaner.c
+sources += slurmadmcli.c slurmjobmon.c slurmadhoccli.c jobcleaner.c
 sources += client.c testapp.c spawn.c synthio.c writer.c
 
 # keep libicc in front
-binaries := $(libicc_so) server client jobcleaner $(libslurmjobmon_so) $(libslurmadhoccli_so) spawn synthio writer
+binaries := $(libicc_so) server client jobcleaner $(libslurmadmcli_so) $(libslurmjobmon_so) $(libslurmadhoccli_so) spawn synthio writer
 
 objects := $(sources:.c=.o)
 depends := $(sources:.c=.d)
@@ -137,10 +138,13 @@ scord_client: LDLIBS +=  `$(PKG_CONFIG) --libs scord` -Wl,--no-undefined,-rpath-
 # $(testapp_bin): CPPFLAGS += `$(PKG_CONFIG) --cflags mpi`
 # $(testapp_bin): LDLIBS += `$(PKG_CONFIG) --libs mpi margo` -L. -licc
 
-slurmjobmon.o slurmadhoccli.o: CPPFLAGS += $(CPPFLAGS_SLURM)
+slurmjobmon.o slurmadhoccli.o slurmadmcli.o: CPPFLAGS += $(CPPFLAGS_SLURM)
 
 # cannot use -Wl,--no-undefined here because some Spank symbols in
 # libslurm have LOCAL binding
-$(libslurmjobmon_so) $(libslurmadhoccli_so): LDLIBS += $(LIBS_SLURM) -L. -licc
+$(libslurmjobmon_so) $(libslurmadhoccli_so) : LDLIBS += $(LIBS_SLURM) -L. -licc
+
+$(libslurmadmcli_so): CPPFLAGS += `$(PKG_CONFIG) --cflags scord`
+$(libslurmadmcli_so): LDLIBS += `$(PKG_CONFIG) --libs scord` $(LIBS_SLURM)
 
 -include $(depends)
