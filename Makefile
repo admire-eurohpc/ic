@@ -1,12 +1,15 @@
 CC := gcc
 
-PREFIX ?=/usr/local
+PREFIX ?=$(HOME)/.local
+PKG_CONFIG_PATH := $(PREFIX)/lib/pkgconfig
 INSTALL_PATH_LIB := $(PREFIX)/lib
 INSTALL_PATH_BIN := $(PREFIX)/bin
 INSTALL_PATH_INCLUDE := $(PREFIX)/include
 INSTALL := install
 MKDIR_P := mkdir -p
 PKG_CONFIG ?= pkg-config
+
+export PKG_CONFIG_PATH
 
 includedir := include
 sourcedir := src
@@ -18,11 +21,11 @@ ICC_MAJOR := $(shell grep ICC_MAJOR $(includedir)/$(icc_header) | awk '{print $$
 ICC_MINOR := $(shell grep ICC_MINOR $(includedir)/$(icc_header) | awk '{print $$3}')
 
 # Use Slurm .pc if possible, fallback to default include/lib dirs
-PKG_CONFIG_SLURM != PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) $(PKG_CONFIG) --exists slurm
+PKG_CONFIG_SLURM != $(PKG_CONFIG) --exists slurm
 
 ifeq ($(.SHELLSTATUS),0)
-CPPFLAGS_SLURM != PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) $(PKG_CONFIG) --cflags slurm
-LIBS_SLURM != PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) $(PKG_CONFIG) --libs slurm
+CPPFLAGS_SLURM != $(PKG_CONFIG) --cflags slurm
+LIBS_SLURM != $(PKG_CONFIG) --libs slurm
 else
 CPPFLAGS_SLURM :=
 LIBS_SLURM := -lslurm
