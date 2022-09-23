@@ -1,5 +1,4 @@
 #include <errno.h>
-#include <inttypes.h>			/* PRId32 */
 #include <stdint.h>				/* uint32_t, etc. */
 #include <stdlib.h>				/* strtoul */
 #include <string.h>				/* strchr, strncmp, strncpy */
@@ -9,23 +8,15 @@
 
 /**
  * Slurm SPANK plugin to handle the ADMIRE adhoc storage CLI. Options are
- * forwarded to scord on running srun. See the struct spank_option for the
- * list of options.
+ * forwarded to scord on srun, salloc and sbatch. See the struct spank_option
+ * for the list of options.
  *
  * Notes:
- * - --adm-adhoc-context could be renamed to adm-adhoc-mode
- * - --adm-adhoc-context-id will be truncated to ADHOCID_LEN characters
- *   including NULL byte
- * - add a default wall time equal to the job's?
- * - missing options adhoc_access_type and adhoc_should_flush,
- *   adhoc_storage_type, adm_input/output
- * - the ADM_job_t handle is not used, need a version that does not set it?
- * - should the storage ID be an arbitrary string? jobid.jobstepid?
- * - RPCs to scord should have a timeout to avoid blocking srun/salloc
- *
+ * - --adm-adhoc-context-id will be silently truncated to ADHOCID_LEN
+ *   characters, including NULL byte
  **/
 
-#define ADHOCID_LEN  128
+#define ADHOCID_LEN    64
 
 #define TAG_NNODES     1
 #define TAG_WALLTIME   2
@@ -47,8 +38,8 @@ static int process_opts(int val, const char *optarg, int remote);
 struct spank_option spank_opts [] = {
 	{
 		"adm-adhoc-nodes",
-		"[nbnodes]",
-		"Dedicate [nbnodes] to the ad-hoc storage",
+		"[nnodes]",
+		"Dedicate [nnodes] to the ad-hoc storage",
 		1,                           /* option takes an argument */
 		TAG_NNODES,                  /* option tag */
 		(spank_opt_cb_f)process_opts /* callback  */
@@ -96,7 +87,13 @@ process_opts(int tag, const char *optarg, int remote)
 	if (tag == TAG_NNODES || tag == TAG_WALLTIME) {
 		unsigned long tmp;
 		char *endptr;
+		errno = 0;
+
 		tmp = strtoul(optarg, &endptr, 0);
+		if (errno != 0 || endptr == optarg || *endptr != '\0' ||
+			tmp <= 0 || tmp > UINT32_MAX) {
+			return -1;
+		}
 
 		if (tag == TAG_NNODES) {
 			adhoc_nnodes = (uint32_t)tmp;
@@ -105,10 +102,6 @@ process_opts(int tag, const char *optarg, int remote)
 			adhoc_walltime = (uint32_t)tmp;
 		}
 
-		if (errno != 0 || endptr == optarg || *endptr != '\0' ||
-			tmp <= 0 || tmp > UINT32_MAX) {
-			return -1;
-		}
 		return 0;
 	}
 
