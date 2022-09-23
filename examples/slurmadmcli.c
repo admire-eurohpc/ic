@@ -16,7 +16,9 @@
  *   characters, including NULL byte
  **/
 
-#define ADHOCID_LEN    64
+#define SCORD_SERVER_DEFAULT "ofi+tcp://127.0.0.1:52000"
+#define SCORD_PROTO_DEFAULT  "ofi+tcp"
+#define ADHOCID_LEN  64
 
 #define TAG_NNODES     1
 #define TAG_WALLTIME   2
@@ -178,8 +180,22 @@ slurm_spank_init_post_opt(spank_t sp, int ac, char **av)
 	if (!scord_flag)
 		return 0;
 
+	const char *scord_addr = SCORD_SERVER_DEFAULT;
+	const char *scord_proto = SCORD_PROTO_DEFAULT;
+
+	for (int i = 0; i < ac; i++) {
+		if (!strncmp ("scord_addr=", av[i], 11)) {
+			scord_addr = av[i] + 11;
+		} else if (!strncmp ("scord_proto=", av[i], 12)) {
+			scord_proto = av[i] + 12;
+		} else {
+			slurm_error("slurmadmcli: invalid option: %s", av[i]);
+			return -1;
+		}
+	}
+
 	ADM_server_t scord_server;
-	scord_server = ADM_server_create("ofi+tcp://127.0.0.1", "ofi+tcp://127.0.0.1:52000");
+	scord_server = ADM_server_create(scord_proto, scord_addr);
 	if (!scord_server) {
 		slurm_error("failed scord server creation");
 		rc = -1;
