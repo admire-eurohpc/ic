@@ -758,12 +758,12 @@ _setup_reconfigure(struct icc_context *icc, icc_reconfigure_func_t func, void *d
 
   if (icc->type == ICC_TYPE_FLEXMPI && !func) {
     /* XX TMP: dlsym FlexMPI reconfiguration function... */
-    icc->flexmpi_func = flexmpi_func(icc->mid, &icc->flexhandle);
+    icc->flexmpi_func = icc_flexmpi_func(icc->mid, &icc->flexhandle);
     if (!icc->flexmpi_func) {
       margo_info(icc->mid, "No FlexMPI reconfigure function, falling back to socket");
       /* ...or init socket to FlexMPI app */
       icc->flexmpi_sock = -1;
-      icc->flexmpi_sock = flexmpi_socket(icc->mid, "localhost", "6666");
+      icc->flexmpi_sock = icc_flexmpi_socket(icc->mid, "localhost", "6666");
       if (icc->flexmpi_sock == -1) {
         margo_error(icc->mid, "%s: Could not initialize FlexMPI socket", __func__);
         return ICC_FAILURE;

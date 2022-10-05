@@ -19,7 +19,7 @@ static ABT_mutex_memory mutexmem = ABT_MUTEX_INITIALIZER;
 
 
 int
-flexmpi_socket(margo_instance_id mid, const char *node, const char *service)
+icc_flexmpi_socket(margo_instance_id mid, const char *node, const char *service)
 {
   /* node = "localhost", service = "7670" */
   struct addrinfo hints, *res, *p;
@@ -60,7 +60,7 @@ flexmpi_socket(margo_instance_id mid, const char *node, const char *service)
 
 
 flexmpi_reconfigure_t
-flexmpi_func(margo_instance_id mid, void **handle)
+icc_flexmpi_func(margo_instance_id mid, void **handle)
 {
   flexmpi_reconfigure_t func;
 
@@ -80,8 +80,8 @@ flexmpi_func(margo_instance_id mid, void **handle)
 
 
 int
-flexmpi_reconfigure(margo_instance_id mid, uint32_t maxprocs,
-                    const char *hostlist __attribute__((unused)),
+icc_flexmpi_reconfigure(margo_instance_id mid, uint32_t maxprocs,
+                    const char *hostlist,
                     flexmpi_reconfigure_t flexmpifunc, int flexmpisock)
 {
   ABT_mutex mutex;

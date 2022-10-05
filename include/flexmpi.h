@@ -13,7 +13,7 @@ typedef int (*flexmpi_reconfigure_t)(const char *); /* signature of the reconfig
  *
  * Return a socket descriptor or -1 in case of error.
  */
-int flexmpi_socket(margo_instance_id mid, const char *node, const char *service);
+int icc_flexmpi_socket(margo_instance_id mid, const char *node, const char *service);
 
 
 /**
@@ -23,7 +23,7 @@ int flexmpi_socket(margo_instance_id mid, const char *node, const char *service)
  * Return a pointer to the function or NULL in case of error. The
  * dlopen handle is also returned in HANDLE.
  */
-flexmpi_reconfigure_t flexmpi_func(margo_instance_id mid, void **handle);
+flexmpi_reconfigure_t icc_flexmpi_func(margo_instance_id mid, void **handle);
 
 /**
  * Reconfigure a FlexMPI application by adding or removing MAXPROCS,
@@ -33,6 +33,6 @@ flexmpi_reconfigure_t flexmpi_func(margo_instance_id mid, void **handle);
  * Return the result of FLEXMPIFUNC or -1. XX no difference between a
  * socket use and an error.
  */
-int flexmpi_reconfigure(margo_instance_id mid, uint32_t maxprocs, const char *hostlist, flexmpi_reconfigure_t flexmpifunc, int flexmpisock);
+int icc_flexmpi_reconfigure(margo_instance_id mid, uint32_t maxprocs, const char *hostlist, flexmpi_reconfigure_t flexmpifunc, int flexmpisock);
 
 #endif

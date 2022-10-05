@@ -56,7 +56,11 @@ reconfigure_cb(hg_handle_t h)
   int rc;
 
   mid = margo_hg_handle_get_instance(h);
-  assert(mid);
+  if (!mid) {
+    out.rc = RPC_FAILURE;
+    margo_error(mid, "Error getting Margo instance");
+    goto respond;
+  }
 
   out.rc = RPC_SUCCESS;
 
@@ -80,7 +84,7 @@ reconfigure_cb(hg_handle_t h)
   if (icc->reconfig_func) {
     rc = icc->reconfig_func(0, in.maxprocs, in.hostlist, icc->reconfig_data);
   } else if (icc->type == ICC_TYPE_FLEXMPI ) {
-    rc = flexmpi_reconfigure(mid, in.maxprocs, in.hostlist, icc->flexmpi_func, icc->flexmpi_sock);
+    rc = icc_flexmpi_reconfigure(mid, in.maxprocs, in.hostlist, icc->flexmpi_func, icc->flexmpi_sock);
   } else {
     rc = RPC_FAILURE;
   }
