@@ -390,7 +390,7 @@ malleability_th(void *arg)
           /* XX TMP test resalloc */
           resalloc_in_t allocin;
           allocin.shrink = 0;
-          allocin.ncpus = 3;
+          allocin.ncpus = 6;
 
           sleep(4);
 
