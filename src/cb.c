@@ -84,7 +84,7 @@ reconfigure_cb(hg_handle_t h)
   if (icc->reconfig_func) {
     rc = icc->reconfig_func(0, in.maxprocs, in.hostlist, icc->reconfig_data);
   } else if (icc->type == ICC_TYPE_FLEXMPI ) {
-    rc = icc_flexmpi_reconfigure(mid, in.maxprocs, in.hostlist, icc->flexmpi_func, icc->flexmpi_sock);
+    rc = icc_flexmpi_reconfigure(mid, 0, in.maxprocs, in.hostlist, icc->flexmpi_func, icc->flexmpi_sock);
   } else {
     rc = RPC_FAILURE;
   }
@@ -144,6 +144,9 @@ resalloc_cb(hg_handle_t h)
     if (icc->reconfig_func) {
       /* call callback immediately if available */
       ret = icc->reconfig_func(in.shrink, in.ncpus, NULL, icc->reconfig_data);
+      out.rc = ret ? RPC_FAILURE : RPC_SUCCESS;
+    } else if (icc->type == ICC_TYPE_FLEXMPI) {
+      ret = icc_flexmpi_reconfigure(icc->mid, in.shrink, in.ncpus, NULL, icc->flexmpi_func, icc->flexmpi_sock);
       out.rc = ret ? RPC_FAILURE : RPC_SUCCESS;
     } else {
       /* set flag to be polled later otherwise */
@@ -212,16 +215,16 @@ alloc_th(struct alloc_args *args)
   /* allocation request: blocking call */
   hm_t *newalloc;
   char icrmerr[ICC_ERRSTR_LEN];
-  icrmerr_t ret = icrm_alloc(icc->jobid, &newjobid, &in.ncpus, &newalloc,
+  icrmerr_t icrmret = icrm_alloc(icc->jobid, &newjobid, &in.ncpus, &newalloc,
                              icrmerr);
-  if (ret != ICRM_SUCCESS) {
+  if (icrmret != ICRM_SUCCESS) {
     margo_error(icc->mid, "icrm_alloc error: %s", icrmerr);
     goto end;
   }
 
   in.hostlist = icrm_hostlist(newalloc, 1, NULL);
   if (!in.hostlist) {
-    ret = ICRM_ENOMEM;
+    icrmret = ICRM_ENOMEM;
     margo_error(icc->mid, "icrm_hostlist error: out of memory");
     goto end;
   }
@@ -232,22 +235,22 @@ alloc_th(struct alloc_args *args)
      hostmap needs to be updated atomically */
   ABT_rwlock_wrlock(icc->hostlock);
 
-  ret = icrm_merge(newjobid, icrmerr);
-  if (ret != ICRM_SUCCESS) {
+  icrmret = icrm_merge(newjobid, icrmerr);
+  if (icrmret != ICRM_SUCCESS) {
     margo_error(icc->mid, "icrm_renounce error: %s", icrmerr);
     goto end;
   }
 
   /* add new resources to hostalloc */
-  ret = icrm_update_hostmap(icc->hostalloc, newalloc);
-  if (ret == ICRM_EOVERFLOW) {
+  icrmret = icrm_update_hostmap(icc->hostalloc, newalloc);
+  if (icrmret == ICRM_EOVERFLOW) {
     margo_error(icc->mid, "Too many CPUs allocated");
     ABT_rwlock_unlock(icc->hostlock);
     goto end;
   }
 
-  ret = icrm_update_hostmap(icc->reconfigalloc, newalloc);
-  if (ret == ICRM_EOVERFLOW) {
+  icrmret = icrm_update_hostmap(icc->reconfigalloc, newalloc);
+  if (icrmret == ICRM_EOVERFLOW) {
     margo_error(icc->mid, "Too many CPUs allocated");
     ABT_rwlock_unlock(icc->hostlock);
     goto end;
@@ -257,9 +260,9 @@ alloc_th(struct alloc_args *args)
 
   /* inform the IC that the allocation succeeded */
   int rpcret = RPC_SUCCESS;
-  int iccret = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_RESALLOCDONE],
+  int ret = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_RESALLOCDONE],
                         &in, &rpcret, RPC_TIMEOUT_MS_DEFAULT);
-  if (iccret != ICC_SUCCESS) {
+  if (ret != ICC_SUCCESS) {
     margo_error(icc->mid, "Error sending RPC_RESALLOCDONE");
     goto end;
   }
@@ -271,7 +274,9 @@ alloc_th(struct alloc_args *args)
     if (icc->reconfig_func) {
       /* call callback immediately if available */
       margo_debug(icc->mid, "Job %"PRIu32": reconfiguring", in.jobid);
-      iccret = icc->reconfig_func(0, in.ncpus, in.hostlist, icc->reconfig_data);
+      ret = icc->reconfig_func(0, in.ncpus, in.hostlist, icc->reconfig_data);
+    } else if (icc->type == ICC_TYPE_FLEXMPI) {
+      ret = icc_flexmpi_reconfigure(icc->mid, 0, in.ncpus, in.hostlist, icc->flexmpi_func, icc->flexmpi_sock);
     } else {
       /* set flag to be polled later otherwise */
       ABT_rwlock_wrlock(icc->hostlock);

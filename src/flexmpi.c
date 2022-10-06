@@ -80,9 +80,9 @@ icc_flexmpi_func(margo_instance_id mid, void **handle)
 
 
 int
-icc_flexmpi_reconfigure(margo_instance_id mid, uint32_t maxprocs,
-                    const char *hostlist,
-                    flexmpi_reconfigure_t flexmpifunc, int flexmpisock)
+icc_flexmpi_reconfigure(margo_instance_id mid,
+                        int shrink, uint32_t maxprocs, const char *hostlist,
+                        flexmpi_reconfigure_t flexmpifunc, int flexmpisock)
 {
   ABT_mutex mutex;
   int nbytes;
@@ -99,7 +99,7 @@ icc_flexmpi_reconfigure(margo_instance_id mid, uint32_t maxprocs,
 
   /* try pointer to FlexMPI reconfiguration function */
   if (flexmpifunc) {
-    return flexmpifunc(cmd);
+    return flexmpifunc(shrink, maxprocs, hostlist, NULL);
   }
 
   /* no FlexMPI function pointer, fallback to socket control */

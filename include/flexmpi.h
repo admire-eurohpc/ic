@@ -4,7 +4,7 @@
 #include <margo.h>
 
 
-typedef int (*flexmpi_reconfigure_t)(const char *); /* signature of the reconfigure func */
+typedef int (*flexmpi_reconfigure_t)(int shrink, uint32_t maxprocs, const char *hostlist, void *data); /* signature of the reconfigure func */
 
 
 /**
@@ -33,6 +33,6 @@ flexmpi_reconfigure_t icc_flexmpi_func(margo_instance_id mid, void **handle);
  * Return the result of FLEXMPIFUNC or -1. XX no difference between a
  * socket use and an error.
  */
-int icc_flexmpi_reconfigure(margo_instance_id mid, uint32_t maxprocs, const char *hostlist, flexmpi_reconfigure_t flexmpifunc, int flexmpisock);
+int icc_flexmpi_reconfigure(margo_instance_id mid, int shrink, uint32_t maxprocs, const char *hostlist, flexmpi_reconfigure_t flexmpifunc, int flexmpisock);
 
 #endif

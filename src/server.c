@@ -356,7 +356,8 @@ malleability_th(void *arg)
         break;
       }
 
-      if (!strncmp(clients[i].type, "flexmpi", ICC_TYPE_LEN)) {
+      /* XX Disable FlexMPI intra node stuff, delete at some point */
+      if (0 && strncmp(clients[i].type, "flexmpi", ICC_TYPE_LEN) == 0) {
         long long dprocs = job.ncpus / nclients - clients[i].nprocs;
 
         if (dprocs < INT32_MIN || dprocs > INT32_MAX) {
@@ -381,7 +382,10 @@ malleability_th(void *arg)
             LOG_ERROR(data->mid, "IC database failure: %s", icdb_errstr(icdb));
           }
         }
-      } else if (!strncmp(clients[i].type, "mpi", ICC_TYPE_LEN)) {
+      }
+
+      if (strncmp(clients[i].type, "flexmpi", ICC_TYPE_LEN) ==  0||
+          strncmp(clients[i].type, "mpi", ICC_TYPE_LEN == 0)) {
 
           /* XX TMP test resalloc */
           resalloc_in_t allocin;
