@@ -1,5 +1,5 @@
 #include <errno.h>
-#include <stdint.h>				/* uint32_t, etc. */
+#include <stdint.h>				/* SIZE_MAX, uint32_t, etc. */
 #include <stdlib.h>				/* strtoul, getenv */
 #include <string.h>				/* strchr, strncmp, strncpy */
 #include <slurm/slurm.h>
@@ -31,8 +31,8 @@ SPANK_PLUGIN (admire-cli, 1)
 static int scord_flag = 0;
 
 /* scord adhoc options */
-static uint32_t adhoc_nnodes = 0;
-static uint32_t adhoc_walltime = 0;
+static long adhoc_nnodes = 0;
+static long adhoc_walltime = 0;
 static ADM_adhoc_mode_t adhoc_mode = 0;
 static char adhoc_context_id[ADHOCID_LEN] = { 0 };
 
@@ -88,21 +88,20 @@ process_opts(int tag, const char *optarg, int remote)
 	scord_flag = 1;
 
 	if (tag == TAG_NNODES || tag == TAG_WALLTIME) {
-		unsigned long tmp;
+		long tmp;
 		char *endptr;
 		errno = 0;
 
-		tmp = strtoul(optarg, &endptr, 0);
-		if (errno != 0 || endptr == optarg || *endptr != '\0' ||
-			tmp <= 0 || tmp > UINT32_MAX) {
+		tmp = strtol(optarg, &endptr, 0);
+		if (errno != 0 || endptr == optarg || *endptr != '\0' || tmp <= 0) {
 			return -1;
 		}
 
 		if (tag == TAG_NNODES) {
-			adhoc_nnodes = (uint32_t)tmp;
+			adhoc_nnodes = tmp;
 		}
 		if (tag == TAG_WALLTIME) {
-			adhoc_walltime = (uint32_t)tmp;
+			adhoc_walltime = tmp;
 		}
 
 		return 0;
@@ -147,7 +146,7 @@ process_opts(int tag, const char *optarg, int remote)
 	return 0;
 }
 
-int
+static int
 scord_register_job(const char *scord_proto, const char *scord_addr, const char *nodelist)
 {
 	int rc = 0;
@@ -160,7 +159,7 @@ scord_register_job(const char *scord_proto, const char *scord_addr, const char *
 		goto end;
 	}
 
-	/* create list of nodes */
+	/* list of job nodes */
 	hostlist_t hl = slurm_hostlist_create(nodelist);
 	if (!hl) {
 		slurm_error("slurmadmcli: slurm_hostlist creation failed");
@@ -169,6 +168,11 @@ scord_register_job(const char *scord_proto, const char *scord_addr, const char *
 	}
 
 	int nnodes = slurm_hostlist_count(hl);
+	if (nnodes <= 0) {
+		slurm_error("slurmadmcli: wrong slurm_hostlist count");
+		rc = -1;
+		goto end;
+	}
 
 	ADM_node_t *nodes = reallocarray(NULL, nnodes, sizeof(ADM_node_t));
 	if (!nodes) {
@@ -189,19 +193,19 @@ scord_register_job(const char *scord_proto, const char *scord_addr, const char *
 		i++;
 	}
 
-	ADM_adhoc_resources_t adhoc_resources;
-	adhoc_resources = ADM_adhoc_resources_create(nodes, nnodes);
-	if (!adhoc_resources) {
-		slurm_error("slurmadmcli: adhoc_resources creation failed");
-		rc = -1;
-		goto end;
-	}
-
-	/* XX for now job_resources = adhoc_resources */
 	ADM_job_resources_t job_resources;
 	job_resources = ADM_job_resources_create(nodes, nnodes);
 	if (!job_resources) {
 		slurm_error("slurmadmcli: job_resources creation failed");
+		rc = -1;
+		goto end;
+	}
+
+	/* take the ADHOC_NNODES first nodes for the adhoc */
+	ADM_adhoc_resources_t adhoc_resources;
+	adhoc_resources = ADM_adhoc_resources_create(nodes, adhoc_nnodes < nnodes ? adhoc_nnodes : nnodes);
+	if (!adhoc_resources) {
+		slurm_error("slurmadmcli: adhoc_resources creation failed");
 		rc = -1;
 		goto end;
 	}
