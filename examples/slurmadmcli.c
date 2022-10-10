@@ -197,6 +197,15 @@ scord_register_job(const char *scord_proto, const char *scord_addr, const char *
 		goto end;
 	}
 
+	/* XX for now job_resources = adhoc_resources */
+	ADM_job_resources_t job_resources;
+	job_resources = ADM_job_resources_create(nodes, nnodes);
+	if (!job_resources) {
+		slurm_error("slurmadmcli: job_resources creation failed");
+		rc = -1;
+		goto end;
+	}
+
 	ADM_adhoc_context_t adhoc_ctx;
 	adhoc_ctx = ADM_adhoc_context_create(adhoc_mode,ADM_ADHOC_ACCESS_RDWR,
 										 adhoc_resources, adhoc_walltime, false);
@@ -224,7 +233,7 @@ scord_register_job(const char *scord_proto, const char *scord_addr, const char *
 	}
 
 	ADM_job_t scord_job;
-	if (ADM_register_job(scord_server, adhoc_resources, scord_reqs, &scord_job) != ADM_SUCCESS) {
+	if (ADM_register_job(scord_server, job_resources, scord_reqs, &scord_job) != ADM_SUCCESS) {
 		slurm_error("slurmadmcli: scord job registration failed");
 		rc = -1;
 		goto end;
