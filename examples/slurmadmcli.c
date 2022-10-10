@@ -1,7 +1,8 @@
 #include <errno.h>
 #include <stdint.h>				/* uint32_t, etc. */
-#include <stdlib.h>				/* strtoul */
+#include <stdlib.h>				/* strtoul, getenv */
 #include <string.h>				/* strchr, strncmp, strncpy */
+#include <slurm/slurm.h>
 #include <slurm/spank.h>
 
 #include "admire.h"
@@ -147,6 +148,99 @@ process_opts(int tag, const char *optarg, int remote)
 }
 
 int
+scord_register_job(const char *scord_proto, const char *scord_addr, const char *nodelist)
+{
+	int rc = 0;
+
+	ADM_server_t scord_server;
+	scord_server = ADM_server_create(scord_proto, scord_addr);
+	if (!scord_server) {
+		slurm_error("slurmadmcli: scord server creation failed");
+		rc = -1;
+		goto end;
+	}
+
+	/* create list of nodes */
+	hostlist_t hl = slurm_hostlist_create(nodelist);
+	if (!hl) {
+		slurm_error("slurmadmcli: slurm_hostlist creation failed");
+		rc = -1;
+		goto end;
+	}
+
+	int nnodes = slurm_hostlist_count(hl);
+
+	ADM_node_t *nodes = reallocarray(NULL, nnodes, sizeof(ADM_node_t));
+	if (!nodes) {
+		slurm_error("slurmadmcli: out of memory");
+		rc = -1;
+		goto end;
+	}
+
+	size_t i = 0;
+	char *nodename;
+	while((nodename = slurm_hostlist_shift(hl))) {
+		nodes[i] = ADM_node_create(nodename);
+		if (!nodes[i]) {
+			slurm_error("slurmadmcli: scord node creation failed");
+			rc = -1;
+			goto end;
+		}
+		i++;
+	}
+
+	ADM_adhoc_resources_t adhoc_resources;
+	adhoc_resources = ADM_adhoc_resources_create(nodes, nnodes);
+	if (!adhoc_resources) {
+		slurm_error("slurmadmcli: adhoc_resources creation failed");
+		rc = -1;
+		goto end;
+	}
+
+	ADM_adhoc_context_t adhoc_ctx;
+	adhoc_ctx = ADM_adhoc_context_create(adhoc_mode,ADM_ADHOC_ACCESS_RDWR,
+										 adhoc_resources, adhoc_walltime, false);
+	if (!adhoc_ctx) {
+		slurm_error("slurmadmcli: adhoc_context creation failed");
+		rc = -1;
+		goto end;
+	}
+
+	ADM_storage_t adhoc_storage;
+	adhoc_storage = ADM_storage_create(adhoc_context_id, ADM_STORAGE_GEKKOFS, adhoc_ctx);
+	if (!adhoc_storage) {
+		slurm_error("slurmadmcli: adhoc_storage creation failed");
+		rc = -1;
+		goto end;
+	}
+
+	/* no inputs or outputs */
+	ADM_job_requirements_t scord_reqs;
+	scord_reqs = ADM_job_requirements_create(NULL, 0, NULL, 0, adhoc_storage);
+	if (!scord_reqs) {
+		slurm_error("slurmadmcli: scord job_requirements creation");
+		rc = -1;
+		goto end;
+	}
+
+	ADM_job_t scord_job;
+	if (ADM_register_job(scord_server, adhoc_resources, scord_reqs, &scord_job) != ADM_SUCCESS) {
+		slurm_error("slurmadmcli: scord job registration failed");
+		rc = -1;
+		goto end;
+	}
+
+end:
+	slurm_hostlist_destroy(hl);
+	ADM_adhoc_resources_destroy(adhoc_resources);
+	ADM_remove_job(scord_server, scord_job);
+	ADM_job_requirements_destroy(scord_reqs);
+	ADM_storage_destroy(adhoc_storage);
+	ADM_server_destroy(scord_server);
+	return rc;
+}
+
+int
 slurm_spank_init(spank_t sp, int ac, char **av)
 {
 	(void)ac;
@@ -166,19 +260,11 @@ slurm_spank_init(spank_t sp, int ac, char **av)
 	return rc == ESPANK_SUCCESS ? 0 : -1;
 }
 
-/**
- * Called locally in srun, after jobid & stepid are available.
- **/
+
 int
-slurm_spank_init_post_opt(spank_t sp, int ac, char **av)
+slurm_spank_local_user_init(spank_t sp, int ac, char **av)
 {
 	(void)sp;
-	(void)ac;
-	(void)av;
-	int rc = 0;
-
-	if (!scord_flag)
-		return 0;
 
 	const char *scord_addr = SCORD_SERVER_DEFAULT;
 	const char *scord_proto = SCORD_PROTO_DEFAULT;
@@ -194,53 +280,13 @@ slurm_spank_init_post_opt(spank_t sp, int ac, char **av)
 		}
 	}
 
-	ADM_server_t scord_server;
-	scord_server = ADM_server_create(scord_proto, scord_addr);
-	if (!scord_server) {
-		slurm_error("failed scord server creation");
-		rc = -1;
-		goto end;
+	/* get list of nodes. /!\ at this point env SLURM_NODELIST is
+	   set, but not SLURM_JOB_NODELIST! */
+	const char *nodelist = getenv("SLURM_NODELIST");
+	if (!nodelist) {
+		slurm_error("slurmadmcli: failed to get node list");
+		return -1;
 	}
 
-	ADM_adhoc_context_t adhoc_ctx;
-	ADM_storage_t adhoc_storage;
-
-	adhoc_ctx = ADM_adhoc_context_create(adhoc_mode,ADM_ADHOC_ACCESS_RDWR,
-										 adhoc_nnodes, adhoc_walltime, false);
-	if (!adhoc_ctx) {
-		slurm_error("failed adhoc context creation");
-		rc = -1;
-		goto end;
-	}
-
-	adhoc_storage = ADM_storage_create(adhoc_context_id, ADM_STORAGE_GEKKOFS, adhoc_ctx);
-	if (!adhoc_storage) {
-		slurm_error("failed adhoc storage options setting");
-		rc = -1;
-		goto end;
-	}
-
-	/* no inputs or outputs */
-	ADM_job_requirements_t scord_reqs;
-	scord_reqs = ADM_job_requirements_create(NULL, 0, NULL, 0, adhoc_storage);
-	if (!scord_reqs) {
-		slurm_error("failed scord job requirements creation");
-		rc = -1;
-		goto end;
-	}
-
-	ADM_job_t scord_job;
-	if (ADM_register_job(scord_server, scord_reqs, &scord_job) != ADM_SUCCESS) {
-		slurm_error("failed to register scord job");
-		rc = -1;
-		goto end;
-	}
-
-	end:
-	ADM_remove_job(scord_server, scord_job);
-	ADM_job_requirements_destroy(scord_reqs);
-	ADM_storage_destroy(adhoc_storage);
-	ADM_server_destroy(scord_server);
-
-	return rc;
+	return scord_register_job(scord_proto, scord_addr, nodelist);
 }
