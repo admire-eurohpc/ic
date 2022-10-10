@@ -239,6 +239,12 @@ scord_register_job(const char *scord_proto, const char *scord_addr, const char *
 		goto end;
 	}
 
+	if (ADM_deploy_adhoc_storage(scord_server, adhoc_storage) != ADM_SUCCESS) {
+		slurm_error("slurmadmcli: adhoc storage deployment failed");
+		rc = -1;
+		goto end;
+	}
+
 end:
 	slurm_hostlist_destroy(hl);
 	ADM_adhoc_resources_destroy(adhoc_resources);
