@@ -1,6 +1,6 @@
 #include <errno.h>
 #include <stdint.h>				/* SIZE_MAX, uint32_t, etc. */
-#include <stdlib.h>				/* strtoul, getenv */
+#include <stdlib.h>				/* strtoul, getenv, reallocarray */
 #include <string.h>				/* strchr, strncmp, strncpy */
 #include <slurm/slurm.h>
 #include <slurm/spank.h>
@@ -34,7 +34,7 @@ static int scord_flag = 0;
 static long adhoc_nnodes = 0;
 static long adhoc_walltime = 0;
 static ADM_adhoc_mode_t adhoc_mode = 0;
-static char adhoc_context_id[ADHOCID_LEN] = { 0 };
+static char adhoc_id[ADHOCID_LEN] = { 0 };
 
 static int process_opts(int val, const char *optarg, int remote);
 
@@ -139,8 +139,8 @@ process_opts(int tag, const char *optarg, int remote)
 	}
 
 	if (tag == TAG_CONTEXT_ID) {
-		strncpy(adhoc_context_id, optarg, ADHOCID_LEN - 1);
-		adhoc_context_id[ADHOCID_LEN - 1] = '\0';
+		strncpy(adhoc_id, optarg, ADHOCID_LEN - 1);
+		adhoc_id[ADHOCID_LEN - 1] = '\0';
 	}
 
 	return 0;
@@ -220,9 +220,8 @@ scord_register_job(const char *scord_proto, const char *scord_addr, const char *
 	}
 
 	ADM_storage_t adhoc_storage;
-	adhoc_storage = ADM_storage_create(adhoc_context_id, ADM_STORAGE_GEKKOFS, adhoc_ctx);
-	if (!adhoc_storage) {
-		slurm_error("slurmadmcli: adhoc_storage creation failed");
+	if (ADM_register_adhoc_storage(scord_server, "mystorage", ADM_STORAGE_GEKKOFS, adhoc_ctx, &adhoc_storage) != ADM_SUCCESS) {
+		slurm_error("slurmadmcli: adhoc_storage registration failed");
 		rc = -1;
 		goto end;
 	}
