@@ -284,6 +284,9 @@ slurm_spank_local_user_init(spank_t sp, int ac, char **av)
 {
 	(void)sp;
 
+	if (!scord_flag)
+		return 0;
+
 	const char *scord_addr = SCORD_SERVER_DEFAULT;
 	const char *scord_proto = SCORD_PROTO_DEFAULT;
 
@@ -312,7 +315,6 @@ slurm_spank_local_user_init(spank_t sp, int ac, char **av)
 	if (!nodelist) {
 		slurm_error("slurmadmcli: failed to get node list");
 		return -1;
-	}
 
 	return scord_register_job(scord_proto, scord_addr, nodelist, jobid);
 }
