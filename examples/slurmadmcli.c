@@ -147,7 +147,7 @@ process_opts(int tag, const char *optarg, int remote)
 }
 
 static int
-scord_register_job(const char *scord_proto, const char *scord_addr, const char *nodelist)
+scord_register_job(const char *scord_proto, const char *scord_addr, const char *nodelist, uint32_t jobid)
 {
 	int rc = 0;
 
@@ -236,7 +236,7 @@ scord_register_job(const char *scord_proto, const char *scord_addr, const char *
 	}
 
 	ADM_job_t scord_job;
-	if (ADM_register_job(scord_server, job_resources, scord_reqs, &scord_job) != ADM_SUCCESS) {
+	if (ADM_register_job(scord_server, job_resources, scord_reqs, jobid, &scord_job) != ADM_SUCCESS) {
 		slurm_error("slurmadmcli: scord job registration failed");
 		rc = -1;
 		goto end;
@@ -298,6 +298,14 @@ slurm_spank_local_user_init(spank_t sp, int ac, char **av)
 		}
 	}
 
+	/* get job id */
+	uint32_t jobid;
+	spank_err_t rc;
+	if ((rc = spank_get_item(sp, S_JOB_ID, &jobid)) != ESPANK_SUCCESS) {
+		slurm_error ("slurmadmcli: failed to get jobid: %s", spank_strerror(rc));
+		return -1;
+	}
+
 	/* get list of nodes. /!\ at this point env SLURM_NODELIST is
 	   set, but not SLURM_JOB_NODELIST! */
 	const char *nodelist = getenv("SLURM_NODELIST");
@@ -306,5 +314,5 @@ slurm_spank_local_user_init(spank_t sp, int ac, char **av)
 		return -1;
 	}
 
-	return scord_register_job(scord_proto, scord_addr, nodelist);
+	return scord_register_job(scord_proto, scord_addr, nodelist, jobid);
 }
