@@ -19,7 +19,9 @@
 
 #define SCORD_SERVER_DEFAULT "ofi+tcp://127.0.0.1:52000"
 #define SCORD_PROTO_DEFAULT  "ofi+tcp"
+#define SCORDCTL_BIN_DEFAULT  "scord-ctl"
 #define ADHOCID_LEN  64
+#define INT32_STR_LEN 16  /* 16 chars are enough to fit an int32 in decimal */
 
 #define TAG_NNODES     1
 #define TAG_WALLTIME   2
@@ -289,23 +291,32 @@ slurm_spank_local_user_init(spank_t sp, int ac, char **av)
 
 	const char *scord_addr = SCORD_SERVER_DEFAULT;
 	const char *scord_proto = SCORD_PROTO_DEFAULT;
+	const char *scordctl_bin = SCORDCTL_BIN_DEFAULT;
 
 	for (int i = 0; i < ac; i++) {
 		if (!strncmp ("scord_addr=", av[i], 11)) {
 			scord_addr = av[i] + 11;
 		} else if (!strncmp ("scord_proto=", av[i], 12)) {
 			scord_proto = av[i] + 12;
+		} else if (!strncmp ("scordctl_bin=", av[i], 13)) {
+			scordctl_bin = av[i] + 13;
 		} else {
 			slurm_error("slurmadmcli: invalid option: %s", av[i]);
 			return -1;
 		}
 	}
 
+	spank_err_t rc;
+
 	/* get job id */
 	uint32_t jobid;
-	spank_err_t rc;
+	char sjobid[INT32_STR_LEN];
 	if ((rc = spank_get_item(sp, S_JOB_ID, &jobid)) != ESPANK_SUCCESS) {
 		slurm_error ("slurmadmcli: failed to get jobid: %s", spank_strerror(rc));
+		return -1;
+	}
+	if (snprintf(sjobid, INT32_STR_LEN, "%"PRIu32, jobid) < 0) {
+		slurm_error ("slurmadmcli: failed to convert jobid");
 		return -1;
 	}
 
@@ -315,6 +326,31 @@ slurm_spank_local_user_init(spank_t sp, int ac, char **av)
 	if (!nodelist) {
 		slurm_error("slurmadmcli: failed to get node list");
 		return -1;
+	}
+
+	/* get number of nodes */
+	uint32_t nnodes;
+	char snnodes[INT32_STR_LEN];
+	if ((rc = spank_get_item(sp, S_JOB_NNODES, &nnodes)) != ESPANK_SUCCESS) {
+		slurm_error ("slurmadmcli: failed to get number of nodes: %s", spank_strerror(rc));
+		return -1;
+	}
+	if (snprintf(snnodes, INT32_STR_LEN, "%"PRIu32, nnodes) < 0) {
+		slurm_error ("slurmadmcli: failed to convert number of nodes");
+		return -1;
+	}
+
+	/* launch one scord-ctl task on each nodes in the allocation */
+	pid_t pid;
+	if ((pid = fork()) < 0) {
+		slurm_error("slurmadmcli: failed to start scord-ctl: %s", strerror(errno));
+		return -1;
+	} else if (pid == 0) {
+		char *argv[] = { "srun", "--ntasks", snnodes, "--ntasks-per-node=1", "--overlap", "--cpu-bind=none", "--jobid", sjobid, (char *const)scordctl_bin, NULL };
+		execvp(argv[0], argv);
+		slurm_error("slurmadmcli: failed to srun scord-ctl: %s", strerror(errno));
+		return 0;
+	}
 
 	return scord_register_job(scord_proto, scord_addr, nodelist, jobid);
 }
