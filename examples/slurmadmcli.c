@@ -328,25 +328,14 @@ slurm_spank_local_user_init(spank_t sp, int ac, char **av)
 		return -1;
 	}
 
-	/* get number of nodes */
-	uint32_t nnodes;
-	char snnodes[INT32_STR_LEN];
-	if ((rc = spank_get_item(sp, S_JOB_NNODES, &nnodes)) != ESPANK_SUCCESS) {
-		slurm_error ("slurmadmcli: failed to get number of nodes: %s", spank_strerror(rc));
-		return -1;
-	}
-	if (snprintf(snnodes, INT32_STR_LEN, "%"PRIu32, nnodes) < 0) {
-		slurm_error ("slurmadmcli: failed to convert number of nodes");
-		return -1;
-	}
 
-	/* launch one scord-ctl task on each nodes in the allocation */
+	/* launch one scord-ctl task on one node in the allocation, let Slurm decide which */
 	pid_t pid;
 	if ((pid = fork()) < 0) {
 		slurm_error("slurmadmcli: failed to start scord-ctl: %s", strerror(errno));
 		return -1;
 	} else if (pid == 0) {
-		char *argv[] = { "srun", "--ntasks", snnodes, "--ntasks-per-node=1", "--overlap", "--cpu-bind=none", "--jobid", sjobid, (char *const)scordctl_bin, NULL };
+		char *argv[] = { "srun", "-N1", "-n1", "--overlap", "--cpu-bind=none", "--jobid", sjobid, (char *const)scordctl_bin, NULL };
 		execvp(argv[0], argv);
 		slurm_error("slurmadmcli: failed to srun scord-ctl: %s", strerror(errno));
 		return 0;
