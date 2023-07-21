@@ -42,14 +42,15 @@ icc_jobcleaner_bin := icc_jobcleaner
 libslurmadmcli_so := libslurmadmcli.so
 libslurmadhoccli_so := libslurmadhoccli.so
 libslurmjobmon_so := libslurmjobmon.so
+libslurmjobmon2_so := libslurmjobmon2.so
 testapp_bin := testapp
 
 sources := hashmap.c server.c rpc.c cb.c cbcommon.c icdb.c icrm.c icc.c flexmpi.c
-sources += slurmadmcli.c slurmjobmon.c slurmadhoccli.c jobcleaner.c
-sources += client.c testapp.c spawn.c synthio.c writer.c
+sources += slurmadmcli.c slurmjobmon.c slurmjobmon2.c slurmadhoccli.c jobcleaner.c
+sources += client.c testapp.c spawn.c synthio.c writer.c mpitest.c test.c
 
 # keep libicc in front
-binaries := $(libicc_so) server client jobcleaner $(libslurmadmcli_so) $(libslurmjobmon_so) $(libslurmadhoccli_so) spawn synthio writer
+binaries := $(libicc_so) server client jobcleaner $(libslurmadmcli_so) $(libslurmjobmon_so) $(libslurmjobmon2_so) $(libslurmadhoccli_so) spawn synthio writer mpitest
 
 objects := $(sources:.c=.o)
 depends := $(sources:.c=.d)
@@ -138,11 +139,19 @@ scord_client: LDLIBS +=  `$(PKG_CONFIG) --libs scord` -Wl,--no-undefined,-rpath-
 # $(testapp_bin): CPPFLAGS += `$(PKG_CONFIG) --cflags mpi`
 # $(testapp_bin): LDLIBS += `$(PKG_CONFIG) --libs mpi margo` -L. -licc
 
+test: LDLIBS += `$(PKG_CONFIG) --libs margo` -L. -licc
+
+mpitest: CPPFLAGS += -I$(PREFIX)/include `$(PKG_CONFIG) --cflags mpich`
+mpitest: LDLIBS += -L$(PREFIX)/lib -lempi `$(PKG_CONFIG) --libs mpich` -L. -licc -Wl,--allow-shlib-undefined,-rpath-link=${PREFIX}/lib -lpapi
+
 slurmjobmon.o slurmadhoccli.o slurmadmcli.o: CPPFLAGS += $(CPPFLAGS_SLURM)
+
+slurmjobmon2.o: CPPFLAGS += $(CPPFLAGS_SLURM) `$(PKG_CONFIG) --cflags hiredis`
 
 # cannot use -Wl,--no-undefined here because some Spank symbols in
 # libslurm have LOCAL binding
-$(libslurmjobmon_so) $(libslurmadhoccli_so) : LDLIBS += $(LIBS_SLURM) -L. -licc
+$(libslurmjobmon_so) $(libslurmadhoccli_so): LDLIBS += $(LIBS_SLURM) -L. -licc
+$(libslurmjobmon2_so): LDLIBS += $(LIBS_SLURM) `$(PKG_CONFIG) --libs hiredis`
 
 $(libslurmadmcli_so): CPPFLAGS += `$(PKG_CONFIG) --cflags scord`
 $(libslurmadmcli_so): LDLIBS += `$(PKG_CONFIG) --libs scord` $(LIBS_SLURM)
