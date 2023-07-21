@@ -18,6 +18,7 @@ struct jobmonctx {
 
 struct jobmonctx jmctx = {.jobid = 0, .jobstepid = 0, .nnodes = 0};
 
+struct icc_context *icc;
 
 /**
  * Return 1 if the ADMIRE plugin should be used.
@@ -61,7 +62,6 @@ slurm_spank_local_user_init(spank_t sp,
     slurm_error ("ADMIRE jobmon: Failed to get job nnodes: %s.", spank_strerror(sprc));
   }
 
-  struct icc_context *icc;
   int rpc_retcode;
   int rc;
 
@@ -77,10 +77,6 @@ slurm_spank_local_user_init(spank_t sp,
   } else {
     slurm_error("Error making RPC to IC (retcode=%d)", rc);
   }
-
-  rc = icc_fini(icc);
-  if (rc != ICC_SUCCESS)
-    slurm_error("ADMIRE jobmon: Could not destroy IC context");
 
   return 0;
 }
@@ -100,15 +96,8 @@ slurm_spank_exit(spank_t sp,
   if (spank_remote(sp))
     return 0;
 
-  struct icc_context *icc;
   int rpc_retcode;
   int rc;
-
-  rc = icc_init(ICC_LOG_INFO, ICC_TYPE_JOBMON, &icc);
-  if (rc != ICC_SUCCESS) {
-    slurm_error("ADMIRE jobmon: Could not initialize connection to IC: %d", rc);
-    return 0;
-  }
 
   rc = icc_rpc_jobmon_exit(icc, jmctx.jobid, jmctx.jobstepid, &rpc_retcode);
   if (rc == ICC_SUCCESS) {

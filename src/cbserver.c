@@ -333,18 +333,26 @@ jobmon_exit_cb(hg_handle_t h)
   hg_return_t hret;
   margo_instance_id mid;
   jobmon_submit_in_t in;
+  rpc_out_t out;
 
   mid = margo_hg_handle_get_instance(h);
   assert(mid);
 
-  MARGO_GET_INPUT(h,in,hret);
-  if (hret == HG_SUCCESS) {
-    margo_info(mid, "Slurm Job %"PRIu32".%"PRIu32" exited", in.jobid, in.jobstepid);
-  }
+  out.rc = RPC_SUCCESS;
 
+  MARGO_GET_INPUT(h,in,hret);
+  if (hret != HG_SUCCESS) {
+    out.rc = RPC_FAILURE;
+    goto respond;
+  }
+  margo_info(mid, "Slurm Job %"PRIu32".%"PRIu32" exited", in.jobid, in.jobstepid);
+
+ respond:
+  MARGO_RESPOND(h, out, hret);
   MARGO_DESTROY_HANDLE(h, hret);
 }
 DEFINE_MARGO_RPC_HANDLER(jobmon_exit_cb);
+
 
 void
 adhoc_nodes_cb(hg_handle_t h)
