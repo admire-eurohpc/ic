@@ -11,9 +11,7 @@
 #include "cbcommon.h"
 #include "cbserver.h"
 
-/* #include <scord.h> */
-
-#define NTHREADS 8              /* threads set aside for RPC handling */
+#define NTHREADS 10              /* threads set aside for RPC handling */
 
 /* malleability manager stub */
 #define NCLIENTS     4
@@ -22,37 +20,19 @@
 
 static void malleability_th(void *arg);
 
+/* message stream */
+struct mstream {
+  margo_instance_id   mid;
+  struct icdb_context **icdbs;  /* DB connection pool */
+};
+static void mstream_th(void *arg);
+
 
 int
 main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
 {
   margo_instance_id mid;
   int rc;
-
-  /* ADM_server_t scord_server = ADM_server_create("tcp", "ofi+tcp://127.0.0.1:52000"); */
-  /* if (!scord_server) { */
-  /*   fprintf(stderr, "scord server"); */
-  /* } */
-
-  /* ADM_adhoc_context_t adhoc_ctx; */
-  /* adhoc_ctx.c_mode = ADM_ADHOC_MODE_IN_JOB_SHARED; */
-  /* adhoc_ctx.c_access = ADM_ADHOC_ACCESS_RDWR; */
-  /* adhoc_ctx.c_nodes = 3; */
-  /* adhoc_ctx.c_walltime = 3600; */
-  /* adhoc_ctx.c_should_bg_flush = 0; */
-
-  /* /\* no inputs or outputs *\/ */
-  /* ADM_job_requirements_t scord_reqs; */
-  /* scord_reqs = ADM_job_requirements_create(NULL, 0, NULL, 0, &adhoc_ctx); */
-  /* if (!scord_reqs) { */
-  /*   fprintf(stderr, "scord job reqs"); */
-  /* } */
-
-  /* ADM_job_t scord_job; */
-  /* ADM_register_job(scord_server, scord_reqs, &scord_job); */
-
-  /* ADM_job_requirements_destroy(scord_reqs); */
-  /* ADM_server_destroy(scord_server); */
 
   assert(NTHREADS > 0);
 
@@ -165,6 +145,14 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   rc = ABT_thread_create(rpc_pool, malleability_th, &malldat, ABT_THREAD_ATTR_NULL, NULL);
   if (rc != ABT_SUCCESS) {
     LOG_ERROR(mid, "Could not create malleability ULT (ret = %d)", rc);
+    goto error;
+  }
+
+  /* Message stream thread, from the Margo pool*/
+  struct mstream msd = { .mid = mid, .icdbs = icdbs };
+  rc = ABT_thread_create(rpc_pool, mstream_th, &msd, ABT_THREAD_ATTR_NULL, NULL);
+  if (rc != ABT_SUCCESS) {
+    LOG_ERROR(mid, "Could not create message stream ULT (ret = %d)", rc);
     goto error;
   }
 
@@ -416,6 +404,7 @@ malleability_th(void *arg)
           }
         }
 
+      /* why is there no mutex here?? */
       data->sleep = 1;
       continue;
     }
@@ -425,5 +414,33 @@ malleability_th(void *arg)
   }
 
   free(clients);
+  return;
+}
+
+
+/* Message stream */
+void
+mstream_th(void *arg)
+{
+  struct mstream *data = (struct mstream *)arg;
+
+  if (!data->icdbs) {
+    LOG_ERROR(data->mid, "null ICDB context");
+    return;
+  }
+
+  int ret, xrank;
+  ret = ABT_self_get_xstream_rank(&xrank);
+  if (ret != ABT_SUCCESS) {
+    LOG_ERROR(data->mid, "argobots ES rank");
+    return;
+  }
+
+  struct icdb_context *icdb = data->icdbs[xrank];
+
+  /* blocking read from FS stream (key "fstream") */
+  icdb_mstream_read(icdb, "fstream");
+  margo_info(data->mid, "message thread: HELLO");
+
   return;
 }

@@ -160,4 +160,12 @@ int icdb_getjob(struct icdb_context *icdb, uint32_t jobid, struct icdb_job *job)
  */
 int icdb_deljob(struct icdb_context *icdb, uint32_t jobid);
 
+
+/**
+ * Get message from stream STREAMKEY
+ *
+ * Returns ICDB_SUCCESS or an error code.
+ */
+int icdb_mstream_read(struct icdb_context *icdb, char *streamkey);
+
 #endif

@@ -513,6 +513,49 @@ icdb_getjob(struct icdb_context *icdb, uint32_t jobid, struct icdb_job *job)
   return icdb->status;
 }
 
+
+/* Message stream */
+int
+icdb_mstream_read(struct icdb_context *icdb, char *streamkey)
+{
+  CHECK_ICDB(icdb);
+
+  icdb->status = ICDB_SUCCESS;
+
+  redisReply *rep;
+  redisContext *ctx = icdb->redisctx;
+
+  rep = redisCommand(ctx, "XREAD BLOCK 0 STREAMS %s $", streamkey);
+  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
+
+  /* XREAD returns an array of arrays:
+     1) 1) "mystream"
+        2) 1) 1) "1690215474757-0"
+              2) 1) "foo"
+                 2) "bar"
+  */
+  for (size_t s = 0; s < rep->elements; s++) {	/* iterate over streams */
+    redisReply *r;
+    r = rep->element[s];
+    fprintf(stderr, "stream %s\n", r->element[0]->str);
+	size_t nmsg = r->element[1]->elements;
+
+    for (size_t m = 0; m < nmsg; m++) {			/* iterate over messages */
+      r = r->element[1]->element[m];
+      fprintf(stderr, "  message %s\n", r->element[0]->str);
+      size_t nkv = r->element[1]->elements;
+
+      for (size_t i = 0; i < nkv; i++) {		/* iterate over key val */
+        char *key = r->element[1]->element[i]->str;
+        char *val = r->element[1]->element[++i]->str;
+        printf("    %s: %s\n", key, val);
+      }
+    }
+  }
+  return icdb->status;
+}
+
+
 /** ICDB Utils */
 
 static int
