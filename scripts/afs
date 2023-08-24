@@ -1,0 +1,12 @@
+#!/bin/sh
+
+beegfsctl=/usr/sbin/beegfs-ctl
+
+# Beegfs: get average queue length over the last 10 seconds.
+# Note: authentication needs to be disabled to allow normal users to use
+# beegfs-ctl, because the connauthfile is not readable
+
+qlen=`$beegfsctl --serverstats --nodetype=storage | tail -n+3 | awk 'NF { qlen+=$5; n+=1; timestamp=$1 } END { printf "timestamp %d qlen %f\n", timestamp, qlen/n }'`
+
+maxlen=100
+redis-cli XADD admire:beegfs:status MAXLEN '~' $maxlen '*' $qlen

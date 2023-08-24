@@ -513,6 +513,28 @@ icdb_getjob(struct icdb_context *icdb, uint32_t jobid, struct icdb_job *job)
   return icdb->status;
 }
 
+/*
+ * New Redis stuff: store jobs and use message queue
+ */
+
+int
+icdb_getlargestjob(struct icdb_context *icdb, uint32_t *jobid) {
+ CHECK_ICDB(icdb);
+
+  icdb->status = ICDB_SUCCESS;
+
+  redisReply *rep;
+  redisContext *ctx = icdb->redisctx;
+
+  rep = redisCommand(ctx, "SORT admire:jobs:running DESC LIMIT 0 1 "
+                          "BY admire:job:*->nnodes "
+                          "GET admire:job:*->jobid");
+
+  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_STRING);
+  ICDB_GET_UINT32(icdb, rep, jobid, "jobid");
+
+  return icdb->status;
+}
 
 /* Message stream */
 int
@@ -550,6 +572,55 @@ icdb_mstream_read(struct icdb_context *icdb, char *streamkey)
         char *val = r->element[1]->element[++i]->str;
         printf("    %s: %s\n", key, val);
       }
+    }
+  }
+  return icdb->status;
+}
+
+/* Beegfs status message stream */
+#define BEEGFS_MSTREAM "admire:beegfs:status"
+
+int
+icdb_mstream_beegfs(struct icdb_context *icdb, struct icdb_beegfs *result)
+{
+  result->qlen = 0;
+  result->timestamp = 0;
+
+  CHECK_ICDB(icdb);
+
+  icdb->status = ICDB_SUCCESS;
+
+  redisReply *rep;
+  redisContext *ctx = icdb->redisctx;
+
+  rep = redisCommand(ctx, "XREAD BLOCK 0 STREAMS " BEEGFS_MSTREAM " $");
+  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
+
+  /*
+   * XREAD returns an array of arrays
+   * we only care about the last message of the one stream
+   */
+  size_t n;
+
+  if (rep->elements != 1) {            /* 1 stream only */
+    ICDB_SET_STATUS(icdb, ICDB_FAILURE, "got %lld streams admire:beegfs", rep->elements);
+  }
+  rep = rep->element[0];
+  n = rep->element[1]->elements;
+  rep = rep->element[1]->element[n-1];  /* last message */
+
+  n = rep->element[1]->elements;
+  for (size_t i = 0; i < n; i++) {
+    char *key = rep->element[1]->element[i]->str;
+    redisReply *val = rep->element[1]->element[++i];
+
+    if (!strcmp(key, "timestamp")) {
+       ICDB_GET_UINT64(icdb, val, &result->timestamp, "timestamp")
+    } else if (!strcmp(key, "qlen")) {
+      ICDB_GET_UINT32(icdb, val, &result->qlen, "qlen")
+    }
+    if (icdb->status != ICDB_SUCCESS) {
+      return ICDB_FAILURE;
     }
   }
   return icdb->status;

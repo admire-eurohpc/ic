@@ -162,10 +162,30 @@ int icdb_deljob(struct icdb_context *icdb, uint32_t jobid);
 
 
 /**
+ * Get the running job ID with the largest amount of nodes.
+ *
+ * XX Newer job interface, incompatible with icdb_getjob/deljob
+ *
+ * Return ICDB_SUCCESS or an error code
+ */
+int icdb_getlargestjob(struct icdb_context *icdb, uint32_t *jobid);
+
+
+/**
  * Get message from stream STREAMKEY
  *
  * Returns ICDB_SUCCESS or an error code.
  */
 int icdb_mstream_read(struct icdb_context *icdb, char *streamkey);
+
+/*
+ * Message streams
+ */
+struct icdb_beegfs {
+  uint64_t  timestamp;
+  uint32_t qlen;
+};
+
+int icdb_mstream_beegfs(struct icdb_context *icdb, struct icdb_beegfs *result);
 
 #endif

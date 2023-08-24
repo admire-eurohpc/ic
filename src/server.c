@@ -149,7 +149,10 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   }
 
   /* Message stream thread, from the Margo pool*/
-  struct mstream msd = { .mid = mid, .icdbs = icdbs };
+  struct mstream msd = {
+    .mid = mid,
+    .icdbs = icdbs,
+  };
   rc = ABT_thread_create(rpc_pool, mstream_th, &msd, ABT_THREAD_ATTR_NULL, NULL);
   if (rc != ABT_SUCCESS) {
     LOG_ERROR(mid, "Could not create message stream ULT (ret = %d)", rc);
@@ -437,10 +440,22 @@ mstream_th(void *arg)
   }
 
   struct icdb_context *icdb = data->icdbs[xrank];
-
-  /* blocking read from FS stream (key "fstream") */
-  icdb_mstream_read(icdb, "fstream");
-  margo_info(data->mid, "message thread: HELLO");
+  struct icdb_beegfs status;
+  uint32_t jobid;
+  margo_debug(data->mid, "message thread: listening on beegfs stream");
+  do {
+    /* blocking read from FS stream */
+    ret = icdb_mstream_beegfs(icdb, &status);
+    if (ret != ICDB_SUCCESS) { return; }
+    if (status.timestamp != 0) {
+      margo_debug(data->mid, "beegfs:qlen %"PRIu32" (%"PRIu64")\n", status.qlen, status.timestamp);
+    }
+    if (status.qlen > 10) {
+      ret = icdb_getlargestjob(icdb, &jobid);
+      if (ret != ICDB_SUCCESS) { return; }
+      margo_debug(data->mid, "beegfs:qlen job %"PRIu32" should halve", jobid);
+   	}
+  } while (ret == ICDB_SUCCESS);
 
   return;
 }

@@ -1,0 +1,38 @@
+#!/bin/sh
+
+# Areg registers/deregister an Admire job to the main Redis database.
+
+# weird but POSIX-compliant way to get Unix time
+now=`awk 'BEGIN{print srand(srand())}'`
+
+reg_start () {
+	redis-cli <<- EOF
+	MULTI
+	HSET admire:job:$SLURM_JOB_ID \
+		jobid $SLURM_JOB_ID       \
+		nnodes $SLURM_NNODES      \
+		nodelist $SLURM_NODELIST  \
+		start $now
+	SADD admire:jobs:running $SLURM_JOB_ID
+	EXEC
+	EOF
+}
+
+reg_end () {
+	redis-cli <<- EOF
+	MULTI
+	HSET admire:job:$SLURM_JOB_ID end $now
+	SREM admire:jobs:running $SLURM_JOB_ID
+	EXEC
+	EOF
+}
+
+case "$SLURM_SCRIPT_CONTEXT" in
+prolog*)
+	reg_start ;;
+epilog*)
+	reg_end ;;
+*)
+	echo "not in a Slurm environment" 1>&2
+	exit 1
+esac
