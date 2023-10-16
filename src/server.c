@@ -448,12 +448,16 @@ mstream_th(void *arg)
     ret = icdb_mstream_beegfs(icdb, &status);
     if (ret != ICDB_SUCCESS) { return; }
     if (status.timestamp != 0) {
-      margo_debug(data->mid, "beegfs:qlen %"PRIu32" (%"PRIu64")\n", status.qlen, status.timestamp);
+      margo_debug(data->mid, "beegfs:qlen:%"PRIu64" %"PRIu32, status.timestamp, status.qlen);
     }
     if (status.qlen > 10) {
       ret = icdb_getlargestjob(icdb, &jobid);
-      if (ret != ICDB_SUCCESS) { return; }
-      margo_debug(data->mid, "beegfs:qlen job %"PRIu32" should halve", jobid);
+      if (ret != ICDB_SUCCESS) {
+        margo_error(data->mid, "beegfs: icdb getlargest: %s", icdb_errstr(icdb));
+        return;
+      } else if (jobid != 0) {
+        margo_debug(data->mid, "beegfs:qlen job %"PRIu32" should halve", jobid);
+      }
    	}
   } while (ret == ICDB_SUCCESS);
 

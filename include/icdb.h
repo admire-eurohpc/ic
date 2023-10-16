@@ -163,8 +163,9 @@ int icdb_deljob(struct icdb_context *icdb, uint32_t jobid);
 
 /**
  * Get the running job ID with the largest amount of nodes.
+ * If no job is registered, the job ID is set to 0
  *
- * XX Newer job interface, incompatible with icdb_getjob/deljob
+ * XX This job interface is incompatible with icdb_getjob/deljob
  *
  * Return ICDB_SUCCESS or an error code
  */

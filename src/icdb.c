@@ -522,6 +522,7 @@ icdb_getlargestjob(struct icdb_context *icdb, uint32_t *jobid) {
  CHECK_ICDB(icdb);
 
   icdb->status = ICDB_SUCCESS;
+  *jobid = 0;
 
   redisReply *rep;
   redisContext *ctx = icdb->redisctx;
@@ -530,8 +531,11 @@ icdb_getlargestjob(struct icdb_context *icdb, uint32_t *jobid) {
                           "BY admire:job:*->nnodes "
                           "GET admire:job:*->jobid");
 
-  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_STRING);
-  ICDB_GET_UINT32(icdb, rep, jobid, "jobid");
+  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
+
+  if (rep->elements > 0) {
+    ICDB_GET_UINT32(icdb, rep->element[0], jobid, "jobid");
+  }
 
   return icdb->status;
 }
