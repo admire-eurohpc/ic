@@ -122,6 +122,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   rpc_ids[RPC_RESALLOC] = MARGO_REGISTER(mid, RPC_RESALLOC_NAME, resalloc_in_t, rpc_out_t, NULL);
   rpc_ids[RPC_RESALLOCDONE] = MARGO_REGISTER(mid, RPC_RESALLOCDONE_NAME, resallocdone_in_t, rpc_out_t, resallocdone_cb);
   rpc_ids[RPC_RECONFIGURE] = MARGO_REGISTER(mid, RPC_RECONFIGURE_NAME, reconfigure_in_t, rpc_out_t, NULL);
+  rpc_ids[RPC_RECONFIGURE2] = MARGO_REGISTER(mid, RPC_RECONFIGURE2_NAME, reconfigure_in_t, rpc_out_t, NULL);
   rpc_ids[RPC_MALLEABILITY_AVAIL] = MARGO_REGISTER(mid, RPC_MALLEABILITY_AVAIL_NAME, malleability_avail_in_t, rpc_out_t, malleability_avail_cb);
   rpc_ids[RPC_MALLEABILITY_REGION] = MARGO_REGISTER(mid, RPC_MALLEABILITY_REGION_NAME, malleability_region_in_t, rpc_out_t, malleability_region_cb);
   rpc_ids[RPC_HINT_IO_BEGIN] = MARGO_REGISTER(mid, RPC_HINT_IO_BEGIN_NAME, hint_io_in_t, hint_io_out_t, hint_io_begin_cb);

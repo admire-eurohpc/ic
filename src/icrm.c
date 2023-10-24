@@ -296,7 +296,6 @@ icrm_release_node(const char *nodename, uint32_t jobid, uint32_t ncpus,
   slurm_free_resource_allocation_response_msg(allocinfo);
 
   if (!hostmap) {
-    slurm_free_resource_allocation_response_msg(allocinfo);
     return ICRM_ENOMEM;
   }
 
@@ -433,13 +432,12 @@ icrm_hostlist(hm_t *hostmap, char withcpus, uint32_t *ncpus_total)
         return NULL;
       }
       buf = tmp;
-      bufsize *= 2;             /* potential overlow catched by reallocarray */
+      bufsize *= 2;             /* potential overflow catched by reallocarray */
     }
   }
 
   return buf;
 }
-
 
 static icrmerr_t
 writerr_internal(char buf[ICC_ERRSTR_LEN], const char *filename, int lineno,

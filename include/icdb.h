@@ -99,7 +99,8 @@ icdb_initjob(struct icdb_job *job) {
  */
 int icdb_setclient(struct icdb_context *icdb, const char *clid,
                    const char *type, const char *addr, uint16_t provid,
-                   uint32_t jobid, uint32_t jobncpus, uint32_t jobnnodes, uint64_t nprocs);
+                   uint32_t jobid, uint32_t jobncpus, uint32_t jobnnodes,
+                   uint64_t nprocs, const char *nodelist);
 
 /**
  * Get the IC client CLID.

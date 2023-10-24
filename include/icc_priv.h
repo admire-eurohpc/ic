@@ -23,17 +23,26 @@ struct icc_context {
   char              clid[UUID_STR_LEN]; /* client uuid */
   enum icc_client_type type;            /* client type */
 
-  /* modified on alloc/release, use lock to access */
+  /* can be modified on reconfiguration order, need lock */
+  char              *nodelist;          /* list of nodes */
+
+  /* modified on alloc/release, use lock to access
+   * hostalloc/hostrelease are used to keep track of nodes allocation/release
+   * at the level of the client. It is incomplete because it does not take into
+   * account the initial allocation.
+   * This whole setup need to be reworked once we have a better idea of what
+   * we want to do.
+   */
   ABT_rwlock hostlock;
   hm_t       *hostalloc;                /* map of host:ncpus allocated */
   hm_t       *hostrelease;              /* map of host:ncpus released */
   enum icc_reconfig_type reconfig_flag; /* pending reconfiguration order */
-  hm_t       *reconfigalloc;            /* map of host:ncpus to use for reconfig */
+  hm_t       *reconfigalloc;            /* map of host:ncpus for reconfig */
 
   /* XX fixme icrm not thread-safe */
   char              icrm_terminate;     /* terminate flag */
   ABT_pool          icrm_pool;          /* pool for blocking RM requests */
-  ABT_xstream       icrm_xstream;       /* exec stream to associate to the pool */
+  ABT_xstream       icrm_xstream;       /* exec stream associated to the pool */
 
   icc_reconfigure_func_t reconfig_func;
   void                   *reconfig_data;

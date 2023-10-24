@@ -80,9 +80,8 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
   if (typeid == ICC_TYPE_MPI || typeid == ICC_TYPE_FLEXMPI)
     icc->bidirectional = 1;
 
-  /* resource manager jobid */
-  char *jobid;
-  char *jobstepid;
+  /* resource manager stuff */
+  char *jobid, *jobstepid, *nodelist;
   jobid = getenv("SLURM_JOB_ID");
   if (!jobid) {
     jobid = getenv("SLURM_JOBID");
@@ -117,6 +116,17 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
     }
   } else {
     icc->jobstepid = 0;
+  }
+
+  /* TMP: if/when using, get the nodelist from the resource manager */
+  nodelist = getenv("ADMIRE_NODELIST");
+  if (nodelist) {
+    icc->nodelist = strdup(nodelist);
+    if (!icc->nodelist) {
+      margo_error(icc->mid, "icc: init: nodelist failed: %s", strerror(errno));
+      rc = ICC_FAILURE;
+  	  goto error;
+    }
   }
 
   /* client UUID, XX could be replaced with jobid.jobstepid? */
@@ -216,6 +226,10 @@ icc_fini(struct icc_context *icc)
     if (rc || rpcrc) {
       margo_error(icc->mid, "Could not deregister target to IC");
     }
+  }
+
+  if (icc->nodelist) {
+    free(icc->nodelist);
   }
 
   if (icc->hostlock) {
@@ -740,6 +754,7 @@ _setup_margo(enum icc_log_level log_level, struct icc_context *icc)
 
   if (icc->type == ICC_TYPE_MPI || icc->type == ICC_TYPE_FLEXMPI) {
     icc->rpcids[RPC_RECONFIGURE] = MARGO_REGISTER(icc->mid, RPC_RECONFIGURE_NAME, reconfigure_in_t, rpc_out_t, reconfigure_cb);
+    icc->rpcids[RPC_RECONFIGURE2] = MARGO_REGISTER(icc->mid, RPC_RECONFIGURE2_NAME, reconfigure_in_t, rpc_out_t, reconfigure2_cb);
     icc->rpcids[RPC_RESALLOC] = MARGO_REGISTER(icc->mid, RPC_RESALLOC_NAME, resalloc_in_t, rpc_out_t, resalloc_cb);
     icc->rpcids[RPC_RESALLOCDONE] = MARGO_REGISTER(icc->mid, RPC_RESALLOCDONE_NAME, resallocdone_in_t, rpc_out_t, NULL);
     icc->rpcids[RPC_MALLEABILITY_REGION] = MARGO_REGISTER(icc->mid, RPC_MALLEABILITY_REGION_NAME, malleability_region_in_t, rpc_out_t, NULL);
@@ -855,7 +870,7 @@ _register_client(struct icc_context *icc, unsigned int nprocs)
   icrmerr_t icrmret;
   icrmret = icrm_ncpus(icc->jobid, &rpc_in.jobncpus, &rpc_in.jobnnodes, icrmerr);
   if (icrmret != ICRM_SUCCESS) {
-    margo_error(icc->mid, icrmerr);
+    margo_warning(icc->mid, icrmerr);
   }
 
   rpc_in.nprocs = nprocs;
@@ -863,6 +878,7 @@ _register_client(struct icc_context *icc, unsigned int nprocs)
   rpc_in.jobid = icc->jobid;
   rpc_in.provid = icc->provider_id;
   rpc_in.clid = icc->clid;
+  rpc_in.nodelist = icc->nodelist;
   rpc_in.type = _icc_type_str(icc->type);
 
   int rpcret = RPC_SUCCESS;

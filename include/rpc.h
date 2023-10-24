@@ -81,7 +81,10 @@ icc_to_margo_log_level(enum icc_log_level icc_log_level)
  * internal use.
  *
  * RPC_RECONFIGURE (ic): Request that a client reconfigure (i.e update
- * the resources on which it is running).
+ * the resources on which it is running), push version
+ *
+ * RPC_RECONFIGURE2 (ic): Request that a client reconfigure (i.e update
+ * the resources on which it is running), pull version
  *
  * RPC_RESALLOC (ic): Request that a client make a request to the
  * resource manager.
@@ -114,6 +117,7 @@ enum icc_rpc_code {
   RPC_JOBMON_SUBMIT,
   RPC_JOBMON_EXIT,
   RPC_RECONFIGURE,
+  RPC_RECONFIGURE2,
   RPC_RESALLOC,                 /* resources alloc/deallocation */
   RPC_RESALLOCDONE,             /* resources alloc done */
   RPC_MALLEABILITY_AVAIL,
@@ -142,7 +146,8 @@ MERCURY_GEN_PROC(client_register_in_t,
                  ((hg_uint32_t)(jobnnodes))
                  ((hg_uint64_t)(nprocs))
                  ((hg_const_string_t)(addr_str))
-                 ((hg_uint16_t)(provid)))
+                 ((hg_uint16_t)(provid))
+                 ((hg_const_string_t)(nodelist)))
 
 MERCURY_GEN_PROC(client_deregister_in_t,
                  ((hg_const_string_t)(clid)))
@@ -220,11 +225,13 @@ MERCURY_GEN_PROC(malleability_region_in_t,
 
 
 #define RPC_RECONFIGURE_NAME  "icc_reconfigure"
+#define RPC_RECONFIGURE2_NAME  "icc_reconfigure2"
 
 MERCURY_GEN_PROC(reconfigure_in_t,
                  ((uint32_t)(cmdidx))
+                 ((hg_bool_t)(shrink))
                  ((int32_t)(maxprocs))
-		 ((hg_const_string_t)(hostlist)))
+                 ((hg_const_string_t)(hostlist)))
 
 
 
