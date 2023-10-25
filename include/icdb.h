@@ -50,12 +50,14 @@ int icdb_command(struct icdb_context *icdb, const char *format, ...);
  * IC client
  * XX fixme: get rid of NFIELDS
  */
-# define ICDB_CLIENT_NFIELDS 6
+#define ICDB_NODELIST_LEN   512
+#define ICDB_CLIENT_NFIELDS 7
 
 struct icdb_client {
   char clid[UUID_STR_LEN];
   char type[ICC_TYPE_LEN];
   char addr[ICC_ADDR_LEN];
+  char nodelist[ICDB_NODELIST_LEN];
   uint16_t provid;
   uint32_t jobid;
   uint64_t nprocs;              /* nprocesses in client */
@@ -69,6 +71,7 @@ icdb_initclient(struct icdb_client *client) {
   client->clid[0] = '\0';
   client->type[0] = '\0';
   client->addr[0] = '\0';
+  client->nodelist[0] = '\0';
   client->provid = 0;
   client->jobid = 0;
   client->nprocs = 0;
@@ -98,9 +101,9 @@ icdb_initjob(struct icdb_job *job) {
  * Add an IC client identified by CLID to the database.
  */
 int icdb_setclient(struct icdb_context *icdb, const char *clid,
-                   const char *type, const char *addr, uint16_t provid,
-                   uint32_t jobid, uint32_t jobncpus, uint32_t jobnnodes,
-                   uint64_t nprocs, const char *nodelist);
+                   const char *type, const char *addr, const char *nodelist,
+                   uint16_t provid, uint32_t jobid, uint32_t jobncpus,
+                   uint32_t jobnnodes, uint64_t nprocs);
 
 /**
  * Get the IC client CLID.

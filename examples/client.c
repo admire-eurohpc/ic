@@ -90,6 +90,18 @@ main(int argc, char **argv)
     /* wait for allocation request */
     icc_sleep(icc, 2000);
   }
+  else if (typeid == ICC_TYPE_RECONFIG2) {
+    /* wait for allocation request */
+    icc_sleep(icc, 2000);
+
+    enum icc_reconfig_type rct;
+    uint32_t nprocs;
+    const char *hostlist = NULL;
+    ret = icc_reconfig_pending(icc, &rct, &nprocs, &hostlist);
+    assert(ret == ICC_SUCCESS);
+
+    printf("reconfigure: type: %d nprocs: %u nodelist: %s\n", rct, nprocs, hostlist);
+  }
   else if (typeid == ICC_TYPE_IOSETS) {
     unsigned int nslices = 0;
 
@@ -139,5 +151,6 @@ _icc_typecode(const char *type)
   else if (!strncmp(type, "adhoccli", 9)) return ICC_TYPE_ADHOCCLI;
   else if (!strncmp(type, "jobmon", 7)) return ICC_TYPE_JOBMON;
   else if (!strncmp(type, "iosets", 7)) return ICC_TYPE_IOSETS;
+  else if (!strncmp(type, "reconfig2", 10)) return ICC_TYPE_RECONFIG2;
   else return ICC_TYPE_UNDEFINED;
 }

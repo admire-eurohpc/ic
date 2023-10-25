@@ -330,7 +330,7 @@ reconfigure2_cb(hg_handle_t h)
   struct icc_context *icc = (struct icc_context *)margo_registered_data(mid, info->id);
 
   if (!icc) {
-    margo_error(mid, "RPC_RECONFIG: No reconfiguration data");
+    margo_error(mid, "RPC_RECONFIG2: no reconfiguration data");
     out.rc = RPC_FAILURE;
     goto respond;
   }

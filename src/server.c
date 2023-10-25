@@ -376,8 +376,7 @@ malleability_th(void *arg)
         }
       }
 
-      if (strncmp(clients[i].type, "flexmpi", ICC_TYPE_LEN) ==  0||
-          strncmp(clients[i].type, "mpi", ICC_TYPE_LEN == 0)) {
+      if (strncmp(clients[i].type, "flexmpi", ICC_TYPE_LEN) ==  0) {
 
           /* XX TMP test resalloc */
           resalloc_in_t allocin;
@@ -407,6 +406,19 @@ malleability_th(void *arg)
             margo_info(data->mid, "Malleability: Job %"PRIu32" RPC_RESALLOC for -%"PRIu32" CPUs", clients[i].jobid, allocin.ncpus);
           }
         }
+
+      if (strncmp(clients[i].type, "reconfig2", ICC_TYPE_LEN) ==  0) {
+        reconfigure_in_t in = { .cmdidx = 0, .maxprocs = 0, .hostlist = clients[i].nodelist };
+
+        ret = rpc_send(data->mid, addr, data->rpcids[RPC_RECONFIGURE2], &in, &rpcret, RPC_TIMEOUT_MS_DEFAULT);
+        if (ret) {
+          LOG_ERROR(data->mid, "malleability: job %"PRIu32": client %s: RPC_RECONFIGURE2 send failed ", clients[i].jobid, clients[i].clid);
+        } else if (rpcret) {
+          LOG_ERROR(data->mid, "malleability: job %"PRIu32": client %s: RPC_RECONFIGURE2 returned with code %d", clients[i].jobid, clients[i].clid, rpcret);
+        } else {
+          margo_info(data->mid, "malleability: job %"PRIu32" RPC_RECONFIG2", clients[i].jobid, clients[i].nodelist);
+        }
+      }
 
       /* why is there no mutex here?? */
       data->sleep = 1;

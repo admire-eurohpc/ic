@@ -41,6 +41,7 @@ enum icc_client_type {
   ICC_TYPE_JOBMON,
   ICC_TYPE_ADHOCCLI,
   ICC_TYPE_IOSETS,
+  ICC_TYPE_RECONFIG2,
   ICC_TYPE_COUNT,
 };
 

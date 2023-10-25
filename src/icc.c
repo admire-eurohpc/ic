@@ -77,7 +77,7 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
   icc->type = typeid;
 
   /*  apps that must be able to both receive AND send RPCs to the IC */
-  if (typeid == ICC_TYPE_MPI || typeid == ICC_TYPE_FLEXMPI)
+  if (typeid == ICC_TYPE_MPI || typeid == ICC_TYPE_FLEXMPI || typeid == ICC_TYPE_RECONFIG2)
     icc->bidirectional = 1;
 
   /* resource manager stuff */
@@ -156,6 +156,7 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
 
   /* pass some data to callbacks that need it */
   margo_register_data(icc->mid, icc->rpcids[RPC_RECONFIGURE], icc, NULL);
+  margo_register_data(icc->mid, icc->rpcids[RPC_RECONFIGURE2], icc, NULL);
   margo_register_data(icc->mid, icc->rpcids[RPC_RESALLOC], icc, NULL);
 
   /* nprocs should unsigned, but MPI defines it as an int, so we take
@@ -426,6 +427,11 @@ icc_reconfig_pending(struct icc_context *icc, enum icc_reconfig_type *reconfigty
     } else {
       rc =  ICC_ENOMEM;
     }
+  }
+
+  /* XX fixme: make a copy of the nodelist */
+  if (*hostlist && !strcmp(*hostlist, "")) {
+    *hostlist = icc->nodelist;
   }
 
   *reconfigtype = icc->reconfig_flag;
@@ -754,10 +760,13 @@ _setup_margo(enum icc_log_level log_level, struct icc_context *icc)
 
   if (icc->type == ICC_TYPE_MPI || icc->type == ICC_TYPE_FLEXMPI) {
     icc->rpcids[RPC_RECONFIGURE] = MARGO_REGISTER(icc->mid, RPC_RECONFIGURE_NAME, reconfigure_in_t, rpc_out_t, reconfigure_cb);
-    icc->rpcids[RPC_RECONFIGURE2] = MARGO_REGISTER(icc->mid, RPC_RECONFIGURE2_NAME, reconfigure_in_t, rpc_out_t, reconfigure2_cb);
     icc->rpcids[RPC_RESALLOC] = MARGO_REGISTER(icc->mid, RPC_RESALLOC_NAME, resalloc_in_t, rpc_out_t, resalloc_cb);
     icc->rpcids[RPC_RESALLOCDONE] = MARGO_REGISTER(icc->mid, RPC_RESALLOCDONE_NAME, resallocdone_in_t, rpc_out_t, NULL);
     icc->rpcids[RPC_MALLEABILITY_REGION] = MARGO_REGISTER(icc->mid, RPC_MALLEABILITY_REGION_NAME, malleability_region_in_t, rpc_out_t, NULL);
+  }
+
+  if (icc->type == ICC_TYPE_RECONFIG2) {
+    icc->rpcids[RPC_RECONFIGURE2] = MARGO_REGISTER(icc->mid, RPC_RECONFIGURE2_NAME, reconfigure_in_t, rpc_out_t, reconfigure2_cb);
   }
 
  end:
@@ -912,6 +921,8 @@ _icc_type_str(enum icc_client_type type)
    return "jobmon";
   case ICC_TYPE_IOSETS:
    return "iosets";
+  case ICC_TYPE_RECONFIG2:
+   return "reconfig2";
   default:
     return "error";
   }

@@ -92,7 +92,7 @@ client_register_cb(hg_handle_t h)
   assert(data->icdbs != NULL);
 
   /* write client to DB */
-  ret = icdb_setclient(data->icdbs[xrank], in.clid, in.type, in.addr_str, in.provid, in.jobid, in.jobncpus, in.jobnnodes, in.nprocs, in.nodelist ? in.nodelist : "");
+  ret = icdb_setclient(data->icdbs[xrank], in.clid, in.type, in.addr_str, in.nodelist ? in.nodelist : "", in.provid, in.jobid, in.jobncpus, in.jobnnodes, in.nprocs);
   if (ret != ICDB_SUCCESS) {
     if (data->icdbs[xrank]) {
       LOG_ERROR(mid, "Could not write client %s to database: %s", in.clid, icdb_errstr(data->icdbs[xrank]));
@@ -104,7 +104,7 @@ client_register_cb(hg_handle_t h)
   ABT_mutex_lock(data->malldat->mutex);
   data->malldat->sleep = 0;
   data->malldat->jobid = in.jobid;
-  //ABT_cond_signal(data->malldat->cond);
+  ABT_cond_signal(data->malldat->cond);
   ABT_mutex_unlock(data->malldat->mutex);
 
  respond:

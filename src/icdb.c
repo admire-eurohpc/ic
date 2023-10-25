@@ -76,6 +76,7 @@
   "GET client:*->clid "                         \
   "GET client:*->type "                         \
   "GET client:*->addr "                         \
+  "GET client:*->nodelist "                     \
   "GET client:*->provid "                       \
   "GET client:*->jobid "                        \
   "GET client:*->nprocs"
@@ -240,6 +241,10 @@ icdb_getclient(struct icdb_context *icdb, const char *clid, struct icdb_client *
     else if (!strcmp(key, "addr")) {
       ICDB_GET_STR(icdb, r, client->addr, key, ICC_ADDR_LEN);
     }
+    else if (!strcmp(key, "nodelist")) {
+      /* will fail is nodelist is too long */
+      ICDB_GET_STR(icdb, r, client->nodelist, key, ICDB_NODELIST_LEN);
+    }
     else if (!strcmp(key, "provid")) {
       ICDB_GET_UINT16(icdb, r, &client->provid, key);
     }
@@ -317,15 +322,18 @@ icdb_getclients(struct icdb_context *icdb, uint32_t jobid,
         break;
       case 2:
         _icdb_get_str(r, clients[i].addr, ICC_ADDR_LEN);
-        /* ICDB_GET_STR(icdb, r, "addr", ICC_ADDR_LEN); */
         break;
       case 3:
-        ICDB_GET_UINT16(icdb, r, &clients[i].provid,  "provid");
+      	/* will fail if nodelist is too long */
+        ICDB_GET_STR(icdb, r, clients[i].nodelist, "nodelist", ICDB_NODELIST_LEN);
         break;
       case 4:
-        ICDB_GET_UINT32(icdb, r, &clients[i].jobid, "jobid");
+        ICDB_GET_UINT16(icdb, r, &clients[i].provid,  "provid");
         break;
       case 5:
+        ICDB_GET_UINT32(icdb, r, &clients[i].jobid, "jobid");
+        break;
+      case 6:
         ICDB_GET_UINT64(icdb, r, &clients[i].nprocs, "nprocs");
         break;
       }
@@ -342,9 +350,9 @@ icdb_getclients(struct icdb_context *icdb, uint32_t jobid,
 
 int
 icdb_setclient(struct icdb_context *icdb, const char *clid,
-               const char *type, const char *addr, uint16_t provid,
-               uint32_t jobid, uint32_t jobncpus, uint32_t jobnnodes,
-               uint64_t nprocs, const char *nodelist)
+               const char *type, const char *addr, const char *nodelist,
+               uint16_t provid, uint32_t jobid, uint32_t jobncpus,
+               uint32_t jobnnodes, uint64_t nprocs)
 {
   CHECK_ICDB(icdb);
   CHECK_PARAM(icdb, clid);
@@ -364,7 +372,7 @@ icdb_setclient(struct icdb_context *icdb, const char *clid,
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
 
   /* 2) write client to hashmap */
-  rep = redisCommand(ctx, "HSET client:%s clid %s type %s addr %s provid %"PRIu32" jobid %"PRIu32" nprocs %"PRIu64" nodelist %s", clid, clid, type, addr, provid, jobid, nprocs, nodelist);
+  rep = redisCommand(ctx, "HSET client:%s clid %s type %s addr %s nodelist %s provid %"PRIu32" jobid %"PRIu32" nprocs %"PRIu64, clid, clid, type, addr, nodelist, provid, jobid, nprocs);
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
 
   /* 3) write to client sets (~indexes)  */
