@@ -31,6 +31,20 @@
     ICDB_SET_STATUS(icdb, ICDB_FAILURE, "Failure");                     \
   }
 
+#define ICDB_GET_STRDUP(icdb,rep,dest,name) switch (_icdb_get_strdup(rep, dest)) { \
+  case ICDB_SUCCESS:                                                    \
+    ICDB_SET_STATUS(icdb, ICDB_SUCCESS, "Success");                     \
+    break;                                                              \
+  case ICDB_EPARAM:                                                     \
+    ICDB_SET_STATUS(icdb, ICDB_EPARAM, "Bad parameters for %s", name);  \
+    break;                                                              \
+  case ICDB_ENOMEM:                                                     \
+    ICDB_SET_STATUS(icdb, ICDB_ENOMEM, "Out of memory field %s", name); \
+    break;                                                              \
+  default:                                                              \
+    ICDB_SET_STATUS(icdb, ICDB_FAILURE, "Failure");                     \
+  }
+
 #define ICDB_GET_UINT(icdb,rep,dest,name,fmt) {                         \
     CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_STRING);                      \
     int _n = sscanf(rep->str, "%"fmt, dest);                            \
@@ -92,10 +106,13 @@ struct icdb_context {
 /* internal utility functions */
 /**
  * Get a string from a Redis reply "str" member int DEST.
- *
+ * The strdup version does the memory allocation, and the result
+ * must be freed by the caller.
  */
 static int
 _icdb_get_str(const redisReply *rep, char *dest, size_t maxlen);
+static int
+_icdb_get_strdup(const redisReply *rep, char **dest);
 
 static int
 _icdb_set_status(struct icdb_context *icdb, int status,
@@ -242,7 +259,6 @@ icdb_getclient(struct icdb_context *icdb, const char *clid, struct icdb_client *
       ICDB_GET_STR(icdb, r, client->addr, key, ICC_ADDR_LEN);
     }
     else if (!strcmp(key, "nodelist")) {
-      /* will fail is nodelist is too long */
       ICDB_GET_STR(icdb, r, client->nodelist, key, ICDB_NODELIST_LEN);
     }
     else if (!strcmp(key, "provid")) {
@@ -324,7 +340,7 @@ icdb_getclients(struct icdb_context *icdb, uint32_t jobid,
         _icdb_get_str(r, clients[i].addr, ICC_ADDR_LEN);
         break;
       case 3:
-      	/* will fail if nodelist is too long */
+        /* will fail if nodelist is too long */
         ICDB_GET_STR(icdb, r, clients[i].nodelist, "nodelist", ICDB_NODELIST_LEN);
         break;
       case 4:
@@ -352,7 +368,7 @@ int
 icdb_setclient(struct icdb_context *icdb, const char *clid,
                const char *type, const char *addr, const char *nodelist,
                uint16_t provid, uint32_t jobid, uint32_t jobncpus,
-               uint32_t jobnnodes, uint64_t nprocs)
+               uint32_t jobnnodes, const char *jobnodelist, uint64_t nprocs)
 {
   CHECK_ICDB(icdb);
   CHECK_PARAM(icdb, clid);
@@ -367,8 +383,7 @@ icdb_setclient(struct icdb_context *icdb, const char *clid,
   /* XX fixme: wrap in transaction */
 
   /* 1) Create or update job */
-  rep = redisCommand(ctx, "HSET job:%"PRIu32" jobid %"PRIu32" ncpus %"PRIu32" nnodes %"PRIu32,
-                     jobid, jobid, jobncpus, jobnnodes);
+  rep = redisCommand(ctx, "HSET job:%"PRIu32" jobid %"PRIu32" ncpus %"PRIu32" nnodes %"PRIu32" nodelist %s",jobid, jobid, jobncpus, jobnnodes, jobnodelist);
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
 
   /* 2) write client to hashmap */
@@ -416,7 +431,6 @@ icdb_delclient(struct icdb_context *icdb, const char *clid, uint32_t *jobid)
   type = rep->element[1]->str;
 
   /* Remove client and client index  */
-  /* XX fixme: wrap in transaction */
   /* DEL & SREM return the number of keys that were deleted */
 
   /* begin transaction */
@@ -483,6 +497,28 @@ int icdb_incrnprocs(struct icdb_context *icdb, char *clid, int64_t incrby) {
   return icdb->status;
 }
 
+void
+icdb_job_init(struct icdb_job *job) {
+  if (!job) return;
+  job->jobid = 0;
+  job->nnodes = 0;
+  job->ncpus = 0;
+  job->nodelist = NULL;
+}
+
+void
+icdb_job_free(struct icdb_job **job) {
+  if (!job || !*job) return;
+  struct icdb_job *j = *job;
+  j->jobid = 0;
+  j->nnodes = 0;
+  j->ncpus = 0;
+  if (j->nodelist) {
+    free(j->nodelist);
+  }
+  j->nodelist = NULL;
+  j = NULL;
+}
 
 int
 icdb_getjob(struct icdb_context *icdb, uint32_t jobid, struct icdb_job *job)
@@ -512,6 +548,9 @@ icdb_getjob(struct icdb_context *icdb, uint32_t jobid, struct icdb_job *job)
     }
     else if (!strcmp(key, "ncpus")) {
       ICDB_GET_UINT32(icdb, r, &job->ncpus, key);
+    }
+    else if (!strcmp(key, "nodelist")) {
+      ICDB_GET_STRDUP(icdb, r, &job->nodelist, key);
     }
 
     if (icdb->status != ICDB_SUCCESS)
@@ -693,6 +732,25 @@ _icdb_get_str(const redisReply *rep, char *dest, size_t maxlen)
 
   strncpy(dest, rep->str, rep->len);
   dest[rep->len] = '\0';
+
+  return ICDB_SUCCESS;
+}
+
+static int
+_icdb_get_strdup(const redisReply *rep, char **dest)
+{
+  if (!rep || !(rep->str)) {
+    return ICDB_EPARAM;
+  }
+
+  if (rep->type != REDIS_REPLY_STRING) {
+    return ICDB_EPARAM;
+  }
+
+  *dest = strdup(rep->str);
+  if (!dest) {
+  	return ICDB_ENOMEM;
+  }
 
   return ICDB_SUCCESS;
 }

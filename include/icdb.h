@@ -86,16 +86,8 @@ struct icdb_job {
   uint32_t jobid;
   uint32_t nnodes;
   uint32_t ncpus;
+  char     *nodelist;  /* need to be malloced */
 };
-
-inline void
-icdb_initjob(struct icdb_job *job) {
-  if (!job) return;
-  job->jobid = 0;
-  job->nnodes = 0;
-  job->ncpus= 0;
-}
-
 
 /**
  * Add an IC client identified by CLID to the database.
@@ -103,7 +95,7 @@ icdb_initjob(struct icdb_job *job) {
 int icdb_setclient(struct icdb_context *icdb, const char *clid,
                    const char *type, const char *addr, const char *nodelist,
                    uint16_t provid, uint32_t jobid, uint32_t jobncpus,
-                   uint32_t jobnnodes, uint64_t nprocs);
+                   uint32_t jobnnodes, const char *jobnodelist, uint64_t nprocs);
 
 /**
  * Get the IC client CLID.
@@ -145,10 +137,19 @@ int icdb_delclient(struct icdb_context *icdb, const char *clid, uint32_t *jobid)
  */
 int icdb_incrnprocs(struct icdb_context *icdb, char *clid, int64_t incrby);
 
+/**
+ * Init an ICDB job.
+ */
+void icdb_job_init(struct icdb_job *job);
 
 /**
- * Get job JOBID into JOB. Allocation of job is the responsibility of
- * the caller.
+ * Free an ICDB job, including allocated memory.
+ */
+void icdb_job_free(struct icdb_job **job);
+
+/**
+ * Get job JOBID into JOB. The job struct should be initialized with
+ * icdb_job_init() and freed with icdb_job_free()
  *
  * Returns ICDB_SUCCESS or an error code.
  */

@@ -118,7 +118,7 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
     icc->jobstepid = 0;
   }
 
-  /* TMP: if/when using, get the nodelist from the resource manager */
+  /* TODO TMP: if/when using, get the nodelist from the resource manager */
   nodelist = getenv("ADMIRE_NODELIST");
   if (nodelist) {
     icc->nodelist = strdup(nodelist);
@@ -429,7 +429,7 @@ icc_reconfig_pending(struct icc_context *icc, enum icc_reconfig_type *reconfigty
     }
   }
 
-  /* XX fixme: make a copy of the nodelist */
+  /* XX fixme: make a copy of the nodelist? */
   if (*hostlist && !strcmp(*hostlist, "")) {
     *hostlist = icc->nodelist;
   }
@@ -877,9 +877,10 @@ _register_client(struct icc_context *icc, unsigned int nprocs)
   /* get job info from resource manager */
   char icrmerr[ICC_ERRSTR_LEN];
   icrmerr_t icrmret;
-  icrmret = icrm_ncpus(icc->jobid, &rpc_in.jobncpus, &rpc_in.jobnnodes, icrmerr);
+  char *jobnodelist;
+  icrmret = icrm_info(icc->jobid, &rpc_in.jobncpus, &rpc_in.jobnnodes, &jobnodelist, icrmerr);
   if (icrmret != ICRM_SUCCESS) {
-    margo_warning(icc->mid, icrmerr);
+    margo_warning(icc->mid, "register_client: %s", icrmerr);
   }
 
   rpc_in.nprocs = nprocs;
@@ -888,6 +889,7 @@ _register_client(struct icc_context *icc, unsigned int nprocs)
   rpc_in.provid = icc->provider_id;
   rpc_in.clid = icc->clid;
   rpc_in.nodelist = icc->nodelist;
+  rpc_in.jobnodelist = jobnodelist;
   rpc_in.type = _icc_type_str(icc->type);
 
   int rpcret = RPC_SUCCESS;
@@ -899,6 +901,8 @@ _register_client(struct icc_context *icc, unsigned int nprocs)
   } else {
     icc->registered = 1;
   }
+
+  free(jobnodelist);
 
  end:
   return rc;

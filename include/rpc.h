@@ -144,6 +144,7 @@ MERCURY_GEN_PROC(client_register_in_t,
                  ((hg_uint32_t)(jobid))
                  ((hg_uint32_t)(jobncpus))
                  ((hg_uint32_t)(jobnnodes))
+                 ((hg_const_string_t)(jobnodelist))
                  ((hg_uint64_t)(nprocs))
                  ((hg_const_string_t)(addr_str))
                  ((hg_uint16_t)(provid))

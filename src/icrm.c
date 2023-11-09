@@ -1,3 +1,4 @@
+#define _GNU_SOURCE             /* for asprintf */
 #include <assert.h>
 #include <netdb.h>              /* socket */
 #include <signal.h>             /* SIG */
@@ -24,10 +25,9 @@
 #define DEPEND_MAXLEN JOBID_MAXLEN + 16 /* enough for dependency string */
 #define JOBSTEP_CANCEL_MAXWAIT  60      /* do not wait for jobstep forever */
 
+#define WRITERR(buf,...)  writerr_internal(buf, __FILE__, __LINE__, __func__, __VA_ARGS__)
 #define CHECK_NULL(p)  if (!(p)) { return ICRM_EPARAM; }
 #define CHECK_ICRM(icrm)  { CHECK_NULL(icrm); CHECK_NULL((icrm)->errstr); }
-
-#define WRITERR(buf,...)  writerr_internal(buf, __FILE__, __LINE__, __func__, __VA_ARGS__)
 
 
 /**
@@ -98,8 +98,8 @@ icrm_jobstate(uint32_t jobid, enum icrm_jobstate *jobstate,
 
 
 icrmerr_t
-icrm_ncpus(uint32_t jobid, uint32_t *ncpus, uint32_t *nnodes,
-           char errstr[ICC_ERRSTR_LEN])
+icrm_info(uint32_t jobid, uint32_t *ncpus, uint32_t *nnodes, char **nodelist,
+          char errstr[ICC_ERRSTR_LEN])
 {
   CHECK_NULL(ncpus);
   CHECK_NULL(nnodes);
@@ -111,15 +111,55 @@ icrm_ncpus(uint32_t jobid, uint32_t *ncpus, uint32_t *nnodes,
   *nnodes = 0;
 
   rc = icrm_load_job_internal(jobid, &buf, errstr);
-  if (rc == ICRM_SUCCESS) {
-    *ncpus = buf->job_array[0].num_cpus;
-    *nnodes = buf->job_array[0].num_nodes;
+  if (rc != ICRM_SUCCESS) {
+    goto end;
+  }
+  *ncpus = buf->job_array[0].num_cpus;
+  *nnodes = buf->job_array[0].num_nodes;
+
+  hostlist_t hl = slurm_hostlist_create(buf->job_array[0].nodes);
+  if (!hl) {
+    rc = ICRM_FAILURE;
+    WRITERR(errstr, "icrm_info: slurm hostlist creation error");
+    goto end;
   }
 
+  /* get hosts in a comma separated list
+     TODO: not a great use of asprintf, multiple malloc/free */
+  *nodelist = NULL;
+  char *host;
+  while ((host = slurm_hostlist_shift(hl))) {
+    char *l;
+    int n;
+    if (!*nodelist) {
+      n = asprintf(&l, "%s", host);
+    } else {
+      n = asprintf(&l, "%s,%s", *nodelist, host);
+      free(*nodelist);
+    }
+    if (n == -1) {
+      rc = ICRM_FAILURE;
+      WRITERR(errstr, "icrm_info: node list building error");
+      goto end;
+    }
+    *nodelist = l;
+    free(host);
+  }
+  slurm_hostlist_destroy(hl);
+
+
+// *nodelist = strdup(buf->job_array[0].nodes);
+  // if (!nodelist) {
+    // rc = ICRM_ENOMEM;
+    // WRITERR(errstr, "icrm_info: nodelist: %s", strerror(errno));
+    // goto end;
+  // }
+
+
+end:
   if (buf) {
     slurm_free_job_info_msg(buf);
   }
-
   return rc;
 }
 

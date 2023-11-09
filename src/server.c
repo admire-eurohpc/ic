@@ -288,6 +288,8 @@ malleability_th(void *arg)
     size_t nclients;
     struct icdb_context *icdb;
     struct icdb_job job;
+    struct icdb_job *j = &job;
+    icdb_job_init(j);
 
     icdb = data->icdbs[xrank];
 
@@ -296,6 +298,8 @@ malleability_th(void *arg)
       LOG_ERROR(data->mid, "IC database: %s", icdb_errstr(icdb));
       return;
     }
+
+    LOG_ERROR(data->mid, "JOB jobid=%d %s (%d)", job.jobid, job.nodelist, job.nnodes);
 
     nclients = NCLIENTS;
     /* XX fixme: multiplication could overflow, use reallocarray? */
@@ -424,6 +428,8 @@ malleability_th(void *arg)
       data->sleep = 1;
       continue;
     }
+
+	icdb_job_free(&j);
 
     /* go back to sleep */
     data->sleep = 1;

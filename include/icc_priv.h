@@ -24,20 +24,25 @@ struct icc_context {
   enum icc_client_type type;            /* client type */
 
   /* can be modified on reconfiguration order, need lock */
-  char              *nodelist;          /* list of nodes */
 
   /* modified on alloc/release, use lock to access
    * hostalloc/hostrelease are used to keep track of nodes allocation/release
    * at the level of the client. It is incomplete because it does not take into
    * account the initial allocation.
-   * This whole setup need to be reworked once we have a better idea of what
-   * we want to do.
+   *
+   * nodelist & jobnodelist are used for malleability with a pool of resources
+   * per job.
+   *
+   * This whole setup need to be reworked once we have a better idea of what we
+   * want to do.
    */
   ABT_rwlock hostlock;
   hm_t       *hostalloc;                /* map of host:ncpus allocated */
   hm_t       *hostrelease;              /* map of host:ncpus released */
   enum icc_reconfig_type reconfig_flag; /* pending reconfiguration order */
   hm_t       *reconfigalloc;            /* map of host:ncpus for reconfig */
+  char       *nodelist;                 /* list of used nodes */
+  char       *jobnodelist;              /* list of nodes for whole job */
 
   /* XX fixme icrm not thread-safe */
   char              icrm_terminate;     /* terminate flag */

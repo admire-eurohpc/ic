@@ -52,14 +52,13 @@ icrmerr_t icrm_jobstate(uint32_t jobid, enum icrm_jobstate *jobstate,
                         char errstr[ICC_ERRSTR_LEN]);
 
 /**
- * Query the resource manager for the number of cpus and the number of
- * nodes assocoated with JOBID. The result is returned in NCPUS and
- * NNODES respectively.
- *
+ * Query the resource manager for informatin associated with JOBID.
+ * Nodelist is allocated by the function and must be freed by the
+ * caller.
  * Return ICRM_SUCCESS or an error code. Fill errstr in case of error.
  */
-icrmerr_t icrm_ncpus(uint32_t jobid, uint32_t *ncpus, uint32_t *nnodes,
-                     char errstr[ICC_ERRSTR_LEN]);
+icrmerr_t icrm_info(uint32_t jobid, uint32_t *ncpus, uint32_t *nnodes,
+                    char **nodelist, char errstr[ICC_ERRSTR_LEN]);
 
 
 /**
