@@ -24,6 +24,7 @@ static void malleability_th(void *arg);
 struct mstream {
   margo_instance_id   mid;
   struct icdb_context **icdbs;  /* DB connection pool */
+  hg_id_t             *rpcids;  /* RPC handles */
 };
 static void mstream_th(void *arg);
 
@@ -153,6 +154,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   struct mstream msd = {
     .mid = mid,
     .icdbs = icdbs,
+    .rpcids = rpc_ids,
   };
   rc = ABT_thread_create(rpc_pool, mstream_th, &msd, ABT_THREAD_ATTR_NULL, NULL);
   if (rc != ABT_SUCCESS) {
@@ -299,8 +301,6 @@ malleability_th(void *arg)
       return;
     }
 
-    LOG_ERROR(data->mid, "JOB jobid=%d %s (%d)", job.jobid, job.nodelist, job.nnodes);
-
     nclients = NCLIENTS;
     /* XX fixme: multiplication could overflow, use reallocarray? */
     /* XX do not alloc/free on every call */
@@ -439,6 +439,35 @@ malleability_th(void *arg)
   return;
 }
 
+static void
+mall_shrink(margo_instance_id mid, hg_id_t rpcs[], struct icdb_context *icdb) {
+  struct icdb_client c;
+  int ret, rpcret;
+
+  ret = icdb_getlargestclient(icdb, &c);
+  if (ret != ICDB_SUCCESS) {
+    margo_error(mid, "mall: icdb getlargest: %s", icdb_errstr(icdb));
+    return;
+  }
+
+  hg_addr_t addr;
+  hg_return_t hret;
+  hret = margo_addr_lookup(mid, c.addr, &addr);
+  if (hret != HG_SUCCESS) {
+    LOG_ERROR(mid, "hg address: %s", HG_Error_to_string(hret));
+    return;
+  }
+
+  reconfigure_in_t in = { .cmdidx = 0, .maxprocs = 42, .hostlist = "" };
+  ret = rpc_send(mid, addr, rpcs[RPC_RECONFIGURE], &in, &rpcret, RPC_TIMEOUT_MS_DEFAULT);
+
+  if (ret) {
+    LOG_ERROR(mid, "mall: client %s: RPC_RECONFIGURE send failed ", c.clid);
+  } else if (rpcret) {
+    LOG_ERROR(mid, "mall: client %s: RPC_RECONFIGURE returned %d", c.clid, rpcret);
+  }
+}
+
 
 /* Message stream */
 void
@@ -460,7 +489,6 @@ mstream_th(void *arg)
 
   struct icdb_context *icdb = data->icdbs[xrank];
   struct icdb_beegfs status;
-  uint32_t jobid;
   margo_debug(data->mid, "message thread: listening on beegfs stream");
   do {
     /* blocking read from FS stream */
@@ -470,15 +498,8 @@ mstream_th(void *arg)
       margo_debug(data->mid, "beegfs:qlen:%"PRIu64" %"PRIu32, status.timestamp, status.qlen);
     }
     if (status.qlen > 10) {
-      ret = icdb_getlargestjob(icdb, &jobid);
-      if (ret != ICDB_SUCCESS) {
-        margo_error(data->mid, "beegfs: icdb getlargest: %s", icdb_errstr(icdb));
-        return;
-      } else if (jobid != 0) {
-        margo_debug(data->mid, "beegfs:qlen job %"PRIu32" should halve", jobid);
-      }
-   	}
+      mall_shrink(data->mid, data->rpcids, icdb);
+    }
   } while (ret == ICDB_SUCCESS);
-
   return;
 }

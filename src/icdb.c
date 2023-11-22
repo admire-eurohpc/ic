@@ -86,8 +86,7 @@
     return ICDB_FAILURE;                                                \
   }
 
-#define ICDB_CLIENT_QUERY  " ALPHA DESC "       \
-  "GET client:*->clid "                         \
+#define ICDB_CLIENT_QUERY "GET client:*->clid " \
   "GET client:*->type "                         \
   "GET client:*->addr "                         \
   "GET client:*->nodelist "                     \
@@ -118,6 +117,8 @@ static int
 _icdb_set_status(struct icdb_context *icdb, int status,
                  const char *filename, int lineno, const char *funcname,
                  const char *format, ...);
+static int
+client_set(struct icdb_context *icdb, redisReply **rep, struct icdb_client *c);
 
 
 /* public functions */
@@ -278,6 +279,19 @@ icdb_getclient(struct icdb_context *icdb, const char *clid, struct icdb_client *
   return icdb->status;
 }
 
+int
+icdb_getlargestclient(struct icdb_context *icdb, struct icdb_client *client)
+{
+  CHECK_ICDB(icdb);
+  CHECK_PARAM(icdb, client);
+
+  redisReply *rep = redisCommand(icdb->redisctx,
+                    "SORT index:clients DESC BY client:*->nnodes LIMIT 0 1 "
+                    ICDB_CLIENT_QUERY);
+  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
+
+  return client_set(icdb, rep->element, client);
+}
 
 int
 icdb_getclients(struct icdb_context *icdb, uint32_t jobid,
@@ -299,12 +313,12 @@ icdb_getclients(struct icdb_context *icdb, uint32_t jobid,
   /* XX if multiple filters use SINTER */
   if (jobid) {
     rep = redisCommand(icdb->redisctx,
-                       "SORT index:clients:jobid:%"PRIu32
+                       "SORT index:clients:jobid:%"PRIu32" ALPHA DESC "
                        ICDB_CLIENT_QUERY, jobid);
 
   } else {
     rep = redisCommand(icdb->redisctx,
-                       "SORT index:clients"
+                       "SORT index:clients ALPHA DESC "
                        ICDB_CLIENT_QUERY);
   }
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
@@ -320,46 +334,13 @@ icdb_getclients(struct icdb_context *icdb, uint32_t jobid,
     ICDB_SET_STATUS(icdb, ICDB_E2BIG, "Too many clients to store");
     return ICDB_E2BIG;
   }
-
   *count = need;
-
-  size_t i, j;
-  redisReply *r;
-  for (i = 0; i < *count; i++) {
-    for (j = 0; j < ICDB_CLIENT_NFIELDS; j++) {
-      r = rep->element[i * ICDB_CLIENT_NFIELDS + j];
-      CHECK_REP_TYPE(icdb, r, REDIS_REPLY_STRING);
-      switch (j) {
-      case 0:
-        ICDB_GET_STR(icdb, r, clients[i].clid, "clid", UUID_STR_LEN);
-        break;
-      case 1:
-        ICDB_GET_STR(icdb, r, clients[i].type, "type", ICC_TYPE_LEN);
-        break;
-      case 2:
-        _icdb_get_str(r, clients[i].addr, ICC_ADDR_LEN);
-        break;
-      case 3:
-        /* will fail if nodelist is too long */
-        ICDB_GET_STR(icdb, r, clients[i].nodelist, "nodelist", ICDB_NODELIST_LEN);
-        break;
-      case 4:
-        ICDB_GET_UINT16(icdb, r, &clients[i].provid,  "provid");
-        break;
-      case 5:
-        ICDB_GET_UINT32(icdb, r, &clients[i].jobid, "jobid");
-        break;
-      case 6:
-        ICDB_GET_UINT64(icdb, r, &clients[i].nprocs, "nprocs");
-        break;
-      }
-      /* immediately stop processing if one field is in error */
-      if (icdb->status != ICDB_SUCCESS) {
-        return ICDB_FAILURE;
-      }
+  for (size_t i = 0; i < *count; i++) {
+    int r = client_set(icdb, rep->element + i * ICDB_CLIENT_NFIELDS, &clients[i]);
+    if (r != ICDB_SUCCESS) {
+      return r;
     }
   }
-
   return ICDB_SUCCESS;
 }
 
@@ -368,7 +349,7 @@ int
 icdb_setclient(struct icdb_context *icdb, const char *clid,
                const char *type, const char *addr, const char *nodelist,
                uint16_t provid, uint32_t jobid, uint32_t jobncpus,
-               uint32_t jobnnodes, const char *jobnodelist, uint64_t nprocs)
+               const char *jobnodelist, uint64_t nprocs)
 {
   CHECK_ICDB(icdb);
   CHECK_PARAM(icdb, clid);
@@ -382,12 +363,36 @@ icdb_setclient(struct icdb_context *icdb, const char *clid,
 
   /* XX fixme: wrap in transaction */
 
+  /* parse comma-separated node lists and add them to the nodelist */
+  uint32_t nnodes = 0, jobnnodes = 0;
+  char *l = strdup(nodelist);
+  if (!l) { return ICDB_ENOMEM; }
+
+  char *node = strtok(l, ",");
+  do {
+    nnodes++;
+    rep = redisCommand(ctx, "RPUSH nodelist:client:%s %s", clid, node);
+    CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
+  } while ((node = strtok(NULL, ",")));
+  free(l);
+
+  l = strdup(jobnodelist);
+  if (!l) { return ICDB_ENOMEM; }
+
+  node = strtok(l, ",");
+  do {
+    jobnnodes++;
+    rep = redisCommand(ctx, "RPUSH nodelist:job:%"PRIu32" %s", jobid, node);
+    CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
+  } while ((node = strtok(NULL, ",")));
+  free(l);
+
   /* 1) Create or update job */
   rep = redisCommand(ctx, "HSET job:%"PRIu32" jobid %"PRIu32" ncpus %"PRIu32" nnodes %"PRIu32" nodelist %s",jobid, jobid, jobncpus, jobnnodes, jobnodelist);
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
 
   /* 2) write client to hashmap */
-  rep = redisCommand(ctx, "HSET client:%s clid %s type %s addr %s nodelist %s provid %"PRIu32" jobid %"PRIu32" nprocs %"PRIu64, clid, clid, type, addr, nodelist, provid, jobid, nprocs);
+  rep = redisCommand(ctx, "HSET client:%s clid %s type %s addr %s nnodes %"PRIu32" nodelist %s provid %"PRIu32" jobid %"PRIu32" nprocs %"PRIu64, clid, clid, type, addr, nnodes, nodelist, provid, jobid, nprocs);
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
 
   /* 3) write to client sets (~indexes)  */
@@ -441,14 +446,18 @@ icdb_delclient(struct icdb_context *icdb, const char *clid, uint32_t *jobid)
   redisCommand(icdb->redisctx, "SREM index:clients:type:%s %s", type, clid);
   redisCommand(icdb->redisctx, "SREM index:clients %s", clid);
   redisCommand(icdb->redisctx, "DEL client:%s", clid);
+  redisCommand(icdb->redisctx, "DEL nodelist:client:%s", clid);
+  redisCommand(icdb->redisctx, "DEL nodelist:job:%"PRIu32, *jobid);
 
   /* end transaction & check responses */
   rep = redisCommand(icdb->redisctx, "EXEC");
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
   CHECK_REP_TYPE(icdb, rep->element[0], REDIS_REPLY_INTEGER); /* SREM */
-  CHECK_REP_TYPE(icdb, rep->element[0], REDIS_REPLY_INTEGER); /* SREM */
   CHECK_REP_TYPE(icdb, rep->element[1], REDIS_REPLY_INTEGER); /* SREM */
-  CHECK_REP_TYPE(icdb, rep->element[0], REDIS_REPLY_INTEGER); /* DEL  */
+  CHECK_REP_TYPE(icdb, rep->element[2], REDIS_REPLY_INTEGER); /* SREM */
+  CHECK_REP_TYPE(icdb, rep->element[3], REDIS_REPLY_INTEGER); /* DEL  */
+  CHECK_REP_TYPE(icdb, rep->element[4], REDIS_REPLY_INTEGER); /* DEL  */
+  CHECK_REP_TYPE(icdb, rep->element[5], REDIS_REPLY_INTEGER); /* DEL  */
 
   return icdb->status;
 }
@@ -752,5 +761,43 @@ _icdb_get_strdup(const redisReply *rep, char **dest)
   	return ICDB_ENOMEM;
   }
 
+  return ICDB_SUCCESS;
+}
+
+static int
+client_set(struct icdb_context *icdb, redisReply **rep, struct icdb_client *c)
+{
+  for (int i = 0; i < ICDB_CLIENT_NFIELDS; i++) {
+    redisReply *r = rep[i];
+    CHECK_REP_TYPE(icdb, r, REDIS_REPLY_STRING);
+    switch (i) {
+    case 0:
+      ICDB_GET_STR(icdb, r, c->clid, "clid", UUID_STR_LEN);
+      break;
+    case 1:
+      ICDB_GET_STR(icdb, r, c->type, "type", ICC_TYPE_LEN);
+      break;
+    case 2:
+      _icdb_get_str(r, c->addr, ICC_ADDR_LEN);
+      break;
+    case 3:
+      /* will fail if nodelist is too long */
+      ICDB_GET_STR(icdb, r, c->nodelist, "nodelist", ICDB_NODELIST_LEN);
+      break;
+    case 4:
+      ICDB_GET_UINT16(icdb, r, &c->provid,  "provid");
+      break;
+    case 5:
+      ICDB_GET_UINT32(icdb, r, &c->jobid, "jobid");
+      break;
+    case 6:
+      ICDB_GET_UINT64(icdb, r, &c->nprocs, "nprocs");
+      break;
+    }
+    /* immediately stop processing if one field is in error */
+    if (icdb->status != ICDB_SUCCESS) {
+      return ICDB_FAILURE;
+    }
+  }
   return ICDB_SUCCESS;
 }

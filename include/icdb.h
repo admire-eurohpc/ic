@@ -95,7 +95,7 @@ struct icdb_job {
 int icdb_setclient(struct icdb_context *icdb, const char *clid,
                    const char *type, const char *addr, const char *nodelist,
                    uint16_t provid, uint32_t jobid, uint32_t jobncpus,
-                   uint32_t jobnnodes, const char *jobnodelist, uint64_t nprocs);
+                   const char *jobnodelist, uint64_t nprocs);
 
 /**
  * Get the IC client CLID.
@@ -106,6 +106,12 @@ int icdb_setclient(struct icdb_context *icdb, const char *clid,
  */
 int icdb_getclient(struct icdb_context *icdb, const char *clid, struct icdb_client *client);
 
+/**
+ * Get the IC client using the highest amount of nodes.
+ *
+ * Returns ICDB_SUCCESS or an error code in case of error.
+ */
+int icdb_getlargestclient(struct icdb_context *icdb, struct icdb_client *client);
 
 /**
  * Get no more than IC clients into the array of size COUNT. Filter by

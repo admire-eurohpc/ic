@@ -92,7 +92,7 @@ client_register_cb(hg_handle_t h)
   assert(data->icdbs != NULL);
 
   /* write client to DB */
-  ret = icdb_setclient(data->icdbs[xrank], in.clid, in.type, in.addr_str, in.nodelist ? in.nodelist : "", in.provid, in.jobid, in.jobncpus, in.jobnnodes, in.jobnodelist, in.nprocs);
+  ret = icdb_setclient(data->icdbs[xrank], in.clid, in.type, in.addr_str, in.nodelist ? in.nodelist : "", in.provid, in.jobid, in.jobncpus, in.jobnodelist, in.nprocs);
   if (ret != ICDB_SUCCESS) {
     if (data->icdbs[xrank]) {
       LOG_ERROR(mid, "Could not write client %s to database: %s", in.clid, icdb_errstr(data->icdbs[xrank]));
@@ -101,11 +101,11 @@ client_register_cb(hg_handle_t h)
   }
 
   /* wake up the malleability thread */
-  ABT_mutex_lock(data->malldat->mutex);
-  data->malldat->sleep = 0;
-  data->malldat->jobid = in.jobid;
-  ABT_cond_signal(data->malldat->cond);
-  ABT_mutex_unlock(data->malldat->mutex);
+  // ABT_mutex_lock(data->malldat->mutex);
+  // data->malldat->sleep = 0;
+  // data->malldat->jobid = in.jobid;
+  // ABT_cond_signal(data->malldat->cond);
+  // ABT_mutex_unlock(data->malldat->mutex);
 
  respond:
   MARGO_RESPOND(h, out, hret);
@@ -162,11 +162,11 @@ client_deregister_cb(hg_handle_t h)
   }
 
   /* wake up the malleability thread */
-  ABT_mutex_lock(data->malldat->mutex);
-  data->malldat->sleep = 0;
-  data->malldat->jobid = jobid;
-  ABT_cond_signal(data->malldat->cond);
-  ABT_mutex_unlock(data->malldat->mutex);
+  // ABT_mutex_lock(data->malldat->mutex);
+  // data->malldat->sleep = 0;
+  // data->malldat->jobid = jobid;
+  // ABT_cond_signal(data->malldat->cond);
+  // ABT_mutex_unlock(data->malldat->mutex);
 
  respond:
   MARGO_RESPOND(h, out, hret);
