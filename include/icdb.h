@@ -134,6 +134,14 @@ int icdb_getclients(struct icdb_context *icdb, uint32_t jobid,
  */
 int icdb_delclient(struct icdb_context *icdb, const char *clid, uint32_t *jobid);
 
+/**
+ * Compute a shrinked node list for the client identified by clid.
+ * Return the reduced node list in newnodelist, which the caller is
+ * responsible for freeing.
+ *
+ * Returns ICDB_SUCCESS or an error code.
+ */
+int icdb_shrink(struct icdb_context *icdb, char *clid, char **newnodelist);
 
 /**
  * Increment the process count of client CLID by INCRBY. INCRBY can be

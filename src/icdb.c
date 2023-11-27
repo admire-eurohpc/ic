@@ -493,15 +493,32 @@ icdb_deljob(struct icdb_context *icdb, uint32_t jobid)
   return icdb->status;
 }
 
+int icdb_shrink(struct icdb_context *icdb, char *clid, char **newnodelist)
+{
+  CHECK_ICDB(icdb);
+  icdb->status = ICDB_SUCCESS;
 
-int icdb_incrnprocs(struct icdb_context *icdb, char *clid, int64_t incrby) {
+  redisReply *rep;
+
+  rep = redisCommand(icdb->redisctx, "EVAL %s 1 nodelist:client:%s",
+  "local n = math.floor(redis.call('LLEN', KEYS[1]) / 2) "
+  "return table.concat(redis.call('LRANGE', KEYS[1], 0, n-1), ',')",
+  clid);
+  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_STRING);
+
+  *newnodelist = strdup(rep->str);
+  return icdb->status;
+}
+
+int icdb_incrnprocs(struct icdb_context *icdb, char *clid, int64_t incrby)
+{
   CHECK_ICDB(icdb);
   icdb->status = ICDB_SUCCESS;
 
   redisReply *rep;
 
   rep = redisCommand(icdb->redisctx, "HINCRBY client:%s nprocs %"PRId64, clid, incrby);
-  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
+  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
 
   return icdb->status;
 }

@@ -92,15 +92,15 @@ main(int argc, char **argv)
   }
   else if (typeid == ICC_TYPE_RECONFIG2) {
     /* wait for allocation request */
-    icc_sleep(icc, 2000);
-
     enum icc_reconfig_type rct;
     uint32_t nprocs;
     const char *hostlist = NULL;
-    ret = icc_reconfig_pending(icc, &rct, &nprocs, &hostlist);
-    assert(ret == ICC_SUCCESS);
-
-    printf("reconfigure: type: %d nprocs: %u nodelist: %s\n", rct, nprocs, hostlist);
+	for (int i = 0; i < 10 ; i++) {
+	  icc_sleep(icc, 2000);
+      ret = icc_reconfig_pending(icc, &rct, &nprocs, &hostlist);
+      assert(ret == ICC_SUCCESS);
+      printf("reconfigure: type: %d nprocs: %u nodelist: %s\n", rct, nprocs, hostlist);
+	}
   }
   else if (typeid == ICC_TYPE_IOSETS) {
     unsigned int nslices = 0;

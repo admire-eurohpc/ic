@@ -450,6 +450,13 @@ mall_shrink(margo_instance_id mid, hg_id_t rpcs[], struct icdb_context *icdb) {
     return;
   }
 
+  char *newnodelist;
+  ret = icdb_shrink(icdb, c.clid, &newnodelist);
+  if (ret != ICDB_SUCCESS) {
+    margo_error(mid, "mall: icdb shrink: %s", icdb_errstr(icdb));
+    return;
+  }
+
   hg_addr_t addr;
   hg_return_t hret;
   hret = margo_addr_lookup(mid, c.addr, &addr);
@@ -458,13 +465,13 @@ mall_shrink(margo_instance_id mid, hg_id_t rpcs[], struct icdb_context *icdb) {
     return;
   }
 
-  reconfigure_in_t in = { .cmdidx = 0, .maxprocs = 42, .hostlist = "" };
-  ret = rpc_send(mid, addr, rpcs[RPC_RECONFIGURE], &in, &rpcret, RPC_TIMEOUT_MS_DEFAULT);
+  reconfigure_in_t in = { .cmdidx = 0, .maxprocs = 0, .hostlist = newnodelist };
 
+  ret = rpc_send(mid, addr, rpcs[RPC_RECONFIGURE2], &in, &rpcret, RPC_TIMEOUT_MS_DEFAULT);
   if (ret) {
-    LOG_ERROR(mid, "mall: client %s: RPC_RECONFIGURE send failed ", c.clid);
+    LOG_ERROR(mid, "mall: client %s: RPC_RECONFIGURE2 send failed ", c.clid);
   } else if (rpcret) {
-    LOG_ERROR(mid, "mall: client %s: RPC_RECONFIGURE returned %d", c.clid, rpcret);
+    LOG_ERROR(mid, "mall: client %s: RPC_RECONFIGURE2 returned %d", c.clid, rpcret);
   }
 }
 
