@@ -127,7 +127,8 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   rpc_ids[RPC_MALLEABILITY_AVAIL] = MARGO_REGISTER(mid, RPC_MALLEABILITY_AVAIL_NAME, malleability_avail_in_t, rpc_out_t, malleability_avail_cb);
   rpc_ids[RPC_MALLEABILITY_REGION] = MARGO_REGISTER(mid, RPC_MALLEABILITY_REGION_NAME, malleability_region_in_t, rpc_out_t, malleability_region_cb);
   rpc_ids[RPC_HINT_IO_BEGIN] = MARGO_REGISTER(mid, RPC_HINT_IO_BEGIN_NAME, hint_io_in_t, hint_io_out_t, hint_io_begin_cb);
-  rpc_ids[RPC_HINT_IO_END] = MARGO_REGISTER(mid, RPC_HINT_IO_END_NAME, hint_io_in_t, rpc_out_t, hint_io_end_cb);
+
+  rpc_ids[RPC_ALERT] = MARGO_REGISTER(mid, RPC_ALERT_NAME, alert_in_t, rpc_out_t, alert_cb);
 
   ABT_pool rpc_pool;
   margo_get_handler_pool(mid, &rpc_pool);
@@ -213,6 +214,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   margo_register_data(mid, rpc_ids[RPC_MALLEABILITY_AVAIL], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_HINT_IO_BEGIN], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_HINT_IO_END], &d, NULL);
+  margo_register_data(mid, rpc_ids[RPC_ALERT], &d, NULL);
 
   margo_wait_for_finalize(mid);
 
@@ -439,7 +441,7 @@ malleability_th(void *arg)
   return;
 }
 
-static void
+void
 mall_shrink(margo_instance_id mid, hg_id_t rpcs[], struct icdb_context *icdb) {
   struct icdb_client c;
   int ret, rpcret;
@@ -474,7 +476,6 @@ mall_shrink(margo_instance_id mid, hg_id_t rpcs[], struct icdb_context *icdb) {
     LOG_ERROR(mid, "mall: client %s: RPC_RECONFIGURE2 returned %d", c.clid, rpcret);
   }
 }
-
 
 /* Message stream */
 void

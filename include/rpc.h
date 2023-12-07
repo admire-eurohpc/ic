@@ -122,7 +122,7 @@ enum icc_rpc_code {
   RPC_RESALLOCDONE,             /* resources alloc done */
   RPC_MALLEABILITY_AVAIL,
   RPC_MALLEABILITY_REGION,
-
+  RPC_ALERT,
   RPC_COUNT
 };
 
@@ -249,6 +249,9 @@ MERCURY_GEN_PROC(hint_io_in_t,
 MERCURY_GEN_PROC(hint_io_out_t,
                  ((uint16_t)(nslices))
                  ((int32_t)(rc)))
+
+#define RPC_ALERT_NAME "icc_alert"
+MERCURY_GEN_PROC(alert_in_t, ((uint8_t)(type)))
 
 /**
  * Send RPC identifed by RPC_CODE from Margo instance MID to the Margo

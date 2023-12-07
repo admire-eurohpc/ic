@@ -47,7 +47,6 @@
     }                                                   \
   }
 
-
 void
 client_register_cb(hg_handle_t h)
 {
@@ -801,3 +800,79 @@ hint_io_end_cb(hg_handle_t h)
   MARGO_DESTROY_HANDLE(h, hret);
 }
 DEFINE_MARGO_RPC_HANDLER(hint_io_end_cb);
+
+void
+alert_cb(hg_handle_t h)
+{
+  hg_return_t hret;
+  margo_instance_id mid;
+  int ret, xrank;
+  alert_in_t in;
+  rpc_out_t out;
+
+  mid = margo_hg_handle_get_instance(h);
+  assert(mid);
+
+  out.rc = RPC_SUCCESS;
+
+  MARGO_GET_INPUT(h,in,hret);
+  if (hret != HG_SUCCESS) {
+    out.rc = RPC_FAILURE;
+    goto respond;
+  }
+
+  ABT_GET_XRANK(ret, xrank);
+  if (ret != ABT_SUCCESS) {
+    out.rc = RPC_FAILURE;
+    goto respond;
+  }
+
+  const struct hg_info *info = margo_get_info(h);
+  struct cb_data *data = (struct cb_data *)margo_registered_data(mid, info->id);
+
+  if (!data) {
+    out.rc = RPC_FAILURE;
+    LOG_ERROR(mid, "No registered data");
+    goto respond;
+  }
+  assert(data->icdbs != NULL);
+
+  struct icdb_context *icdb = data->icdbs[xrank];
+  struct icdb_client c;
+
+  ret = icdb_getlargestclient(icdb, &c);
+  if (ret != ICDB_SUCCESS) {
+    margo_error(mid, "mall: icdb getlargest: %s", icdb_errstr(icdb));
+    return;
+  }
+
+  char *newnodelist;
+  ret = icdb_shrink(icdb, c.clid, &newnodelist);
+  if (ret != ICDB_SUCCESS) {
+    margo_error(mid, "mall: icdb shrink: %s", icdb_errstr(icdb));
+    return;
+  }
+
+  hg_addr_t addr;
+  hg_return_t hret2;
+  hret2 = margo_addr_lookup(mid, c.addr, &addr);
+  if (hret2 != HG_SUCCESS) {
+    LOG_ERROR(mid, "hg address: %s", HG_Error_to_string(hret2));
+    goto respond;
+  }
+
+  int rpcret;
+  reconfigure_in_t rin = { .cmdidx = 0, .maxprocs = 0, .hostlist = newnodelist };
+
+  ret = rpc_send(mid, addr, data->rpcids[RPC_RECONFIGURE2], &rin, &rpcret, RPC_TIMEOUT_MS_DEFAULT);
+  if (ret) {
+    LOG_ERROR(mid, "mall: client %s: RPC_RECONFIGURE2 send failed ", c.clid);
+  } else if (rpcret) {
+    LOG_ERROR(mid, "mall: client %s: RPC_RECONFIGURE2 returned %d", c.clid, rpcret);
+  }
+
+ respond:
+  MARGO_RESPOND(h, out, hret);
+  MARGO_DESTROY_HANDLE(h, hret);
+}
+DEFINE_MARGO_RPC_HANDLER(alert_cb);

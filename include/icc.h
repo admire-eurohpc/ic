@@ -258,5 +258,22 @@ enum icc_malleability_region_action {
  */
 int icc_rpc_malleability_region(struct icc_context *icc, enum icc_malleability_region_action type, int *retcode);
 
+/**
+ * Generic alert.
+ */
+enum icc_alert_type {
+  ICC_ALERT_UNDEFINED = 0,
+  ICC_ALERT_IO,
+  ICC_ALERT_LEN
+};
+
+/**
+ * Send an alert of type TYPE to the controller.
+ *
+ * RETCODE is filled with the RPC return status code on completion.
+ *
+ * Return ICC_SUCCESS or an error code.
+ */
+int icc_rpc_alert(struct icc_context *icc, enum icc_alert_type type, int *retcode);
 
 #endif
