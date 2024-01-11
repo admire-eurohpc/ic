@@ -129,6 +129,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   rpc_ids[RPC_HINT_IO_BEGIN] = MARGO_REGISTER(mid, RPC_HINT_IO_BEGIN_NAME, hint_io_in_t, hint_io_out_t, hint_io_begin_cb);
 
   rpc_ids[RPC_ALERT] = MARGO_REGISTER(mid, RPC_ALERT_NAME, alert_in_t, rpc_out_t, alert_cb);
+  rpc_ids[RPC_NODEALERT] = MARGO_REGISTER(mid, RPC_NODEALERT_NAME, nodealert_in_t, rpc_out_t, nodealert_cb);
 
   ABT_pool rpc_pool;
   margo_get_handler_pool(mid, &rpc_pool);
@@ -215,6 +216,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   margo_register_data(mid, rpc_ids[RPC_HINT_IO_BEGIN], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_HINT_IO_END], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_ALERT], &d, NULL);
+  margo_register_data(mid, rpc_ids[RPC_NODEALERT], &d, NULL);
 
   margo_wait_for_finalize(mid);
 

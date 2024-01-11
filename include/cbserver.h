@@ -19,6 +19,7 @@ void malleability_region_cb(hg_handle_t h);
 void hint_io_begin_cb(hg_handle_t h);
 void hint_io_end_cb(hg_handle_t h);
 void alert_cb(hg_handle_t h);
+void nodealert_cb(hg_handle_t h);
 
 DECLARE_MARGO_RPC_HANDLER(client_register_cb);
 DECLARE_MARGO_RPC_HANDLER(client_deregister_cb);
@@ -32,6 +33,7 @@ DECLARE_MARGO_RPC_HANDLER(malleability_region_cb);
 DECLARE_MARGO_RPC_HANDLER(hint_io_begin_cb);
 DECLARE_MARGO_RPC_HANDLER(hint_io_end_cb);
 DECLARE_MARGO_RPC_HANDLER(alert_cb);
+DECLARE_MARGO_RPC_HANDLER(nodealert_cb);
 
 
 /* XX fixme: duplication in structs */

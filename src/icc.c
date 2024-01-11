@@ -571,6 +571,23 @@ icc_rpc_alert(struct icc_context *icc, enum icc_alert_type type, int *retcode)
 }
 
 int
+icc_rpc_nodealert(struct icc_context *icc, enum icc_alert_type type, const char *node, int *retcode)
+{
+  int rc;
+  nodealert_in_t in;
+
+  CHECK_ICC(icc);
+
+  assert(type > ICC_ALERT_UNDEFINED && type < ICC_ALERT_UNDEFINED && type <= UINT8_MAX);
+  in.type = type;
+  in.nodename = node;
+  in.jobid = icc->jobid;
+
+  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_NODEALERT], &in, retcode, RPC_TIMEOUT_MS_DEFAULT);
+  return rc ? ICC_FAILURE : ICC_SUCCESS;
+}
+
+int
 icc_release_register(struct icc_context *icc, const char *host, uint16_t ncpus)
 {
   CHECK_ICC(icc);
@@ -764,6 +781,7 @@ _setup_margo(enum icc_log_level log_level, struct icc_context *icc)
   icc->rpcids[RPC_HINT_IO_END] = MARGO_REGISTER(icc->mid, RPC_HINT_IO_END_NAME, hint_io_in_t, rpc_out_t, NULL);
 
   icc->rpcids[RPC_ALERT] = MARGO_REGISTER(icc->mid, RPC_ALERT_NAME, alert_in_t, rpc_out_t, NULL);
+  icc->rpcids[RPC_NODEALERT] = MARGO_REGISTER(icc->mid, RPC_NODEALERT_NAME, nodealert_in_t, rpc_out_t, NULL);
 
   if (icc->bidirectional) {
     icc->rpcids[RPC_CLIENT_REGISTER] = MARGO_REGISTER(icc->mid, RPC_CLIENT_REGISTER_NAME, client_register_in_t, rpc_out_t, NULL);

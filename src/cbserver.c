@@ -876,3 +876,24 @@ alert_cb(hg_handle_t h)
   MARGO_DESTROY_HANDLE(h, hret);
 }
 DEFINE_MARGO_RPC_HANDLER(alert_cb);
+
+void
+nodealert_cb(hg_handle_t h)
+{
+  hg_return_t hret;
+  rpc_out_t out;
+  out.rc = RPC_SUCCESS;
+
+  margo_instance_id mid = margo_hg_handle_get_instance(h);
+  if (!mid) {
+    out.rc = RPC_FAILURE;
+    goto respond;
+  }
+
+  /* XX here get rid of a the faulty node for given job */
+
+respond:
+  MARGO_RESPOND(h, out, hret);
+  MARGO_DESTROY_HANDLE(h, hret);
+}
+DEFINE_MARGO_RPC_HANDLER(nodealert_cb);
