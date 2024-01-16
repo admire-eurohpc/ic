@@ -369,22 +369,26 @@ icdb_setclient(struct icdb_context *icdb, const char *clid,
   if (!l) { return ICDB_ENOMEM; }
 
   char *node = strtok(l, ",");
-  do {
-    nnodes++;
-    rep = redisCommand(ctx, "RPUSH nodelist:client:%s %s", clid, node);
-    CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
-  } while ((node = strtok(NULL, ",")));
+  if (node) {
+    do {
+      nnodes++;
+      rep = redisCommand(ctx, "RPUSH nodelist:client:%s %s", clid, node);
+      CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
+    } while ((node = strtok(NULL, ",")));
+  }
   free(l);
 
   l = strdup(jobnodelist);
   if (!l) { return ICDB_ENOMEM; }
 
   node = strtok(l, ",");
-  do {
-    jobnnodes++;
-    rep = redisCommand(ctx, "RPUSH nodelist:job:%"PRIu32" %s", jobid, node);
-    CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
-  } while ((node = strtok(NULL, ",")));
+  if (node) {
+    do {
+      jobnnodes++;
+      rep = redisCommand(ctx, "RPUSH nodelist:job:%"PRIu32" %s", jobid, node);
+      CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
+    } while ((node = strtok(NULL, ",")));
+  }
   free(l);
 
   /* 1) Create or update job */

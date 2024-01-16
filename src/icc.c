@@ -936,7 +936,9 @@ _register_client(struct icc_context *icc, unsigned int nprocs)
     icc->registered = 1;
   }
 
-  free(jobnodelist);
+  if (jobnodelist) {
+    free(jobnodelist);
+  }
 
  end:
   return rc;

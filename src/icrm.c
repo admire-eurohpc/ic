@@ -109,6 +109,7 @@ icrm_info(uint32_t jobid, uint32_t *ncpus, uint32_t *nnodes, char **nodelist,
 
   *ncpus = 0;
   *nnodes = 0;
+  *nodelist = NULL;
 
   rc = icrm_load_job_internal(jobid, &buf, errstr);
   if (rc != ICRM_SUCCESS) {
@@ -126,7 +127,6 @@ icrm_info(uint32_t jobid, uint32_t *ncpus, uint32_t *nnodes, char **nodelist,
 
   /* get hosts in a comma separated list
      TODO: not a great use of asprintf, multiple malloc/free */
-  *nodelist = NULL;
   char *host;
   while ((host = slurm_hostlist_shift(hl))) {
     char *l;

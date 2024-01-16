@@ -91,7 +91,7 @@ client_register_cb(hg_handle_t h)
   assert(data->icdbs != NULL);
 
   /* write client to DB */
-  ret = icdb_setclient(data->icdbs[xrank], in.clid, in.type, in.addr_str, in.nodelist ? in.nodelist : "", in.provid, in.jobid, in.jobncpus, in.jobnodelist, in.nprocs);
+  ret = icdb_setclient(data->icdbs[xrank], in.clid, in.type, in.addr_str, in.nodelist ? in.nodelist : "", in.provid, in.jobid, in.jobncpus, in.jobnodelist ? in.jobnodelist : "", in.nprocs);
   if (ret != ICDB_SUCCESS) {
     if (data->icdbs[xrank]) {
       LOG_ERROR(mid, "Could not write client %s to database: %s", in.clid, icdb_errstr(data->icdbs[xrank]));
