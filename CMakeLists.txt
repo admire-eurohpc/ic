@@ -182,6 +182,11 @@ target_link_libraries(icc_jobcleaner PRIVATE
 # * INSTALL TARGETS *
 # *******************/
 
+# Generate Pkg-Config
+configure_file(admireic.pc.in admireic.pc @ONLY) 
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/admireic.pc DESTINATION lib/pkgconfig)
+
+
 # Libicc
 install(TARGETS icc DESTINATION lib)
 # Headers
