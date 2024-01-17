@@ -47,12 +47,12 @@ testapp_bin := testapp
 
 sources := hashmap.c server.c rpc.c cb.c cbcommon.c icdb.c icrm.c icc.c flexmpi.c
 sources += slurmjobmon.c slurmjobmon2.c slurmadhoccli.c jobcleaner.c
-sources += client.c testapp.c spawn.c synthio.c writer.c mpitest.c test.c
+sources += client.c testapp.c spawn.c synthio.c writer.c mpitest.c test.c nomem.c
 
 sources += ${ENABLE_SLURMADMCLI:true=slurmadmcli.c}
 
 # keep libicc in front
-binaries := $(libicc_so) server client jobcleaner $(libslurmjobmon_so) $(libslurmjobmon2_so) $(libslurmadhoccli_so) spawn synthio writer mpitest
+binaries := $(libicc_so) server client jobcleaner $(libslurmjobmon_so) $(libslurmjobmon2_so) $(libslurmadhoccli_so) spawn synthio writer mpitest nomem
 
 binaries += ${ENABLE_SLURMADMCLI:true=$(libslurmadmcli_so)}
 
