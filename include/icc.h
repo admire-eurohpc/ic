@@ -270,8 +270,21 @@ enum icc_alert_type {
 };
 
 /**
- * Generic alert
- */
+* Send a complete Metric Alert to the IC
+* SOURCE: the name of the emitting collector (jobid, Node Id or main (all))
+* NAME: Name of the alarm
+* METRIC: Name of the blamed metric
+* OPERATOR: Name of the applied operator in the alarm
+* CURRENT_VALUE: value of the given metric
+* ACTIVE: true if the alarm is currently active alarms are only notified on value change
+* PRETTY_PRINT: a string containing a clean description of the alarm
+*
+ * RETCODE is filled with the RPC return status code on completion.
+ *
+ * Return ICC_SUCCESS or an error code.
+*/
+int icc_rpc_metric_alert(struct icc_context * icc,  char * source, char * name, char * metric, char * operator, double current_value, int active, char * pretty_print, int *retcode );
+
 
 /**
  * Send an alert of type TYPE to the controller.

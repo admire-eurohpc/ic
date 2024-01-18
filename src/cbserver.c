@@ -802,6 +802,42 @@ hint_io_end_cb(hg_handle_t h)
 DEFINE_MARGO_RPC_HANDLER(hint_io_end_cb);
 
 void
+metricalert_cb(hg_handle_t h)
+{
+  hg_return_t hret;
+  margo_instance_id mid = NULL;
+  int ret = 0;
+  int xrank = 0;
+  metricalert_in_t in;
+  rpc_out_t out;
+
+  mid = margo_hg_handle_get_instance(h);
+  assert(mid);
+
+  out.rc = RPC_SUCCESS;
+
+  MARGO_GET_INPUT(h,in,hret);
+  if (hret != HG_SUCCESS) {
+    out.rc = RPC_FAILURE;
+    goto respond;
+  }
+
+    margo_info(mid, "Got \""RPC_METRIC_ALERT_NAME"\" %s alert on %s for %s", in.active?"++ACTIVE++":"--INACTIVE--", in.source, in.pretty_print);
+
+  ABT_GET_XRANK(ret, xrank);
+  if (ret != ABT_SUCCESS) {
+    out.rc = RPC_FAILURE;
+    goto respond;
+  }
+
+ respond:
+  MARGO_RESPOND(h, out, hret);
+  MARGO_DESTROY_HANDLE(h, hret);
+}
+DEFINE_MARGO_RPC_HANDLER(metricalert_cb);
+
+
+void
 alert_cb(hg_handle_t h)
 {
   hg_return_t hret;

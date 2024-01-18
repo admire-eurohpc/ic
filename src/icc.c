@@ -3,6 +3,7 @@
 #include <errno.h>              /* errno, strerror */
 #include <inttypes.h>           /* uintXX */
 #include <netdb.h>              /* addrinfo */
+#include <stdio.h>
 #include <stdlib.h>             /* malloc, getenv, setenv, strtoxx */
 #include <string.h>             /* strerror */
 #include <unistd.h>             /* close */
@@ -555,6 +556,29 @@ icc_hint_io_end(struct icc_context *icc, unsigned long witer, int islast, unsign
   return rc;
 }
 
+
+int icc_rpc_metric_alert(struct icc_context * icc, char * source, char * name, char * metric, char * operator, double current_value, int active, char * pretty_print, int *retcode)
+{
+  int rc = 0;
+  metricalert_in_t in;
+
+  CHECK_ICC(icc);
+
+  in.source = source;
+  in.name = name;
+  in.metric = metric;
+  in.operator = operator;
+  char scurrent_val[32];
+  (void)snprintf(scurrent_val, 32, "%g", current_value);
+  in.current_value = scurrent_val;
+  in.active = active;
+  in.pretty_print = pretty_print;
+
+  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_METRIC_ALERT], &in, retcode, RPC_TIMEOUT_MS_DEFAULT);
+  return rc ? ICC_FAILURE : ICC_SUCCESS;
+}
+
+
 int
 icc_rpc_alert(struct icc_context *icc, enum icc_alert_type type, int *retcode)
 {
@@ -780,6 +804,7 @@ _setup_margo(enum icc_log_level log_level, struct icc_context *icc)
   icc->rpcids[RPC_HINT_IO_BEGIN] = MARGO_REGISTER(icc->mid, RPC_HINT_IO_BEGIN_NAME, hint_io_in_t, hint_io_out_t, NULL);
   icc->rpcids[RPC_HINT_IO_END] = MARGO_REGISTER(icc->mid, RPC_HINT_IO_END_NAME, hint_io_in_t, rpc_out_t, NULL);
 
+  icc->rpcids[RPC_METRIC_ALERT] = MARGO_REGISTER(icc->mid, RPC_METRIC_ALERT_NAME, metricalert_in_t, rpc_out_t, NULL);
   icc->rpcids[RPC_ALERT] = MARGO_REGISTER(icc->mid, RPC_ALERT_NAME, alert_in_t, rpc_out_t, NULL);
   icc->rpcids[RPC_NODEALERT] = MARGO_REGISTER(icc->mid, RPC_NODEALERT_NAME, nodealert_in_t, rpc_out_t, NULL);
 
