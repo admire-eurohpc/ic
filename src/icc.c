@@ -414,7 +414,7 @@ icc_reconfig_pending(struct icc_context *icc, enum icc_reconfig_type *reconfigty
   *nprocs = 0;
   *hostlist = NULL;
 
-  ABT_rwlock_rdlock(icc->hostlock);
+  ABT_rwlock_wrlock(icc->hostlock);
 
   if (icc->reconfig_flag == ICC_RECONFIG_NONE) {
     ABT_rwlock_unlock(icc->hostlock);
