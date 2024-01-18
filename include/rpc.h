@@ -89,6 +89,8 @@ icc_to_margo_log_level(enum icc_log_level icc_log_level)
  * RPC_RESALLOC (ic): Request that a client make a request to the
  * resource manager.
  *
+ * RPC_LOWMEM (ic): Inform the client of a low memory situation.
+ *
  * RPC_CLIENT_REGISTER (client): Register an IC client as a Margo
  * "target". Once registered, and IC client can both send and receive
  * RPC server. The client needs to be started in MARGO_SERVER_MODE to
@@ -122,6 +124,7 @@ enum icc_rpc_code {
   RPC_RESALLOCDONE,             /* resources alloc done */
   RPC_MALLEABILITY_AVAIL,
   RPC_MALLEABILITY_REGION,
+  RPC_LOWMEM,
   RPC_METRIC_ALERT,
   RPC_ALERT,
   RPC_NODEALERT,
@@ -252,6 +255,9 @@ MERCURY_GEN_PROC(hint_io_out_t,
                  ((uint16_t)(nslices))
                  ((int32_t)(rc)))
 
+#define RPC_LOWMEM_NAME "icc_lowmem"
+MERCURY_GEN_PROC(lowmem_in_t, ((hg_const_string_t)(nodename)))
+
 #define RPC_METRIC_ALERT_NAME "icc_metric_alert"
 MERCURY_GEN_PROC(metricalert_in_t,
                  ((hg_const_string_t)(source))
@@ -260,8 +266,7 @@ MERCURY_GEN_PROC(metricalert_in_t,
                  ((hg_const_string_t)(operator)) /* app characteristic time (ms) */
                  ((hg_const_string_t)(current_value))      /* set if we start/end an IO phase */
                  ((int32_t)(active))
-                 ((hg_const_string_t)(pretty_print))) 
-
+                 ((hg_const_string_t)(pretty_print)))
 
 #define RPC_ALERT_NAME "icc_alert"
 MERCURY_GEN_PROC(alert_in_t, ((uint8_t)(type)))

@@ -3,6 +3,7 @@
 #include <errno.h>              /* errno, strerror */
 #include <inttypes.h>           /* uintXX */
 #include <netdb.h>              /* addrinfo */
+#include <stdbool.h>			/* bool */
 #include <stdio.h>
 #include <stdlib.h>             /* malloc, getenv, setenv, strtoxx */
 #include <string.h>             /* strerror */
@@ -159,6 +160,7 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
   margo_register_data(icc->mid, icc->rpcids[RPC_RECONFIGURE], icc, NULL);
   margo_register_data(icc->mid, icc->rpcids[RPC_RECONFIGURE2], icc, NULL);
   margo_register_data(icc->mid, icc->rpcids[RPC_RESALLOC], icc, NULL);
+  margo_register_data(icc->mid, icc->rpcids[RPC_LOWMEM], icc, NULL);
 
   /* nprocs should unsigned, but MPI defines it as an int, so we take
      care of the check here */
@@ -446,6 +448,19 @@ icc_reconfig_pending(struct icc_context *icc, enum icc_reconfig_type *reconfigty
   return rc;
 }
 
+iccret_t
+icc_lowmem_pending(struct icc_context *icc, bool *lowmem)
+{
+
+  ABT_rwlock_wrlock(icc->lowmemlock);
+
+  *lowmem = icc->lowmem;
+  icc->lowmem = false;
+
+  ABT_rwlock_unlock(icc->hostlock);
+
+  return ICC_SUCCESS;
+}
 
 iccret_t
 icc_hint_io_begin(struct icc_context *icc, unsigned long witer, int isfirst, unsigned int *nslices)
@@ -796,6 +811,8 @@ _setup_margo(enum icc_log_level log_level, struct icc_context *icc)
   }
 
   icc->rpcids[RPC_TEST] = MARGO_REGISTER(icc->mid, RPC_TEST_NAME, test_in_t, rpc_out_t, test_cb);
+  icc->rpcids[RPC_LOWMEM] = MARGO_REGISTER(icc->mid, RPC_LOWMEM_NAME, lowmem_in_t, rpc_out_t, lowmem_cb);
+
   icc->rpcids[RPC_JOBMON_SUBMIT] = MARGO_REGISTER(icc->mid, RPC_JOBMON_SUBMIT_NAME, jobmon_submit_in_t, rpc_out_t, NULL);
   icc->rpcids[RPC_JOBMON_EXIT] = MARGO_REGISTER(icc->mid, RPC_JOBMON_EXIT_NAME, jobmon_exit_in_t, rpc_out_t, NULL);
   icc->rpcids[RPC_ADHOC_NODES] = MARGO_REGISTER(icc->mid, RPC_ADHOC_NODES_NAME, adhoc_nodes_in_t, rpc_out_t, NULL);

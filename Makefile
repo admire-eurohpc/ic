@@ -47,12 +47,12 @@ testapp_bin := testapp
 
 sources := hashmap.c server.c rpc.c cb.c cbcommon.c icdb.c icrm.c icc.c flexmpi.c
 sources += slurmjobmon.c slurmjobmon2.c slurmadhoccli.c jobcleaner.c
-sources += client.c testapp.c spawn.c synthio.c writer.c mpitest.c test.c nomem.c
+sources += client.c testapp.c spawn.c synthio.c writer.c mpitest.c test.c lowmem.c
 
 sources += ${ENABLE_SLURMADMCLI:true=slurmadmcli.c}
 
 # keep libicc in front
-binaries := $(libicc_so) server client jobcleaner $(libslurmjobmon_so) $(libslurmjobmon2_so) $(libslurmadhoccli_so) spawn synthio writer mpitest nomem
+binaries := $(libicc_so) server client jobcleaner $(libslurmjobmon_so) $(libslurmjobmon2_so) $(libslurmadhoccli_so) spawn synthio writer mpitest lowmem
 
 binaries += ${ENABLE_SLURMADMCLI:true=$(libslurmadmcli_so)}
 
@@ -129,6 +129,8 @@ $(libicc_so): CPPFLAGS += `$(PKG_CONFIG) --cflags margo uuid`
 $(libicc_so): LDLIBS += `$(PKG_CONFIG) --libs margo uuid` $(LIBS_SLURM) -ldl -Wl,--no-undefined,-h$(libicc_soname)
 
 client: LDLIBS += -L. -licc -Wl,--no-undefined,-rpath-link=${PREFIX}/lib
+
+lowmem: LDLIBS += -L. -licc -Wl,--no-undefined,-rpath-link=${PREFIX}/lib
 
 jobcleaner: LDLIBS += -L. -licc -Wl,--no-undefined,-rpath-link=${PREFIX}/lib
 

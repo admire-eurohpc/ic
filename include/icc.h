@@ -1,6 +1,7 @@
 #ifndef _ADMIRE_ICC_H
 #define _ADMIRE_ICC_H
 
+#include <stdbool.h>
 #include <stdint.h>             /* uintxx_t */
 
 #define ICC_MAJOR 1
@@ -134,6 +135,12 @@ iccret_t icc_reconfig_pending(struct icc_context *icc,
                               enum icc_reconfig_type *reconfigtype,
                               uint32_t *nprocs, const char **hostlist);
 
+/**
+ * Set LOWMEM to true if the controller reported a low memory condition
+ *
+ * Return ICC_SUCCESS or an error code.
+ */
+iccret_t icc_lowmem_pending(struct icc_context *icc, bool *lowmem);
 
 /**
  * Register NCPUS on HOST for release. The resources will be actually

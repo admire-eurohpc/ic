@@ -360,3 +360,47 @@ reconfigure2_cb(hg_handle_t h)
   }
 }
 DEFINE_MARGO_RPC_HANDLER(reconfigure2_cb);
+
+void
+lowmem_cb(hg_handle_t h)
+{
+  hg_return_t hret;
+  margo_instance_id mid;
+  lowmem_in_t in;
+  rpc_out_t out;
+
+  mid = margo_hg_handle_get_instance(h);
+  if (!mid) {
+    out.rc = RPC_FAILURE;
+    margo_error(mid, "Error getting Margo instance");
+    goto respond;
+  }
+
+  out.rc = RPC_SUCCESS;
+
+  hret = margo_get_input(h, &in);
+  if (hret != HG_SUCCESS) {
+    out.rc = RPC_FAILURE;
+    margo_error(mid, "input failure RPC_LOWMEM: %s", HG_Error_to_string(hret));
+    goto respond;
+  }
+
+  const struct hg_info *info = margo_get_info(h);
+  struct icc_context *icc = (struct icc_context *)margo_registered_data(mid, info->id);
+  if (!icc) {
+    margo_error(mid, "RPC_LOWMEM: no registered data");
+    out.rc = RPC_FAILURE;
+    goto respond;
+  }
+
+  ABT_rwlock_wrlock(icc->lowmemlock);
+  icc->lowmem = true;
+  ABT_rwlock_unlock(icc->hostlock);
+
+ respond:
+  hret = margo_respond(h, &out);
+  if (hret != HG_SUCCESS) {
+    margo_error(mid, "Response failure RPC_LOWMEM: %s", HG_Error_to_string(hret));
+  }
+}
+DEFINE_MARGO_RPC_HANDLER(lowmem_cb);

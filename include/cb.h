@@ -33,4 +33,14 @@ DECLARE_MARGO_RPC_HANDLER(reconfigure2_cb);
 void resalloc_cb(hg_handle_t);
 DECLARE_MARGO_RPC_HANDLER(resalloc_cb);
 
+/**
+ * Low memory callback. Just raises a flag to be queried later by the
+ * application.
+ *
+ * RPC status code:
+ * RPC_SUCCESS or RPC_FAILURE in case of error.
+ */
+void lowmem_cb(hg_handle_t h);
+DECLARE_MARGO_RPC_HANDLER(lowmem_cb);
+
 #endif

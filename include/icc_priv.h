@@ -1,6 +1,7 @@
 #ifndef ADMIRE_ICC_PRIV_H
 #define ADMIRE_ICC_PRIV_H
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <margo.h>
 #include "uuid_admire.h"
@@ -43,6 +44,10 @@ struct icc_context {
   hm_t       *reconfigalloc;            /* map of host:ncpus for reconfig */
   char       *nodelist;                 /* list of used nodes */
   char       *jobnodelist;              /* list of nodes for whole job */
+
+  /* alert stuff */
+  ABT_rwlock lowmemlock;
+  bool       lowmem;
 
   /* XX fixme icrm not thread-safe */
   char              icrm_terminate;     /* terminate flag */

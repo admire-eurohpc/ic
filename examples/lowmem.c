@@ -3,6 +3,7 @@
  * percent, at a rate of 10% of the total memory every 2 seconds.
  */
 
+#include <assert.h>
 #include <errno.h>
 #include <getopt.h>
 #include <limits.h>
@@ -12,6 +13,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "icc.h"
 
 void
 usage(void)
@@ -65,10 +67,20 @@ main(int argc, char **argv) {
 		usage();
 	}
 
+	struct icc_context *icc;
+	icc_init(ICC_LOG_DEBUG, 0, &icc);
+	assert(icc);
+
 	long sz = sysconf(_SC_PAGESIZE);
 	long npg = sysconf(_SC_PHYS_PAGES);
 	void *m = NULL;
-	for (long p = 10; p <= percent; p += 10) {
+	bool lowmem = false;
+	for (long p = 10; p <= percent; p += 10, sleep(2)) {
+		icc_lowmem_pending(icc, &lowmem);
+		if (!lowmem) {
+			continue;
+		}
+
 		void *t = reallocarray(m, p, npg * sz / 100);
 		if (!t) {
 			fputs("no memory\n", stderr);
@@ -77,8 +89,9 @@ main(int argc, char **argv) {
 		m = t;
 		/* overflow was checked by reallocarray */
 		memset(m, 1, p * npg * sz /100);
-		sleep(2);
 	}
+
+	icc_fini(icc);
 
 	return EXIT_SUCCESS;
 }
