@@ -122,6 +122,7 @@ enum icc_rpc_code {
   RPC_RESALLOCDONE,             /* resources alloc done */
   RPC_MALLEABILITY_AVAIL,
   RPC_MALLEABILITY_REGION,
+  RPC_METRIC_ALERT,
   RPC_ALERT,
   RPC_NODEALERT,
   RPC_COUNT
@@ -250,6 +251,17 @@ MERCURY_GEN_PROC(hint_io_in_t,
 MERCURY_GEN_PROC(hint_io_out_t,
                  ((uint16_t)(nslices))
                  ((int32_t)(rc)))
+
+#define RPC_METRIC_ALERT_NAME "icc_metric_alert"
+MERCURY_GEN_PROC(metricalert_in_t,
+                 ((hg_const_string_t)(source))
+                 ((hg_const_string_t)(name))
+                 ((hg_const_string_t)(metric))
+                 ((hg_const_string_t)(operator)) /* app characteristic time (ms) */
+                 ((hg_const_string_t)(current_value))      /* set if we start/end an IO phase */
+                 ((int32_t)(active))
+                 ((hg_const_string_t)(pretty_print))) 
+
 
 #define RPC_ALERT_NAME "icc_alert"
 MERCURY_GEN_PROC(alert_in_t, ((uint8_t)(type)))
