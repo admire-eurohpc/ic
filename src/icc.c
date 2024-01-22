@@ -79,7 +79,8 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
   icc->type = typeid;
 
   /*  apps that must be able to both receive AND send RPCs to the IC */
-  if (typeid == ICC_TYPE_MPI || typeid == ICC_TYPE_FLEXMPI || typeid == ICC_TYPE_RECONFIG2)
+  if (typeid == ICC_TYPE_MPI || typeid == ICC_TYPE_FLEXMPI ||
+      typeid == ICC_TYPE_RECONFIG2 || typeid == ICC_TYPE_ALERT)
     icc->bidirectional = 1;
 
   /* resource manager stuff */
@@ -414,7 +415,7 @@ icc_reconfig_pending(struct icc_context *icc, enum icc_reconfig_type *reconfigty
   *nprocs = 0;
   *hostlist = NULL;
 
-  ABT_rwlock_wrlock(icc->hostlock);
+  ABT_rwlock_rdlock(icc->hostlock);
 
   if (icc->reconfig_flag == ICC_RECONFIG_NONE) {
     ABT_rwlock_unlock(icc->hostlock);
@@ -811,7 +812,6 @@ _setup_margo(enum icc_log_level log_level, struct icc_context *icc)
   }
 
   icc->rpcids[RPC_TEST] = MARGO_REGISTER(icc->mid, RPC_TEST_NAME, test_in_t, rpc_out_t, test_cb);
-  icc->rpcids[RPC_LOWMEM] = MARGO_REGISTER(icc->mid, RPC_LOWMEM_NAME, lowmem_in_t, rpc_out_t, lowmem_cb);
 
   icc->rpcids[RPC_JOBMON_SUBMIT] = MARGO_REGISTER(icc->mid, RPC_JOBMON_SUBMIT_NAME, jobmon_submit_in_t, rpc_out_t, NULL);
   icc->rpcids[RPC_JOBMON_EXIT] = MARGO_REGISTER(icc->mid, RPC_JOBMON_EXIT_NAME, jobmon_exit_in_t, rpc_out_t, NULL);
@@ -820,6 +820,10 @@ _setup_margo(enum icc_log_level log_level, struct icc_context *icc)
 
   icc->rpcids[RPC_HINT_IO_BEGIN] = MARGO_REGISTER(icc->mid, RPC_HINT_IO_BEGIN_NAME, hint_io_in_t, hint_io_out_t, NULL);
   icc->rpcids[RPC_HINT_IO_END] = MARGO_REGISTER(icc->mid, RPC_HINT_IO_END_NAME, hint_io_in_t, rpc_out_t, NULL);
+
+  if (icc->type == ICC_TYPE_ALERT) {
+    icc->rpcids[RPC_LOWMEM] = MARGO_REGISTER(icc->mid, RPC_LOWMEM_NAME, lowmem_in_t, rpc_out_t, lowmem_cb);
+  }
 
   icc->rpcids[RPC_METRIC_ALERT] = MARGO_REGISTER(icc->mid, RPC_METRIC_ALERT_NAME, metricalert_in_t, rpc_out_t, NULL);
   icc->rpcids[RPC_ALERT] = MARGO_REGISTER(icc->mid, RPC_ALERT_NAME, alert_in_t, rpc_out_t, NULL);
@@ -1005,6 +1009,8 @@ _icc_type_str(enum icc_client_type type)
    return "iosets";
   case ICC_TYPE_RECONFIG2:
    return "reconfig2";
+  case ICC_TYPE_ALERT:
+   return "alert";
   default:
     return "error";
   }

@@ -497,6 +497,49 @@ icdb_deljob(struct icdb_context *icdb, uint32_t jobid)
   return icdb->status;
 }
 
+int
+icdb_getclients2(struct icdb_context *icdb, uint32_t jobid, const char *type,
+                struct icdb_client *clients[], size_t *count, uint64_t *cursor)
+{
+  CHECK_ICDB(icdb);
+  CHECK_PARAM(icdb, clients);
+
+  redisReply *rep = NULL;
+
+  if (jobid && type) {
+    /* XX sinter return length is unbounded, no cursor */
+    rep = redisCommand(icdb->redisctx,
+            "SINTER index:clients:jobid:%"PRIu32" index:clients:type:%s", jobid, type);
+  } else if (jobid) {
+     rep = redisCommand(icdb->redisctx, "SSCAN index:clients:jobid:%"PRIu32" %d", jobid, *cursor);
+  } else if (type) {
+     rep = redisCommand(icdb->redisctx, "SSCAN index:clients:type:%s %d", type, *cursor);
+  } else {
+     rep = redisCommand(icdb->redisctx, "SSCAN index:clients %d", *cursor);
+  }
+
+  /* SSCAN returns the cursor + an array of elements */
+  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
+  CHECK_REP_TYPE(icdb, rep->element[0], REDIS_REPLY_STRING)
+  CHECK_REP_TYPE(icdb, rep->element[1], REDIS_REPLY_ARRAY)
+
+  ICDB_GET_UINT64(icdb, rep->element[0], cursor, "cursor");
+  *count = rep->element[1]->elements;
+
+  struct icdb_client *tmp = reallocarray(*clients, *count, sizeof(struct icdb_client));
+  if (!tmp) {
+    return ICDB_ENOMEM;
+  }
+
+  for (size_t i = 0; i < *count; i++) {
+    icdb_getclient(icdb, rep->element[1]->element[i]->str, &(tmp[i]));
+  }
+  *clients = tmp;
+
+  return ICDB_SUCCESS;
+}
+
+
 int icdb_shrink(struct icdb_context *icdb, char *clid, char **newnodelist)
 {
   CHECK_ICDB(icdb);

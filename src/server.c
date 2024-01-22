@@ -218,6 +218,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   margo_register_data(mid, rpc_ids[RPC_HINT_IO_END], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_ALERT], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_NODEALERT], &d, NULL);
+  margo_register_data(mid, rpc_ids[RPC_METRIC_ALERT], &d, NULL);
 
   margo_wait_for_finalize(mid);
 

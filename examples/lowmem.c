@@ -1,6 +1,6 @@
 /*
  * Nomem allocate increasingly large chunks of memory to reach the target in
- * percent, at a rate of 10% of the total memory every 2 seconds.
+ * percent, at a rate of 10% of the total memory every 3 seconds.
  */
 
 #include <assert.h>
@@ -68,17 +68,17 @@ main(int argc, char **argv) {
 	}
 
 	struct icc_context *icc;
-	icc_init(ICC_LOG_DEBUG, 0, &icc);
+	icc_init(ICC_LOG_DEBUG, ICC_TYPE_ALERT, &icc);
 	assert(icc);
 
 	long sz = sysconf(_SC_PAGESIZE);
 	long npg = sysconf(_SC_PHYS_PAGES);
 	void *m = NULL;
 	bool lowmem = false;
-	for (long p = 10; p <= percent; p += 10, sleep(2)) {
+	for (long p = 10; p <= percent; p += 10, sleep(3)) {
 		icc_lowmem_pending(icc, &lowmem);
-		if (!lowmem) {
-			continue;
+		if (lowmem) {
+			break;
 		}
 
 		void *t = reallocarray(m, p, npg * sz / 100);

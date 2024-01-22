@@ -801,13 +801,55 @@ hint_io_end_cb(hg_handle_t h)
 }
 DEFINE_MARGO_RPC_HANDLER(hint_io_end_cb);
 
+
+static int
+lowmem_act(margo_instance_id mid, const struct cb_data *data) {
+  int ret, xrank;
+  ABT_GET_XRANK(ret, xrank);
+  if (ret != ABT_SUCCESS) {
+    return 1;
+  }
+  struct icdb_context *icdb = data->icdbs[xrank];
+  struct icdb_client *c = NULL;
+
+  size_t count;
+  uint64_t cursor;
+  ret = icdb_getclients2(icdb, 0, "alert", &c, &count, &cursor);
+  if (ret != ICDB_SUCCESS) {
+    LOG_ERROR(mid, "lowmem: icdb getclients2: %s", icdb_errstr(icdb));
+    return 1;
+  }
+
+  hg_addr_t addr;
+  hg_return_t hret;
+  int rpcret;
+  for (size_t i = 0; i < count; i++) {
+    hret = margo_addr_lookup(mid, c[i].addr, &addr);
+    if (hret != HG_SUCCESS) {
+      LOG_ERROR(mid, "lowmem: response hg address: %s", HG_Error_to_string(hret));
+      return -1;
+    }
+
+    lowmem_in_t rin = { 0 };
+    ret = rpc_send(mid, addr, data->rpcids[RPC_LOWMEM], &rin, &rpcret, RPC_TIMEOUT_MS_DEFAULT);
+    if (ret || rpcret) {
+      LOG_ERROR(mid, "lowmem: client %s: RPC_LOWMEM failed", c[i].clid);
+      return 1;
+    }
+  }
+
+  if (c) {
+    free(c);
+  }
+
+  return 0;
+}
+
 void
 metricalert_cb(hg_handle_t h)
 {
   hg_return_t hret;
   margo_instance_id mid = NULL;
-  int ret = 0;
-  int xrank = 0;
   metricalert_in_t in;
   rpc_out_t out;
 
@@ -822,12 +864,18 @@ metricalert_cb(hg_handle_t h)
     goto respond;
   }
 
-    margo_info(mid, "Got \""RPC_METRIC_ALERT_NAME"\" %s alert on %s for %s", in.active?"++ACTIVE++":"--INACTIVE--", in.source, in.pretty_print);
-
-  ABT_GET_XRANK(ret, xrank);
-  if (ret != ABT_SUCCESS) {
+  const struct hg_info *info = margo_get_info(h);
+  struct cb_data *data = (struct cb_data *)margo_registered_data(mid, info->id);
+  if (!data) {
     out.rc = RPC_FAILURE;
+    LOG_ERROR(mid, "lowmem: no registered data");
     goto respond;
+  }
+
+  if (!strcmp(in.metric, "proxy_memory_used_percent")) {
+    lowmem_act(mid, data);
+  } else {
+    margo_info(mid, "Got \""RPC_METRIC_ALERT_NAME"\" %s alert on %s for %s", in.active?"++ACTIVE++":"--INACTIVE--", in.source, in.pretty_print);
   }
 
  respond:

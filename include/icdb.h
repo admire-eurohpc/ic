@@ -124,6 +124,20 @@ int icdb_getlargestclient(struct icdb_context *icdb, struct icdb_client *client)
 int icdb_getclients(struct icdb_context *icdb, uint32_t jobid,
                     struct icdb_client clients[], size_t *count);
 
+/**
+ * Get clients matching jobid and type, with 0 and "" respectively meaning any
+ * XX intersection not implemented
+ * return results in clients, the caller is responsible for freeing it.
+ * Cursor based, start call with 0, iteration is finished when cursor is 0 again.
+ * Note: we rely on redis returning a "reasonable" number of clients at each
+ * call.
+ *
+ * Similar to icdb_getclients but cursor based.
+ */
+
+int
+icdb_getclients2(struct icdb_context *icdb, uint32_t jobid, const char *type,
+   struct icdb_client *clients[], size_t *count, uint64_t *cursor);
 
 /**
  * Delete IC client CLID.
