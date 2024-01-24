@@ -531,6 +531,7 @@ icdb_getclients2(struct icdb_context *icdb, uint32_t jobid, const char *type,
     return ICDB_ENOMEM;
   }
 
+  /* XX check return code */
   for (size_t i = 0; i < *count; i++) {
     icdb_getclient(icdb, rep->element[1]->element[i]->str, &(tmp[i]));
   }
