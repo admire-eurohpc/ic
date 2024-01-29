@@ -96,9 +96,7 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
 
   /* jobid is only required for registered clients */
   if (icc->bidirectional && !jobid) {
-      margo_error(MARGO_INSTANCE_NULL, "icc (init): job ID not found");
-      rc = ICC_FAILURE;
-      goto error;
+      margo_warning(MARGO_INSTANCE_NULL, "icc (init): job ID not found");
   }
 
   if (jobid) {
@@ -944,7 +942,6 @@ _register_client(struct icc_context *icc, unsigned int nprocs)
   int rc;
 
   assert(icc);
-  assert(icc->jobid);
 
   icc->provider_id = MARGO_PROVIDER_DEFAULT;
 
@@ -955,12 +952,14 @@ _register_client(struct icc_context *icc, unsigned int nprocs)
   }
 
   /* get job info from resource manager */
-  char icrmerr[ICC_ERRSTR_LEN];
-  icrmerr_t icrmret;
-  char *jobnodelist;
-  icrmret = icrm_info(icc->jobid, &rpc_in.jobncpus, &rpc_in.jobnnodes, &jobnodelist, icrmerr);
-  if (icrmret != ICRM_SUCCESS) {
-    margo_warning(icc->mid, "register_client: %s", icrmerr);
+  char *jobnodelist = NULL;
+  if (icc->jobid) {
+    char icrmerr[ICC_ERRSTR_LEN];
+    icrmerr_t icrmret;
+    icrmret = icrm_info(icc->jobid, &rpc_in.jobncpus, &rpc_in.jobnnodes, &jobnodelist, icrmerr);
+    if (icrmret != ICRM_SUCCESS) {
+      margo_warning(icc->mid, "register_client: resource manager: %s", icrmerr);
+    }
   }
 
   rpc_in.nprocs = nprocs;
