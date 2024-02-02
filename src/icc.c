@@ -718,8 +718,8 @@ release_node(struct icc_context *icc, const char *host)
   }
 
   const uint16_t *nreleased = hm_get(icc->hostrelease, host);
-  if (!nreleased) {
-    return ICC_EINVAL;
+  if (!nreleased) {  /* ignore empty nodes */
+    return ICC_SUCCESS;
   }
 
   char icrmerr[ICC_ERRSTR_LEN];
