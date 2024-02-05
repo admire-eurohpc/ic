@@ -166,6 +166,11 @@ int icdb_shrink(struct icdb_context *icdb, char *clid, char **newnodelist);
 int icdb_incrnprocs(struct icdb_context *icdb, char *clid, int64_t incrby);
 
 /**
+ * Mark client CLID as reconfigurable and registers its hints.
+ */
+int icdb_reconfigurable(struct icdb_context *icdb, const char *clid, int32_t procs_hint, int32_t nodes_hint);
+
+/**
  * Init an ICDB job.
  */
 void icdb_job_init(struct icdb_job *job);

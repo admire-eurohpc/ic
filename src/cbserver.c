@@ -439,7 +439,7 @@ malleability_region_cb(hg_handle_t h)
   margo_instance_id mid;
   malleability_region_in_t in;
   rpc_out_t out;
-  int ret;
+  int ret, xrank;
 
   mid = margo_hg_handle_get_instance(h);
   assert(mid);
@@ -450,6 +450,28 @@ malleability_region_cb(hg_handle_t h)
   if (hret != HG_SUCCESS) {
     out.rc = RPC_FAILURE;
     goto respond;
+  }
+
+  ABT_GET_XRANK(ret, xrank);
+  if (ret != ABT_SUCCESS) {
+    out.rc = RPC_FAILURE;
+    goto respond;
+  }
+
+  const struct hg_info *info = margo_get_info(h);
+  struct cb_data *data = (struct cb_data *)margo_registered_data(mid, info->id);
+
+  if (!data) {
+    out.rc = RPC_FAILURE;
+    LOG_ERROR(mid, "No registered data");
+    goto respond;
+  }
+  assert(data->icdbs != NULL);
+
+  ret = icdb_reconfigurable(data->icdbs[xrank], in.clid, in.nprocs, in.nnodes);
+  if (ret != ICDB_SUCCESS) {
+    margo_error(mid, "%s: icdb: %s", __func__, icdb_errstr(data->icdbs[xrank]));
+    out.rc = RPC_FAILURE;
   }
 
   margo_info(mid, "Application %s %s malleability region", in.clid,

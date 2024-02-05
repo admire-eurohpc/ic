@@ -387,17 +387,25 @@ icc_rpc_malleability_avail(struct icc_context *icc, char *type, char *portname, 
 
 
 int
-icc_rpc_malleability_region(struct icc_context *icc, enum icc_malleability_region_action type, int *retcode)
+icc_rpc_malleability_region(struct icc_context *icc, enum icc_malleability_region_action type, int procs_hint, int exclusive_hint, int *retcode)
 {
   int rc;
   malleability_region_in_t in;
 
   CHECK_ICC(icc);
 
-  assert(type > ICC_MALLEABILITY_UNDEFINED && type <= UINT8_MAX);
+  if (type < ICC_MALLEABILITY_UNDEFINED || type > ICC_MALLEABILITY_LIM) {
+    return ICC_FAILURE;
+  }
+
+  if (procs_hint < INT32_MIN || procs_hint > INT32_MAX) {
+    return ICC_FAILURE;
+  }
 
   in.clid = icc->clid;
-  in.type = type; /* safe to cast type to uint8 because of the check above */
+  in.type = type;
+  in.nprocs = procs_hint;
+  in.nnodes = exclusive_hint ? procs_hint : 0;  /* one node per proc */
 
   rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_MALLEABILITY_REGION], &in, retcode, RPC_TIMEOUT_MS_DEFAULT);
 
@@ -981,9 +989,7 @@ _register_client(struct icc_context *icc, unsigned int nprocs)
     icc->registered = 1;
   }
 
-  if (jobnodelist) {
-    free(jobnodelist);
-  }
+  free(jobnodelist);
 
  end:
   return rc;

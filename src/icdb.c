@@ -452,6 +452,7 @@ icdb_delclient(struct icdb_context *icdb, const char *clid, uint32_t *jobid)
   redisCommand(icdb->redisctx, "DEL client:%s", clid);
   redisCommand(icdb->redisctx, "DEL nodelist:client:%s", clid);
   redisCommand(icdb->redisctx, "DEL nodelist:job:%"PRIu32, *jobid);
+  redisCommand(icdb->redisctx, "DEL client:%s:reconfig", clid);
 
   /* end transaction & check responses */
   rep = redisCommand(icdb->redisctx, "EXEC");
@@ -462,10 +463,27 @@ icdb_delclient(struct icdb_context *icdb, const char *clid, uint32_t *jobid)
   CHECK_REP_TYPE(icdb, rep->element[3], REDIS_REPLY_INTEGER); /* DEL  */
   CHECK_REP_TYPE(icdb, rep->element[4], REDIS_REPLY_INTEGER); /* DEL  */
   CHECK_REP_TYPE(icdb, rep->element[5], REDIS_REPLY_INTEGER); /* DEL  */
+  CHECK_REP_TYPE(icdb, rep->element[6], REDIS_REPLY_INTEGER); /* DEL  */
 
   return icdb->status;
 }
 
+int
+icdb_reconfigurable(struct icdb_context *icdb, const char *clid, int32_t procs_hint, int32_t nodes_hint)
+{
+  CHECK_ICDB(icdb);
+  CHECK_PARAM(icdb, clid);
+
+  icdb->status = ICDB_SUCCESS;
+
+  redisReply *rep;
+  redisContext *ctx = icdb->redisctx;
+
+  rep = redisCommand(ctx, "HSET client:%s:reconfig ncpus %"PRIi32" nprocs %"PRIi32, clid, procs_hint, nodes_hint);
+  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
+
+ return icdb->status;
+}
 
 int
 icdb_deljob(struct icdb_context *icdb, uint32_t jobid)

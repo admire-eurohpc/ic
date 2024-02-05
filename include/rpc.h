@@ -227,7 +227,9 @@ MERCURY_GEN_PROC(malleability_avail_in_t,
 
 MERCURY_GEN_PROC(malleability_region_in_t,
                  ((hg_const_string_t)(clid))
-                 ((uint8_t)(type)))
+                 ((uint8_t)(type))
+                 ((hg_int32_t)(nprocs))
+                 ((hg_int32_t)(nnodes)))
 
 
 #define RPC_RECONFIGURE_NAME  "icc_reconfigure"

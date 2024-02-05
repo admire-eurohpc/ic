@@ -78,12 +78,12 @@ main(int argc, char **argv)
 
   /* FlexMPI apps need to wait for malleability commands */
   if (typeid == ICC_TYPE_FLEXMPI) {
-    ret = icc_rpc_malleability_region(icc, ICC_MALLEABILITY_REGION_ENTER, &rpcret);
+    ret = icc_rpc_malleability_region(icc, ICC_MALLEABILITY_REGION_ENTER, -3, 0, &rpcret);
     assert(ret == ICC_SUCCESS && rpcret == ICC_SUCCESS);
 
     icc_sleep(icc, 4000);
 
-    ret = icc_rpc_malleability_region(icc, ICC_MALLEABILITY_REGION_LEAVE, &rpcret);
+    ret = icc_rpc_malleability_region(icc, ICC_MALLEABILITY_REGION_LEAVE, 0, 0, &rpcret);
     assert(ret == ICC_SUCCESS && rpcret == ICC_SUCCESS);
   }
   else if (typeid == ICC_TYPE_MPI) {

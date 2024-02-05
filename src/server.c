@@ -214,6 +214,7 @@ main(int argc __attribute__((unused)), char** argv __attribute__((unused)))
   margo_register_data(mid, rpc_ids[RPC_JOBCLEAN], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_JOBMON_SUBMIT], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_MALLEABILITY_AVAIL], &d, NULL);
+  margo_register_data(mid, rpc_ids[RPC_MALLEABILITY_REGION], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_HINT_IO_BEGIN], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_HINT_IO_END], &d, NULL);
   margo_register_data(mid, rpc_ids[RPC_ALERT], &d, NULL);

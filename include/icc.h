@@ -247,24 +247,30 @@ int icc_rpc_malleability_avail(struct icc_context *icc, char *type, char *portna
 
 
 /**
- * Malleability notification.
+ * Malleability notification type.
+ * WARNING: must fit in uint8.
  */
 enum icc_malleability_region_action {
   ICC_MALLEABILITY_UNDEFINED = 0,
   ICC_MALLEABILITY_REGION_ENTER,
-  ICC_MALLEABILITY_REGION_LEAVE
+  ICC_MALLEABILITY_REGION_LEAVE,
+  ICC_MALLEABILITY_LIM
 };
 
 /**
  * RPC MALLEABILITY_REGION: Notify the server of the start (if type is
  * ICC_MALLEABILITY_REGION_ENTER) or end (if type is
- * ICC_MALLEABILITY_REGION_LEAVE) of a malleability region..
+ * ICC_MALLEABILITY_REGION_LEAVE) of a malleability region.
+ *
+ * procs_hint requests a specific number of processors, exclusive_hint
+ * indicates whether one node per processor is desired.
+ * NOTE: a "number of nodes" hint is probably more appropriate.
  *
  * RETCODE is filled with the RPC return status code on completion.
  *
  * Return ICC_SUCCESS or an error code.
  */
-int icc_rpc_malleability_region(struct icc_context *icc, enum icc_malleability_region_action type, int *retcode);
+int icc_rpc_malleability_region(struct icc_context *icc, enum icc_malleability_region_action type, int procs_hint, int exclusive_hint, int *retcode);
 
 /**
  * Alerts
