@@ -120,7 +120,7 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
   }
 
   /* TODO TMP: if/when using, get the nodelist from the resource manager */
-  nodelist = getenv("ADMIRE_NODELIST");
+  nodelist = getenv("SLURM_JOB_NODELIST");
   if (nodelist) {
     icc->nodelist = strdup(nodelist);
     if (!icc->nodelist) {
