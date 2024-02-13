@@ -276,170 +276,61 @@ malleability_th(void *arg)
 
   while (1) {
     ABT_mutex_lock(data->mutex);
-    while (data->sleep)
+    while (data->sleep) {
       ABT_cond_wait(data->cond, data->mutex);
+    }
+    data->sleep = 1;  // will go back to sleep
     ABT_mutex_unlock(data->mutex);
 
     int ret, xrank;
-    void *tmp;
 
     if (!data->icdbs) {
-      LOG_ERROR(data->mid, "Null ICDB context");
+      LOG_ERROR(data->mid, "null icdb context");
       return;
     }
 
     ret = ABT_self_get_xstream_rank(&xrank);
     if (ret != ABT_SUCCESS) {
-      LOG_ERROR(data->mid, "Argobots ES rank");
+      LOG_ERROR(data->mid, "argobots: ES rank");
       return;
     }
 
-    size_t nclients;
-    struct icdb_context *icdb;
-    struct icdb_job job;
-    struct icdb_job *j = &job;
-    icdb_job_init(j);
+    struct icdb_client client;
+    struct icdb_context *icdb = data->icdbs[xrank];
 
-    icdb = data->icdbs[xrank];
-
-    ret = icdb_getjob(icdb, data->jobid, &job);
+    ret = icdb_getclient(icdb, data->clid, &client);
     if (ret != ICDB_SUCCESS) {
-      LOG_ERROR(data->mid, "IC database: %s", icdb_errstr(icdb));
-      return;
-    }
-
-    nclients = NCLIENTS;
-    /* XX fixme: multiplication could overflow, use reallocarray? */
-    /* XX do not alloc/free on every call */
-    clients = malloc(sizeof(*clients) * nclients);
-    if (!clients) {
-      LOG_ERROR(data->mid, "Failed malloc");
-      return;
-    }
-
-    do {
-      /* XX fixme filter on (flex)MPI clients?*/
-      ret = icdb_getclients(icdb, data->jobid, clients, &nclients);
-
-      /* clients array is too small, expand */
-      if (ret == ICDB_E2BIG && nclients <= NCLIENTS_MAX) {
-        tmp = realloc(clients, sizeof(*clients) * nclients);
-        if (!tmp) {
-          LOG_ERROR(data->mid, "Failed malloc");
-          return;
-        }
-        clients = tmp;
-        continue;
-      }
-      else if (nclients > NCLIENTS_MAX){
-        LOG_ERROR(data->mid, "Too many clients returned from DB");
-        return;
-      }
-      else if (ret != ICDB_SUCCESS) {
-        LOG_ERROR(data->mid, "IC database: %s", icdb_errstr(icdb));
-        free(clients);
-        return;
-      }
-      break;
-    } while (1);
-
-    margo_info(data->mid, "Malleability: Job %"PRIu32": got %zu client%s",
-               data->jobid, nclients, nclients > 1 ? "s" : "");
-
-    /* reconfigure to share cpus fairly between all steps of a job */
-    for (size_t i = 0; i < nclients; i++) {
-      /* make malleability RPC */
-      hg_addr_t addr;
-      hg_return_t hret;
-      int rpcret;
-
-      hret = margo_addr_lookup(data->mid, clients[i].addr, &addr);
-      if (hret != HG_SUCCESS) {
-        LOG_ERROR(data->mid, "Failed getting Mercury address: %s", HG_Error_to_string(hret));
-        break;
-      }
-
-      /* XX Disable FlexMPI intra node stuff, delete at some point */
-      if (0 && strncmp(clients[i].type, "flexmpi", ICC_TYPE_LEN) == 0) {
-        long long dprocs = job.ncpus / nclients - clients[i].nprocs;
-
-        if (dprocs < INT32_MIN || dprocs > INT32_MAX) {
-          LOG_ERROR(data->mid, "Reconfiguration: Job %"PRIu32": too many new processes");
-          break;
-        }
-
-        /* XX number reconfiguration command, add hostlist */
-        reconfigure_in_t in = { .cmdidx = 0, .maxprocs = dprocs, .hostlist = "" };
-
-        ret = rpc_send(data->mid, addr, data->rpcids[RPC_RECONFIGURE], &in, &rpcret, RPC_TIMEOUT_MS_DEFAULT);
-        if (ret) {
-          LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RECONFIGURE send failed ", clients[i].jobid, clients[i].clid);
-        } else if (rpcret) {
-          LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RECONFIGURE returned with code %d", clients[i].jobid, clients[i].clid, rpcret);
-        }
-        else {
-          margo_info(data->mid, "Malleability: Job %"PRIu32": client %s: %s%"PRId32" procs", clients[i].jobid, clients[i].clid, dprocs > 0 ? "+" : "", dprocs);
-          /* XX generalize with a "writeclient" function? */
-          ret = icdb_incrnprocs(icdb, clients[i].clid, dprocs);
-          if (ret != ICDB_SUCCESS) {
-            LOG_ERROR(data->mid, "IC database failure: %s", icdb_errstr(icdb));
-          }
-        }
-      }
-
-      if (strncmp(clients[i].type, "flexmpi", ICC_TYPE_LEN) ==  0) {
-
-          /* XX TMP test resalloc */
-          resalloc_in_t allocin;
-          allocin.shrink = 0;
-          allocin.ncpus = 6;
-
-          sleep(4);
-
-          ret = rpc_send(data->mid, addr, data->rpcids[RPC_RESALLOC], &allocin, &rpcret, RPC_TIMEOUT_MS_DEFAULT);
-          if (ret) {
-            LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RESALLOC send failed ", clients[i].jobid, clients[i].clid);
-          } else if (rpcret) {
-            LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RESALLOC returned with code %d", clients[i].jobid, clients[i].clid, rpcret);
-          } else {
-            margo_info(data->mid, "Malleability: Job %"PRIu32" RPC_RESALLOC for %"PRIu32" CPUs", clients[i].jobid, allocin.ncpus);
-          }
-
-          sleep(16);
-
-          allocin.shrink = 1;
-          ret = rpc_send(data->mid, addr, data->rpcids[RPC_RESALLOC], &allocin, &rpcret, RPC_TIMEOUT_MS_DEFAULT);
-          if (ret) {
-            LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RESALLOC send failed ", clients[i].jobid, clients[i].clid);
-          } else if (rpcret) {
-            LOG_ERROR(data->mid, "Malleability: Job %"PRIu32": client %s: RPC_RESALLOC returned with code %d", clients[i].jobid, clients[i].clid, rpcret);
-          } else {
-            margo_info(data->mid, "Malleability: Job %"PRIu32" RPC_RESALLOC for -%"PRIu32" CPUs", clients[i].jobid, allocin.ncpus);
-          }
-        }
-
-      if (strncmp(clients[i].type, "reconfig2", ICC_TYPE_LEN) ==  0) {
-        reconfigure_in_t in = { .cmdidx = 0, .maxprocs = 0, .hostlist = clients[i].nodelist };
-
-        ret = rpc_send(data->mid, addr, data->rpcids[RPC_RECONFIGURE2], &in, &rpcret, RPC_TIMEOUT_MS_DEFAULT);
-        if (ret) {
-          LOG_ERROR(data->mid, "malleability: job %"PRIu32": client %s: RPC_RECONFIGURE2 send failed ", clients[i].jobid, clients[i].clid);
-        } else if (rpcret) {
-          LOG_ERROR(data->mid, "malleability: job %"PRIu32": client %s: RPC_RECONFIGURE2 returned with code %d", clients[i].jobid, clients[i].clid, rpcret);
-        } else {
-          margo_info(data->mid, "malleability: job %"PRIu32" RPC_RECONFIG2", clients[i].jobid, clients[i].nodelist);
-        }
-      }
-
-      /* why is there no mutex here?? */
-      data->sleep = 1;
+      LOG_ERROR(data->mid, "reconfig: no client %s: %s", data->clid, icdb_errstr(icdb));
       continue;
     }
 
-	icdb_job_free(&j);
+    hg_addr_t addr;
+    hg_return_t hret;
+    int rpcret;
 
-    /* go back to sleep */
-    data->sleep = 1;
+    hret = margo_addr_lookup(data->mid, client.addr, &addr);
+    if (hret != HG_SUCCESS) {
+      LOG_ERROR(data->mid, "reconfig: hg address: %s", HG_Error_to_string(hret));
+      continue;
+    }
+
+    resalloc_in_t in;
+    in.shrink = 0;
+    in.ncpus = client.reconfig_nprocs;
+    in.nnodes = client.reconfig_nnodes;
+    if (client.reconfig_nprocs < 0) {
+      in.shrink = 1;
+      in.ncpus = -in.ncpus;
+    }
+
+    ret = rpc_send(data->mid, addr, data->rpcids[RPC_RESALLOC], &in, &rpcret, RPC_TIMEOUT_MS_DEFAULT);
+    if (ret) {
+      LOG_ERROR(data->mid, "reconfig: client %s: RPC_RESALLOC failed ", client.clid);
+    } else if (rpcret) {
+      LOG_ERROR(data->mid, "reconfig: client %s: RPC_RESALLOC ret %d", client.clid, rpcret);
+    } else {
+      margo_info(data->mid, "reconfig: client %s", client.clid);
+    }
   }
 
   free(clients);

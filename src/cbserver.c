@@ -8,6 +8,7 @@
 #include "rpc.h"
 #include "icdb.h"
 #include "icrm.h"                 /* ressource manager */
+#include "uuid_admire.h"        /* UUID_STR_LEN */
 
 #define IOSETID_LEN 256
 #define APPID_LEN 256
@@ -477,6 +478,14 @@ malleability_region_cb(hg_handle_t h)
   margo_info(mid, "Application %s %s malleability region", in.clid,
              in.type == ICC_MALLEABILITY_REGION_ENTER ? "entering" : "leaving");
 
+  /* wake up the malleability thread */
+  ABT_mutex_lock(data->malldat->mutex);
+  data->malldat->sleep = 0;
+  data->malldat->jobid = 0;
+  memcpy(data->malldat->clid, in.clid, UUID_STR_LEN);
+  ABT_cond_signal(data->malldat->cond);
+  ABT_mutex_unlock(data->malldat->mutex);
+
  respond:
   MARGO_RESPOND(h, out, ret);
   MARGO_DESTROY_HANDLE(h, hret)
@@ -835,7 +844,7 @@ lowmem_act(margo_instance_id mid, const struct cb_data *data) {
   struct icdb_client *c;
 
   size_t count;
-  uint64_t cursor;
+  uint64_t cursor = 0;
 
   do {
     c = NULL;

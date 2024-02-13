@@ -45,7 +45,7 @@
     ICDB_SET_STATUS(icdb, ICDB_FAILURE, "Failure");                     \
   }
 
-#define ICDB_GET_UINT(icdb,rep,dest,name,fmt) {                         \
+#define ICDB_GET_INT(icdb,rep,dest,name,fmt) {                         \
     CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_STRING);                      \
     int _n = sscanf(rep->str, "%"fmt, dest);                            \
     if (_n == 1)                                                        \
@@ -56,9 +56,10 @@
       ICDB_SET_STATUS(icdb, ICDB_FAILURE, "No conversion possible for %s", name); \
   }
 
-#define ICDB_GET_UINT16(icdb,rep,dest,name)  ICDB_GET_UINT(icdb,rep,dest,name,SCNu16)
-#define ICDB_GET_UINT32(icdb,rep,dest,name)  ICDB_GET_UINT(icdb,rep,dest,name,SCNu32)
-#define ICDB_GET_UINT64(icdb,rep,dest,name)  ICDB_GET_UINT(icdb,rep,dest,name,SCNu64)
+#define ICDB_GET_UINT16(icdb,rep,dest,name)  ICDB_GET_INT(icdb,rep,dest,name,SCNu16)
+#define ICDB_GET_UINT32(icdb,rep,dest,name)  ICDB_GET_INT(icdb,rep,dest,name,SCNu32)
+#define ICDB_GET_UINT64(icdb,rep,dest,name)  ICDB_GET_INT(icdb,rep,dest,name,SCNu64)
+#define ICDB_GET_INT32(icdb,rep,dest,name)  ICDB_GET_INT(icdb,rep,dest,name,SCNi32)
 
 #define CHECK_ICDB(icdb)  if (!(icdb) || !(icdb)->redisctx) {           \
     if ((icdb)) {                                                       \
@@ -271,6 +272,12 @@ icdb_getclient(struct icdb_context *icdb, const char *clid, struct icdb_client *
     else if (!strcmp(key, "nprocs")) {
       ICDB_GET_UINT64(icdb, r, &client->nprocs, key);
     }
+    else if (!strcmp(key, "reconfig_ncpus")) {
+      ICDB_GET_INT32(icdb, r, &client->reconfig_nprocs, key);
+    }
+    else if (!strcmp(key, "reconfig_nnodes")) {
+      ICDB_GET_INT32(icdb, r, &client->reconfig_nnodes, key);
+    }
 
     if (icdb->status != ICDB_SUCCESS)
       break;
@@ -479,7 +486,7 @@ icdb_reconfigurable(struct icdb_context *icdb, const char *clid, int32_t procs_h
   redisReply *rep;
   redisContext *ctx = icdb->redisctx;
 
-  rep = redisCommand(ctx, "HSET client:%s:reconfig ncpus %"PRIi32" nprocs %"PRIi32, clid, procs_hint, nodes_hint);
+  rep = redisCommand(ctx, "HSET client:%s reconfig_nprocs %"PRIi32" reconfig_nnodes %"PRIi32, clid, procs_hint, nodes_hint);
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
 
  return icdb->status;

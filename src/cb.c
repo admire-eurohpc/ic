@@ -32,6 +32,7 @@ static int in_resalloc = 0;
 struct alloc_args {
   struct icc_context *icc;
   uint32_t ncpus;
+  uint32_t nnodes;
   int      retcode;
 };
 
@@ -154,12 +155,11 @@ resalloc_cb(hg_handle_t h)
       ABT_rwlock_wrlock(icc->hostlock);
       icc->reconfig_flag = ICC_RECONFIG_SHRINK;
       ABT_rwlock_unlock(icc->hostlock);
-
-      ABT_mutex_lock(mutex);
-      in_resalloc = 0;
-      ABT_mutex_unlock(mutex);
     }
 
+    ABT_mutex_lock(mutex);
+    in_resalloc = 0;
+    ABT_mutex_unlock(mutex);
     goto respond;
   }
 
@@ -182,6 +182,7 @@ resalloc_cb(hg_handle_t h)
 
   args->icc = icc;
   args->ncpus = in.ncpus;
+  args->nnodes = in.nnodes;
   args->retcode = ICC_SUCCESS;
 
   /* note: args must be freed in the ULT */
@@ -209,14 +210,15 @@ alloc_th(struct alloc_args *args)
 
   resallocdone_in_t in = { 0 };
   in.ncpus = args->ncpus;
+  in.nnodes = args->nnodes;
   in.jobid = icc->jobid;
 
-  uint32_t newjobid;
+  uint32_t newjob;
 
   /* allocation request: blocking call */
   hm_t *newalloc;
   char icrmerr[ICC_ERRSTR_LEN];
-  icrmerr_t icrmret = icrm_alloc(icc->jobid, &newjobid, &in.ncpus, &newalloc,
+  icrmerr_t icrmret = icrm_alloc(icc->jobid, &newjob, &in.ncpus, &args->nnodes, &newalloc,
                              icrmerr);
   if (icrmret != ICRM_SUCCESS) {
     margo_error(icc->mid, "icrm_alloc error: %s", icrmerr);
@@ -230,19 +232,13 @@ alloc_th(struct alloc_args *args)
     goto end;
   }
 
-  margo_debug(icc->mid, "Job %"PRIu32" resource allocation of %"PRIu32" CPUs (%s)", in.jobid, in.ncpus, in.hostlist);
+  margo_debug(icc->mid, "Job %"PRIu32" resource allocation of %"PRIu32" cpus in %"PRIu32" nodes (%s)", in.jobid, in.ncpus, in.nnodes, in.hostlist);
 
   /* CRITICAL SECTION: nodes can be deallocated at the same time +
      hostmap needs to be updated atomically */
   ABT_rwlock_wrlock(icc->hostlock);
 
-  icrmret = icrm_merge(newjobid, icrmerr);
-  if (icrmret != ICRM_SUCCESS) {
-    margo_error(icc->mid, "icrm_renounce error: %s", icrmerr);
-    goto end;
-  }
-
-  /* add new resources to hostalloc */
+  /* add new resources to hostalloc etc. */
   icrmret = icrm_update_hostmap(icc->hostalloc, newalloc);
   if (icrmret == ICRM_EOVERFLOW) {
     margo_error(icc->mid, "Too many CPUs allocated");
@@ -255,6 +251,13 @@ alloc_th(struct alloc_args *args)
     margo_error(icc->mid, "Too many CPUs allocated");
     ABT_rwlock_unlock(icc->hostlock);
     goto end;
+  }
+
+  /* update host:jobid map */
+  const char *h;
+  size_t curs = 0;
+  while ((curs = hm_next(newalloc, curs, &h, NULL)) != 0) {
+    hm_set(icc->hostjob, h, &newjob, sizeof(newjob));
   }
 
   ABT_rwlock_unlock(icc->hostlock);

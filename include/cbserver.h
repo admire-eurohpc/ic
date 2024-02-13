@@ -5,6 +5,7 @@
  */
 
 #include "hashmap.h"
+#include "uuid_admire.h"        /* UUID_STR_LEN */
 
 
 void client_register_cb(hg_handle_t h);
@@ -44,7 +45,8 @@ struct malleability_data {
   ABT_cond            cond;
   char                sleep;
   margo_instance_id   mid;
-  uint32_t            jobid;    /* job that triggered malleability */
+  char                clid[UUID_STR_LEN]; /* client triggering malleab. */
+  uint32_t            jobid;              /* job triggering malleab. */
   struct icdb_context **icdbs;  /* DB connection pool */
   hg_id_t             *rpcids;  /* RPC handles */
 };

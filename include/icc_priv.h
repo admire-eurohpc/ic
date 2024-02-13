@@ -40,6 +40,7 @@ struct icc_context {
   ABT_rwlock hostlock;
   hm_t       *hostalloc;                /* map of host:ncpus allocated */
   hm_t       *hostrelease;              /* map of host:ncpus released */
+  hm_t       *hostjob;                  /* map of host:jobid */
   enum icc_reconfig_type reconfig_flag; /* pending reconfiguration order */
   hm_t       *reconfigalloc;            /* map of host:ncpus for reconfig */
   char       *nodelist;                 /* list of used nodes */

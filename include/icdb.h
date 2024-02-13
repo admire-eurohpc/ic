@@ -51,7 +51,7 @@ int icdb_command(struct icdb_context *icdb, const char *format, ...);
  * XX fixme: get rid of NFIELDS
  */
 #define ICDB_NODELIST_LEN   512
-#define ICDB_CLIENT_NFIELDS 7
+#define ICDB_CLIENT_NFIELDS 9
 
 struct icdb_client {
   char clid[UUID_STR_LEN];
@@ -60,7 +60,9 @@ struct icdb_client {
   char nodelist[ICDB_NODELIST_LEN];
   uint16_t provid;
   uint32_t jobid;
-  uint64_t nprocs;              /* nprocesses in client */
+  uint64_t nprocs;			/* nprocesses in client */
+  int32_t reconfig_nprocs;	/* procs requested by client for malleab. */
+  int32_t reconfig_nnodes;
 };
 
 inline void

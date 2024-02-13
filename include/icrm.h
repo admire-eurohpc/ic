@@ -74,7 +74,8 @@ icrmerr_t icrm_info(uint32_t jobid, uint32_t *ncpus, uint32_t *nnodes,
  *
  * The caller is responsible for freeing HOSTMAP.
  */
-icrmerr_t icrm_alloc(uint32_t jobid, uint32_t *newjobid, uint32_t *ncpus,
+icrmerr_t icrm_alloc(uint32_t jobid, uint32_t *newjobid,
+                     uint32_t *ncpus, uint32_t *nnodes,
                      hm_t **hostmap, char errstr[ICC_ERRSTR_LEN]);
 
 /**
