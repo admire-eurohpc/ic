@@ -2,7 +2,6 @@
 #include <inttypes.h>
 #include <margo.h>
 
-#include "cb.h"
 #include "rpc.h"                /* for RPC i/o structs */
 
 #define MARGO_GET_INPUT(h,in,hret)  hret = margo_get_input(h, &in);	\
