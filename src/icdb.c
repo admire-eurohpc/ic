@@ -372,7 +372,7 @@ icdb_setclient(struct icdb_context *icdb, const char *clid,
 
   /* parse comma-separated node lists and add them to the nodelist */
   uint32_t nnodes = 0, jobnnodes = 0;
-  char *l = strdup(nodelist);
+  char *l = strdup(jobnodelist);
   if (!l) { return ICDB_ENOMEM; }
 
   char *node = strtok(l, ",");
