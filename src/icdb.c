@@ -4,6 +4,11 @@
 #include <stdlib.h>             /* malloc */
 #include <string.h>             /* strncpy */
 #include <hiredis.h>
+#include <margo.h>
+#include <unistd.h>             /* sleep */ // CHANGE: JAVI
+#include <time.h>
+
+
 #include "uuid_admire.h"        /* UUID_STR_LEN */
 
 #include "icdb.h"
@@ -93,7 +98,9 @@
   "GET client:*->nodelist "                     \
   "GET client:*->provid "                       \
   "GET client:*->jobid "                        \
-  "GET client:*->nprocs"
+  "GET client:*->nprocs "                       \
+  "GET client:*->reconfig_nprocs "              \
+  "GET client:*->reconfig_nnodes"
 
 
 struct icdb_context {
@@ -102,6 +109,9 @@ struct icdb_context {
   char               errstr[ICDB_ERRSTR_LEN];
 };
 
+// CHANGE: JAVI
+static ABT_mutex_memory icdb_mutex = ABT_MUTEX_INITIALIZER;
+// END CHANGE: JAVI
 
 /* internal utility functions */
 /**
@@ -125,9 +135,12 @@ client_set(struct icdb_context *icdb, redisReply **rep, struct icdb_client *c);
 /* public functions */
 
 int
-icdb_init(struct icdb_context **icdb_context)
+icdb_init(struct icdb_context **icdb_context, char *ip_addr)
 {
   *icdb_context = NULL;
+
+  if (ip_addr == NULL)
+    return ICDB_EPARAM;
 
   struct icdb_context *icdb = calloc(1, sizeof(*icdb));
   if (!icdb)
@@ -135,7 +148,7 @@ icdb_init(struct icdb_context **icdb_context)
 
   icdb->status = ICDB_SUCCESS;
 
-  icdb->redisctx = redisConnect("127.0.0.1", 6379);
+  icdb->redisctx = redisConnect(ip_addr, 6379);
 
   if (icdb->redisctx == NULL) {
     ICDB_SET_STATUS(icdb, ICDB_FAILURE, "Null DB context");
@@ -234,8 +247,13 @@ icdb_getclient(struct icdb_context *icdb, const char *clid, struct icdb_client *
 
   icdb->status = ICDB_SUCCESS;
 
+  // CHANGE: JAVI
+  ABT_mutex mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&icdb_mutex);
+  ABT_mutex_lock(mutex);
   redisReply *rep;
   rep = redisCommand(icdb->redisctx, "HGETALL client:%s", clid);
+  ABT_mutex_unlock(mutex);
+  // END CHANGE: JAVI
 
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
 
@@ -292,9 +310,15 @@ icdb_getlargestclient(struct icdb_context *icdb, struct icdb_client *client)
   CHECK_ICDB(icdb);
   CHECK_PARAM(icdb, client);
 
+  // CHANGE: JAVI
+  ABT_mutex mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&icdb_mutex);
+  ABT_mutex_lock(mutex);
   redisReply *rep = redisCommand(icdb->redisctx,
                     "SORT index:clients DESC BY client:*->nnodes LIMIT 0 1 "
                     ICDB_CLIENT_QUERY);
+  ABT_mutex_unlock(mutex);
+  // END CHANGE: JAVI
+    
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
 
   return client_set(icdb, rep->element, client);
@@ -318,6 +342,9 @@ icdb_getclients(struct icdb_context *icdb, uint32_t jobid,
 
 
   /* XX if multiple filters use SINTER */
+  // CHANGE: JAVI
+  ABT_mutex mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&icdb_mutex);
+  ABT_mutex_lock(mutex);
   if (jobid) {
     rep = redisCommand(icdb->redisctx,
                        "SORT index:clients:jobid:%"PRIu32" ALPHA DESC "
@@ -328,7 +355,10 @@ icdb_getclients(struct icdb_context *icdb, uint32_t jobid,
                        "SORT index:clients ALPHA DESC "
                        ICDB_CLIENT_QUERY);
   }
-  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
+  ABT_mutex_unlock(mutex);
+  // END CHANGE: JAVI
+
+    CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
 
   /* SORT returns fields one after the other, a client is
      ICDB_CLIENT_NFIELDS fields */
@@ -352,6 +382,203 @@ icdb_getclients(struct icdb_context *icdb, uint32_t jobid,
 }
 
 
+// CHANGE: JAVI
+int
+icdb_addnodes(struct icdb_context *icdb, const char *clid, const char *nodelist)
+{
+  CHECK_ICDB(icdb);
+  CHECK_PARAM(icdb, clid);
+  CHECK_PARAM(icdb, nodelist);
+
+  icdb->status = ICDB_SUCCESS;
+
+  redisReply *rep;
+  redisContext *ctx = icdb->redisctx;
+
+  /* XX fixme: wrap in transaction */
+  ABT_mutex mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&icdb_mutex);
+
+  /* parse comma-separated node lists and add them to the nodelist */
+  uint32_t nnodes = 0;
+  char *l = strdup(nodelist);
+  if (!l) { return ICDB_ENOMEM; }
+
+  char *node = strtok(l, ",");
+  do {
+    nnodes++;
+    ABT_mutex_lock(mutex);
+    rep = redisCommand(ctx, "RPUSH nodelist:client:%s %s", clid, node);
+    ABT_mutex_unlock(mutex);
+    CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
+  } while ((node = strtok(NULL, ",")));
+  free(l);
+  freeReplyObject(rep);
+
+  return icdb->status;
+}
+
+int
+icdb_delnodes(struct icdb_context *icdb, const char *clid, const char *nodelist)
+{
+  CHECK_ICDB(icdb);
+  CHECK_PARAM(icdb, clid);
+  CHECK_PARAM(icdb, nodelist);
+
+  icdb->status = ICDB_SUCCESS;
+
+  redisReply *rep = NULL;
+  redisContext *ctx = icdb->redisctx;
+
+  /* XX fixme: wrap in transaction */
+  ABT_mutex mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&icdb_mutex);
+
+  /* parse comma-separated node lists and add them to the nodelist */
+  uint32_t nnodes = 0;
+  char *l = strdup(nodelist);
+  if (!l) { return ICDB_ENOMEM; }
+
+  char *node = strtok(l, ",");
+  do {
+    nnodes++;
+    ABT_mutex_lock(mutex);
+    rep = redisCommand(ctx, "LREM nodelist:client:%s 0 %s", clid, node);
+    ABT_mutex_unlock(mutex);
+    CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
+  } while ((node = strtok(NULL, ",")));
+  free(l);
+  freeReplyObject(rep);
+
+  return icdb->status;
+}
+
+int
+icdb_getMonitor(struct icdb_context *icdb, const char *clid, double *rate_cpu, double *rate_mem, int *num_proc, double *rtime, double *ptime, double *ctime)
+{
+  CHECK_ICDB(icdb);
+  CHECK_PARAM(icdb, clid);
+  CHECK_PARAM(icdb, rate_cpu);
+  CHECK_PARAM(icdb, rate_mem);
+  CHECK_PARAM(icdb, num_proc);
+  CHECK_PARAM(icdb, rtime);
+  CHECK_PARAM(icdb, ptime);
+  CHECK_PARAM(icdb, ctime);
+
+  icdb->status = ICDB_SUCCESS;
+
+  redisReply *rep = NULL;
+  redisReply *rep2 = NULL;
+  redisContext *ctx = icdb->redisctx;
+  double rate_cpu_total=0.0, rate_mem_total=0.0;
+  int num_nodes=0;
+    
+    
+
+  ABT_mutex mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&icdb_mutex);
+    
+  //ABT_mutex_lock(mutex);
+  //rep = redisCommand(ctx, "KEYS *", clid);
+  //ABT_mutex_unlock(mutex);
+  //fprintf(stderr, "icdb_getMonitor: step 0: KEYS *\n");
+  //CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
+  //for (size_t i = 0; i < rep->elements; i++) {
+  //    fprintf(stderr, "icdb_getMonitor: KEYS: %s\n",rep->element[i]->str);
+  //}
+  //freeReplyObject(rep);
+
+  // get list of nodes for clid
+  ABT_mutex_lock(mutex);
+  rep = redisCommand(ctx, "LRANGE nodelist:client:%s 0 -1", clid);
+  ABT_mutex_unlock(mutex);
+  //fprintf(stderr, "icdb_getMonitor: step 1: LRANGE nodelist:client:%s 0 -1 (%p)\n",clid, rep);
+  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
+
+  int memory=0, ncpu=0, ncores=0;
+  double rate_mem_local=0.0, rate_cpu_local=0.0;
+
+  // get monitor values for each node of clid
+  for (size_t i = 0; i < rep->elements; i++) {
+    ABT_mutex_lock(mutex);
+    rep2 = redisCommand(ctx, "GET monitor:%s", rep->element[i]->str);
+    ABT_mutex_unlock(mutex);
+    //fprintf(stderr, "icdb_getMonitor: step 2: GET monitor:%s\n", rep->element[i]->str);
+    CHECK_REP_TYPE(icdb, rep2, REDIS_REPLY_STRING);
+    char ip_addr[20];
+    int nfields =  sscanf(rep2->str, "%[^ ] %d %lf %d %d %lf", ip_addr, &memory, &rate_mem_local, &ncpu, &ncores, &rate_cpu_local);
+    freeReplyObject(rep2);
+    if (nfields != 6) {
+        fprintf(stderr, "icdb_getMonitor: Error with sscanf of GET monitor:%s\n",rep->element[i]->str);
+        icdb->status = ICDB_ENOMEM;
+        freeReplyObject(rep);
+        goto end;
+    }
+    rate_cpu_total = rate_cpu_total + rate_cpu_local;
+    rate_mem_total = rate_mem_total + rate_mem_local;
+    num_nodes++;
+  }
+  freeReplyObject(rep);
+
+  // get current iteration key for clid
+  ABT_mutex_lock(mutex);
+  rep = redisCommand(ctx, "KEYS monitorFlexMPI:%s:*:current", clid);
+  ABT_mutex_unlock(mutex);
+  //fprintf(stderr, "icdb_getMonitor: step 3: KEYS monitorFlexMPI:%s:*:current\n", clid);
+  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
+  if (rep->elements != 1) {
+    fprintf(stderr, "icdb_getMonitor: KEYS monitorFlexMPI:%s:*:current, there is  not just a single entry\n",clid);
+    icdb->status = ICDB_EBADRESP;
+    freeReplyObject(rep);
+    goto end;
+  }
+  //fprintf(stderr, "icdb_getMonitor: step 4\n");
+  CHECK_REP_TYPE(icdb, rep->element[0], REDIS_REPLY_STRING);
+  char *iter_key = strdup(rep->element[0]->str);
+  freeReplyObject(rep);
+
+  // get current iteration data for clid
+  double aux_rtime=0-0, aux_ptime=0.0, aux_ctime=0.0;
+  int aux_num_proc=0;
+  ABT_mutex_lock(mutex);
+  rep = redisCommand(ctx, "GET %s", iter_key);
+  ABT_mutex_unlock(mutex);
+  //fprintf(stderr, "icdb_getMonitor: step 5: GET %s\n", iter_key);
+  free(iter_key);
+  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_STRING);
+  int nfields =  sscanf(rep->str, "%*d %*f %lf %lf %lf %*f %d", &aux_rtime, &aux_ptime, &aux_ctime, &aux_num_proc);
+  freeReplyObject(rep);
+  if (nfields != 4) {
+    fprintf(stderr, "icdb_getMonitor: Error with sscanf of GET %s\n",iter_key);
+    icdb->status = ICDB_ENOMEM;
+    goto end;
+  }
+
+    
+  // calculate final rates
+  (*rate_cpu) = rate_cpu_total / ((double) num_nodes);
+  (*rate_mem) = rate_mem_total / ((double) num_nodes);
+  (*num_proc) = ncpu * ncores;
+  //(*num_proc) = aux_num_proc;
+  (*rtime) = aux_rtime;
+  (*ptime) = aux_ptime;
+  (*ctime) = aux_ctime;
+
+
+  // store data as log
+  char val_str[256];
+  sprintf(val_str, "%ld %d %d %lf %lf %lf %lf %lf", time(NULL), num_nodes, (*num_proc), (*rate_cpu), (*rate_mem), (*rtime), (*ptime), (*ctime));
+
+  ABT_mutex_lock(mutex);
+  rep = redisCommand(ctx, "RPUSH log:%s %s", clid, val_str);
+  ABT_mutex_unlock(mutex);
+  //fprintf(stderr, "icdb_getMonitor: step 5: RPUSH log:%s %s\n",clid, val_str);
+  CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
+  freeReplyObject(rep);
+    
+end:
+  return icdb->status;
+}
+// END CHANGE: JAVI
+
+
 int
 icdb_setclient(struct icdb_context *icdb, const char *clid,
                const char *type, const char *addr, const char *nodelist,
@@ -369,6 +596,31 @@ icdb_setclient(struct icdb_context *icdb, const char *clid,
   redisContext *ctx = icdb->redisctx;
 
   /* XX fixme: wrap in transaction */
+  // CHANGE: JAVI
+  ABT_mutex mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&icdb_mutex);
+  // END CHANGE: JAVI
+
+  /* ALBERTO - Check if client exisits and update his addr*/
+  ABT_mutex_lock(mutex);
+  rep = redisCommand(ctx, "HMGET client:%s addr", clid);
+  ABT_mutex_unlock(mutex);
+  //CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
+  if (rep == NULL || rep->type == REDIS_REPLY_ERROR) 
+        fprintf(stderr, "[DEBUG] Error getting client address from redis");
+
+  //fprintf(stderr, "[DEBUG] Get client addr - num elements returned= %lu - addr = %s\n", rep->elements, rep->element[0]->str);
+  if (rep->type == REDIS_REPLY_ARRAY && rep->elements == 1 && rep->element[0]->str != NULL){
+  //if (rep->elements > 0 && rep->str != NULL){ 
+    //fprintf(stderr, "[DEBUG] Reloading client address\n");
+    ABT_mutex_lock(mutex);
+    rep = redisCommand(ctx, "HSET client:%s addr %s", clid, addr);
+    ABT_mutex_unlock(mutex);
+    if (rep == NULL || rep->type == REDIS_REPLY_ERROR) 
+        fprintf(stderr, "[DEBUG] Error updating the client addr\n");
+    return ICDB_SUCCESS;
+  } 
+
+  //fprintf(stderr, "[DEBUG] Client registered normally\n");
 
   /* parse comma-separated node lists and add them to the nodelist */
   uint32_t nnodes = 0, jobnnodes = 0;
@@ -379,7 +631,11 @@ icdb_setclient(struct icdb_context *icdb, const char *clid,
   if (node) {
     do {
       nnodes++;
+      // CHANGE: JAVI
+      ABT_mutex_lock(mutex);
       rep = redisCommand(ctx, "RPUSH nodelist:client:%s %s", clid, node);
+      ABT_mutex_unlock(mutex);
+      // END CHANGE: JAVI
       CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
     } while ((node = strtok(NULL, ",")));
   }
@@ -392,28 +648,52 @@ icdb_setclient(struct icdb_context *icdb, const char *clid,
   if (node) {
     do {
       jobnnodes++;
+      // CHANGE: JAVI
+      ABT_mutex_lock(mutex);
       rep = redisCommand(ctx, "RPUSH nodelist:job:%"PRIu32" %s", jobid, node);
+      ABT_mutex_unlock(mutex);
+      // END CHANGE: JAVI
       CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
     } while ((node = strtok(NULL, ",")));
   }
   free(l);
 
   /* 1) Create or update job */
+  // CHANGE: JAVI
+  ABT_mutex_lock(mutex);
   rep = redisCommand(ctx, "HSET job:%"PRIu32" jobid %"PRIu32" ncpus %"PRIu32" nnodes %"PRIu32" nodelist %s",jobid, jobid, jobncpus, jobnnodes, jobnodelist);
+  ABT_mutex_unlock(mutex);
+  // END CHANGE: JAVI
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
 
   /* 2) write client to hashmap */
-  rep = redisCommand(ctx, "HSET client:%s clid %s type %s addr %s nnodes %"PRIu32" nodelist %s provid %"PRIu32" jobid %"PRIu32" nprocs %"PRIu64, clid, clid, type, addr, nnodes, nodelist, provid, jobid, nprocs);
+  // CHANGE: JAVI
+  ABT_mutex_lock(mutex);
+  rep = redisCommand(ctx, "HSET client:%s clid %s type %s addr %s nnodes %"PRIu32" nodelist %s provid %"PRIu32" jobid %"PRIu32" nprocs %"PRIu64" reconfig_nprocs 0 reconfig_nnodes 0", clid, clid, type, addr, nnodes, nodelist, provid, jobid, nprocs);
+  ABT_mutex_unlock(mutex);
+  // END CHANGE: JAVI
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
 
   /* 3) write to client sets (~indexes)  */
+  // CHANGE: JAVI
+  ABT_mutex_lock(mutex);
   rep = redisCommand(ctx, "SADD index:clients %s", clid);
+  ABT_mutex_unlock(mutex);
+  // END CHANGE: JAVI
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
 
+  // CHANGE: JAVI
+  ABT_mutex_lock(mutex);
   rep = redisCommand(ctx, "SADD index:clients:type:%s %s", type, clid);
+  ABT_mutex_unlock(mutex);
+  // END CHANGE: JAVI
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
 
+  // CHANGE: JAVI
+  ABT_mutex_lock(mutex);
   rep = redisCommand(ctx, "SADD index:clients:jobid:%"PRIu32" %s", jobid, clid);
+  ABT_mutex_unlock(mutex);
+  // END CHANGE: JAVI
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
 
   return icdb->status;
@@ -430,8 +710,12 @@ icdb_delclient(struct icdb_context *icdb, const char *clid, uint32_t *jobid)
 
   redisReply *rep;
   char *type;
-
+  // CHANGE: JAVI
+  ABT_mutex mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&icdb_mutex);
+  ABT_mutex_lock(mutex);
   rep = redisCommand(icdb->redisctx, "HMGET client:%s jobid type", clid);
+  ABT_mutex_unlock(mutex);
+  // END CHANGE: JAVI
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
 
   if (rep->elements == 0) {
@@ -450,9 +734,15 @@ icdb_delclient(struct icdb_context *icdb, const char *clid, uint32_t *jobid)
   /* DEL & SREM return the number of keys that were deleted */
 
   /* begin transaction */
+  // CHANGE: JAVI
+  ABT_mutex_lock(mutex);
   rep = redisCommand(icdb->redisctx, "MULTI");
+  ABT_mutex_unlock(mutex);
+  // END CHANGE: JAVI
   assert(rep->type == REDIS_REPLY_STATUS);
 
+  // CHANGE: JAVI
+  ABT_mutex_lock(mutex);
   redisCommand(icdb->redisctx, "SREM index:clients:jobid:%"PRIu32" %s", *jobid, clid);
   redisCommand(icdb->redisctx, "SREM index:clients:type:%s %s", type, clid);
   redisCommand(icdb->redisctx, "SREM index:clients %s", clid);
@@ -460,9 +750,15 @@ icdb_delclient(struct icdb_context *icdb, const char *clid, uint32_t *jobid)
   redisCommand(icdb->redisctx, "DEL nodelist:client:%s", clid);
   redisCommand(icdb->redisctx, "DEL nodelist:job:%"PRIu32, *jobid);
   redisCommand(icdb->redisctx, "DEL client:%s:reconfig", clid);
+  ABT_mutex_unlock(mutex);
+  // END CHANGE: JAVI
 
   /* end transaction & check responses */
+  // CHANGE: JAVI
+  ABT_mutex_lock(mutex);
   rep = redisCommand(icdb->redisctx, "EXEC");
+  ABT_mutex_unlock(mutex);
+  // END CHANGE: JAVI
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
   CHECK_REP_TYPE(icdb, rep->element[0], REDIS_REPLY_INTEGER); /* SREM */
   CHECK_REP_TYPE(icdb, rep->element[1], REDIS_REPLY_INTEGER); /* SREM */
@@ -503,7 +799,12 @@ icdb_deljob(struct icdb_context *icdb, uint32_t jobid)
   int ret;
 
   /* 1. delete clients associated with jobid */
+  // CHANGE: JAVI
+  ABT_mutex mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&icdb_mutex);
+  ABT_mutex_lock(mutex);
   rep = redisCommand(icdb->redisctx, "SMEMBERS index:clients:jobid:%"PRIu32, jobid);
+  ABT_mutex_unlock(mutex);
+  // END CHANGE: JAVI
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
 
   for (size_t i = 0; i < rep->elements; i++) {
@@ -516,7 +817,11 @@ icdb_deljob(struct icdb_context *icdb, uint32_t jobid)
   }
 
   /* 2. delete jobid */
+  // CHANGE: JAVI
+  ABT_mutex_lock(mutex);
   rep = redisCommand(icdb->redisctx, "DEL job:%"PRIu32, jobid);
+  ABT_mutex_unlock(mutex);
+  // END CHANGE: JAVI
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_INTEGER);
 
   return icdb->status;
@@ -573,10 +878,15 @@ int icdb_shrink(struct icdb_context *icdb, char *clid, char **newnodelist)
 
   redisReply *rep;
 
+  // CHANGE: JAVI
+  ABT_mutex mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&icdb_mutex);
+  ABT_mutex_lock(mutex);
   rep = redisCommand(icdb->redisctx, "EVAL %s 1 nodelist:client:%s",
-  "local n = math.floor(redis.call('LLEN', KEYS[1]) / 2) "
-  "return table.concat(redis.call('LRANGE', KEYS[1], 0, n-1), ',')",
-  clid);
+    "local n = math.floor(redis.call('LLEN', KEYS[1]) / 2) "
+    "return table.concat(redis.call('LRANGE', KEYS[1], 0, n-1), ',')",
+    clid);
+  ABT_mutex_unlock(mutex);
+  // END CHANGE: JAVI
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_STRING);
 
   *newnodelist = strdup(rep->str);
@@ -589,8 +899,13 @@ int icdb_incrnprocs(struct icdb_context *icdb, char *clid, int64_t incrby)
   icdb->status = ICDB_SUCCESS;
 
   redisReply *rep;
-
+    
+  // CHANGE: JAVI
+  ABT_mutex mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&icdb_mutex);
+  ABT_mutex_lock(mutex);
   rep = redisCommand(icdb->redisctx, "HINCRBY client:%s nprocs %"PRId64, clid, incrby);
+  ABT_mutex_unlock(mutex);
+  // END CHANGE: JAVI
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
 
   return icdb->status;
@@ -629,7 +944,15 @@ icdb_getjob(struct icdb_context *icdb, uint32_t jobid, struct icdb_job *job)
   redisReply *rep;
   redisContext *ctx = icdb->redisctx;
 
+  // CHANGE: JAVI
+  //assert(-1==0);
+  fprintf(stderr, "icdb_getjob: jobid=%d\n", jobid);
+  ABT_mutex mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&icdb_mutex);
+  ABT_mutex_lock(mutex);
   rep = redisCommand(ctx, "HGETALL job:%"PRIu32, jobid);
+  ABT_mutex_unlock(mutex);
+  //assert(1==0);
+  // END CHANGE: JAVI
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
 
   /* HGETALL returns all keys followed by their respective value */
@@ -673,10 +996,14 @@ icdb_getlargestjob(struct icdb_context *icdb, uint32_t *jobid) {
   redisReply *rep;
   redisContext *ctx = icdb->redisctx;
 
+  // CHANGE: JAVI
+  ABT_mutex mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&icdb_mutex);
+  ABT_mutex_lock(mutex);
   rep = redisCommand(ctx, "SORT admire:jobs:running DESC LIMIT 0 1 "
                           "BY admire:job:*->nnodes "
                           "GET admire:job:*->jobid");
-
+  ABT_mutex_unlock(mutex);
+  // END CHANGE: JAVI
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
 
   if (rep->elements > 0) {
@@ -697,7 +1024,17 @@ icdb_mstream_read(struct icdb_context *icdb, char *streamkey)
   redisReply *rep;
   redisContext *ctx = icdb->redisctx;
 
-  rep = redisCommand(ctx, "XREAD BLOCK 0 STREAMS %s $", streamkey);
+  // CHANGE: JAVI
+  ABT_mutex mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&icdb_mutex);
+  do {
+    ABT_mutex_lock(mutex);
+    //rep = redisCommand(ctx, "XREAD BLOCK 0 STREAMS %s $", streamkey);
+    rep = redisCommand(ctx, "XREAD STREAMS %s $", streamkey);
+    ABT_mutex_unlock(mutex);
+      if ((rep)->type == REDIS_REPLY_NIL) sleep(1);
+  } while ((rep)->type == REDIS_REPLY_NIL);
+  // END CHANGE: JAVI
+
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
 
   /* XREAD returns an array of arrays:
@@ -743,7 +1080,16 @@ icdb_mstream_beegfs(struct icdb_context *icdb, struct icdb_beegfs *result)
   redisReply *rep;
   redisContext *ctx = icdb->redisctx;
 
-  rep = redisCommand(ctx, "XREAD BLOCK 0 STREAMS " BEEGFS_MSTREAM " $");
+  // CHANGE: JAVI
+  ABT_mutex mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&icdb_mutex);
+  do {
+    ABT_mutex_lock(mutex);
+    //rep = redisCommand(ctx, "XREAD BLOCK 0 STREAMS " BEEGFS_MSTREAM " $");
+    rep = redisCommand(ctx, "XREAD STREAMS " BEEGFS_MSTREAM " $");
+    ABT_mutex_unlock(mutex);
+      if ((rep)->type == REDIS_REPLY_NIL) sleep(1);
+  } while ((rep)->type == REDIS_REPLY_NIL);
+  // END CHANGE: JAVI
   CHECK_REP_TYPE(icdb, rep, REDIS_REPLY_ARRAY);
 
   /*
@@ -882,6 +1228,12 @@ client_set(struct icdb_context *icdb, redisReply **rep, struct icdb_client *c)
       break;
     case 6:
       ICDB_GET_UINT64(icdb, r, &c->nprocs, "nprocs");
+      break;
+    case 7:
+      ICDB_GET_INT32(icdb, r, &c->reconfig_nprocs, "reconfig_ncpus");
+      break;
+    case 8:
+      ICDB_GET_INT32(icdb, r, &c->reconfig_nnodes, "reconfig_nnodes");
       break;
     }
     /* immediately stop processing if one field is in error */

@@ -5,7 +5,11 @@
  */
 
 #include "hashmap.h"
-#include "uuid_admire.h"        /* UUID_STR_LEN */
+
+// CHANGE JAVI
+#include "rpc.h"
+#include "uuid_admire.h"
+// END CHANGE JAVI
 
 
 void client_register_cb(hg_handle_t h);
@@ -23,6 +27,10 @@ void metricalert_cb(hg_handle_t h);
 void alert_cb(hg_handle_t h);
 void nodealert_cb(hg_handle_t h);
 
+//ALBERTO
+void malleability_query_cb(hg_handle_t h);
+void checkpoint_cb(hg_handle_t h);
+
 DECLARE_MARGO_RPC_HANDLER(client_register_cb);
 DECLARE_MARGO_RPC_HANDLER(client_deregister_cb);
 DECLARE_MARGO_RPC_HANDLER(resallocdone_cb);
@@ -37,6 +45,9 @@ DECLARE_MARGO_RPC_HANDLER(hint_io_end_cb);
 DECLARE_MARGO_RPC_HANDLER(metricalert_cb);
 DECLARE_MARGO_RPC_HANDLER(alert_cb);
 DECLARE_MARGO_RPC_HANDLER(nodealert_cb);
+//ALBERTO
+DECLARE_MARGO_RPC_HANDLER(checkpoint_cb);
+DECLARE_MARGO_RPC_HANDLER(malleability_query_cb);
 
 
 /* XX fixme: duplication in structs */
@@ -44,9 +55,14 @@ struct malleability_data {
   ABT_mutex           mutex;    /* malleability thread mutex etc. */
   ABT_cond            cond;
   char                sleep;
+  // CHANGE JAVI
+  ABT_cond            cond2;
+  enum icc_rpc_code   rpc_code; /* rpc using condition to trigger maleability thread */
+  void *              rpc_data; /* generic data transfered from rpc to maleability thread */
+  char                clid[UUID_STR_LEN]; /* client uuid */
+  // END CHANGE JAVI
   margo_instance_id   mid;
-  char                clid[UUID_STR_LEN]; /* client triggering malleab. */
-  uint32_t            jobid;              /* job triggering malleab. */
+  uint32_t            jobid;    /* job that triggered malleability */
   struct icdb_context **icdbs;  /* DB connection pool */
   hg_id_t             *rpcids;  /* RPC handles */
 };

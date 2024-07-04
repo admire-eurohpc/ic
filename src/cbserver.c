@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <math.h>               /* log10, lround */
+#include <string.h>
 #include <margo.h>
 
 #include "cbserver.h"
@@ -48,6 +49,10 @@
     }                                                   \
   }
 
+/* ALBERTO: for testing. Review later */
+int _checkpoint_iteration = 20;
+
+
 void
 client_register_cb(hg_handle_t h)
 {
@@ -88,24 +93,37 @@ client_register_cb(hg_handle_t h)
     LOG_ERROR(mid, "No registered data");
     goto respond;
   }
-
+    
   assert(data->icdbs != NULL);
 
+  //margo_info(mid, "[DEBUG] ICDB Before setclient %s", in.clid);
   /* write client to DB */
-  ret = icdb_setclient(data->icdbs[xrank], in.clid, in.type, in.addr_str, in.nodelist ? in.nodelist : "", in.provid, in.jobid, in.jobncpus, in.jobnodelist ? in.jobnodelist : "", in.nprocs);
+  /* CHANGE JAVI NOTE: activate clement version*/ 
+  //ret = icdb_setclient(data->icdbs[xrank], in.clid, in.type, in.addr_str, in.provid, in.jobid, in.jobncpus, in.jobnnodes, in.nprocs);
+    ret = icdb_setclient(data->icdbs[xrank], in.clid, in.type, in.addr_str, in.nodelist ? in.nodelist : "", in.provid, in.jobid, in.jobncpus, in.jobnodelist ? in.jobnodelist : "", in.nprocs);
+  /* END CHANGE JAVI */
+
+    //margo_info(mid, "[DEBUG] ICDB After setclient %s", in.clid);
+    
   if (ret != ICDB_SUCCESS) {
     if (data->icdbs[xrank]) {
       LOG_ERROR(mid, "Could not write client %s to database: %s", in.clid, icdb_errstr(data->icdbs[xrank]));
     }
     out.rc = RPC_FAILURE;
   }
-
+  /* CHANGE JAVI */
   /* wake up the malleability thread */
-  // ABT_mutex_lock(data->malldat->mutex);
-  // data->malldat->sleep = 0;
-  // data->malldat->jobid = in.jobid;
-  // ABT_cond_signal(data->malldat->cond);
-  // ABT_mutex_unlock(data->malldat->mutex);
+  ABT_mutex_lock(data->malldat->mutex);
+  while (data->malldat->sleep == 0)
+    ABT_cond_wait(data->malldat->cond2, data->malldat->mutex);
+  data->malldat->rpc_code = RPC_CLIENT_REGISTER;
+  data->malldat->rpc_data = NULL;
+  data->malldat->jobid = in.jobid;
+  data->malldat->sleep = 0;
+  strncpy(data->malldat->clid, in.clid, UUID_STR_LEN);
+  ABT_cond_signal(data->malldat->cond);
+  ABT_mutex_unlock(data->malldat->mutex);
+  /* END CHANGE JAVI */
 
  respond:
   MARGO_RESPOND(h, out, hret);
@@ -161,12 +179,19 @@ client_deregister_cb(hg_handle_t h)
     out.rc = RPC_FAILURE;
   }
 
+  /* CHANGE JAVI */
   /* wake up the malleability thread */
-  // ABT_mutex_lock(data->malldat->mutex);
-  // data->malldat->sleep = 0;
-  // data->malldat->jobid = jobid;
-  // ABT_cond_signal(data->malldat->cond);
-  // ABT_mutex_unlock(data->malldat->mutex);
+  ABT_mutex_lock(data->malldat->mutex);
+  while (data->malldat->sleep == 0)
+    ABT_cond_wait(data->malldat->cond2, data->malldat->mutex);
+  data->malldat->rpc_code = RPC_CLIENT_DEREGISTER;
+  data->malldat->rpc_data = NULL;
+  data->malldat->jobid = jobid;
+  data->malldat->sleep = 0;
+  strncpy(data->malldat->clid, in.clid, UUID_STR_LEN);
+  ABT_cond_signal(data->malldat->cond);
+  ABT_mutex_unlock(data->malldat->mutex);
+  /* END CHANGE JAVI */
 
  respond:
   MARGO_RESPOND(h, out, hret);
@@ -194,9 +219,12 @@ resallocdone_cb(hg_handle_t h)
     goto respond;
   }
 
+  // CHANGE JAVI
   /* XX write to DB */
-  margo_info(mid, "Job %"PRIu32": allocated %"PRIu32" CPUs (%s)",
-             in.jobid, in.ncpus, in.hostlist);
+  margo_info(mid, "Resalloc done: Job %"PRIu32": allocated %"PRIu32" nnodes %"PRIu32" CPUs (%s)",
+             in.jobid, in.ncpus, in.nnodes, in.hostlist);
+  // END CHANGE JAVI
+
 
  respond:
   MARGO_RESPOND(h, out, hret)
@@ -218,7 +246,7 @@ jobclean_cb(hg_handle_t h)
   assert(mid);
 
   out.rc = RPC_SUCCESS;
-
+    
   /* XX macro? */
   const struct hg_info *info = margo_get_info(h);
   struct cb_data *data = (struct cb_data *)margo_registered_data(mid, info->id);
@@ -310,7 +338,7 @@ jobmon_submit_cb(hg_handle_t h)
   }
   assert(data->icdbs != NULL);
 
-  margo_info(mid, "Job %"PRIu32".%"PRIu32" started on %"PRIu32" node%s",
+  margo_info(mid, "Job submit: Job %"PRIu32".%"PRIu32" started on %"PRIu32" node%s",
              in.jobid, in.jobstepid, in.nnodes, in.nnodes > 1 ? "s" : "");
 
   ret = icdb_command(data->icdbs[xrank], "SET nnodes:%"PRIu32".%"PRIu32" %"PRIu32,
@@ -345,7 +373,7 @@ jobmon_exit_cb(hg_handle_t h)
     out.rc = RPC_FAILURE;
     goto respond;
   }
-  margo_info(mid, "Slurm Job %"PRIu32".%"PRIu32" exited", in.jobid, in.jobstepid);
+  margo_info(mid, "Job exit: Slurm Job %"PRIu32".%"PRIu32" exited", in.jobid, in.jobstepid);
 
  respond:
   MARGO_RESPOND(h, out, hret);
@@ -459,15 +487,23 @@ malleability_region_cb(hg_handle_t h)
     goto respond;
   }
 
-  const struct hg_info *info = margo_get_info(h);
-  struct cb_data *data = (struct cb_data *)margo_registered_data(mid, info->id);
+  /* CHANGE JAVI */
+  const struct hg_info *info;
+  const struct cb_data *data;
 
+  info = margo_get_info(h);
+  data = (struct cb_data *)margo_registered_data(mid, info->id);
+
+  /* can happen if RPC is received before data is registered */
   if (!data) {
     out.rc = RPC_FAILURE;
     LOG_ERROR(mid, "No registered data");
     goto respond;
   }
+    
   assert(data->icdbs != NULL);
+
+
 
   ret = icdb_reconfigurable(data->icdbs[xrank], in.clid, in.nprocs, in.nnodes);
   if (ret != ICDB_SUCCESS) {
@@ -478,13 +514,25 @@ malleability_region_cb(hg_handle_t h)
   margo_info(mid, "Application %s %s malleability region", in.clid,
              in.type == ICC_MALLEABILITY_REGION_ENTER ? "entering" : "leaving");
 
+  //margo_info(mid, "Application %s %s malleability region", in.clid,in.type == ICC_MALLEABILITY_REGION_ENTER ? "entering" : "leaving");
+  //margo_info(mid, "Application %s (%d:%d) %s malleability region", in.clid,in.jobid, in.nprocs, in.type == ICC_MALLEABILITY_REGION_ENTER ? "entering" : "leaving");
+
   /* wake up the malleability thread */
   ABT_mutex_lock(data->malldat->mutex);
+  while (data->malldat->sleep == 0) {
+    ABT_cond_wait(data->malldat->cond2, data->malldat->mutex);
+  }
+  data->malldat->rpc_code = RPC_MALLEABILITY_REGION;
+  data->malldat->rpc_data = (void *) malloc(sizeof(int32_t)*3);
+  ((int32_t *)(data->malldat->rpc_data))[0] = (int32_t)in.type;
+  ((int32_t *)(data->malldat->rpc_data))[1] = (int32_t)in.nprocs;
+  ((int32_t *)(data->malldat->rpc_data))[2] = (int32_t)in.nnodes;
+  data->malldat->jobid = in.jobid;
   data->malldat->sleep = 0;
-  data->malldat->jobid = 0;
-  memcpy(data->malldat->clid, in.clid, UUID_STR_LEN);
-  ABT_cond_signal(data->malldat->cond);
+  strncpy(data->malldat->clid, in.clid, UUID_STR_LEN);
+  ABT_cond_broadcast(data->malldat->cond);
   ABT_mutex_unlock(data->malldat->mutex);
+  /* END CHANGE JAVI */
 
  respond:
   MARGO_RESPOND(h, out, ret);
@@ -992,6 +1040,7 @@ alert_cb(hg_handle_t h)
 }
 DEFINE_MARGO_RPC_HANDLER(alert_cb);
 
+
 void
 nodealert_cb(hg_handle_t h)
 {
@@ -1012,3 +1061,63 @@ respond:
   MARGO_DESTROY_HANDLE(h, hret);
 }
 DEFINE_MARGO_RPC_HANDLER(nodealert_cb);
+
+/*ALBERTO 26062023*/
+void
+checkpoint_cb(hg_handle_t h)
+{
+  hg_return_t hret;
+  margo_instance_id mid;
+  rpc_out_t out;
+  checkpointing_in_t in;
+
+  mid = margo_hg_handle_get_instance(h);
+  assert(mid);
+
+  MARGO_GET_INPUT(h, in, hret);
+
+  /* Do checkpoint every 20 iterations --> debug */
+  /* IC should set "_checkpoint_iteration" to 1 to do checkpoint and 0 if not. */
+  if(_checkpoint_iteration == 0){
+    out.rc = 1;
+    _checkpoint_iteration = 20; //--> stop and restart put again value to 20
+    margo_info(mid, "IC responds for checkpoint query %"PRIu32" to job %"PRIu32" ",
+              out.rc, in.jobid);
+  } else {
+    out.rc = 0;
+    _checkpoint_iteration--;
+  }
+
+  MARGO_RESPOND(h, out, hret)
+  MARGO_DESTROY_HANDLE(h, hret);
+}
+DEFINE_MARGO_RPC_HANDLER(checkpoint_cb);
+
+void
+malleability_query_cb(hg_handle_t h)
+{
+  hg_return_t hret;
+  margo_instance_id mid;
+  malleability_query_out_t out;
+  malleability_query_in_t in;
+
+  mid = margo_hg_handle_get_instance(h);
+  assert(mid);
+
+  MARGO_GET_INPUT(h, in, hret);
+
+  out.malleability = 1;
+  out.nnodes = 1;
+  char * aux = (char*)malloc(20);
+  sprintf(aux,"slurm-node-2");
+  out.nodelist_str = aux;
+
+  /* to-do: decide action and send it back */
+  /*margo_info(mid, "IC responds for malleability query %"PRIu32", %"PRIu32", and %s to job %"PRIu32" ",
+              out.malleability, out.nnodes, out.nodelist_str, in.jobid);*/
+
+  MARGO_RESPOND(h, out, hret)
+  MARGO_DESTROY_HANDLE(h, hret);
+}
+DEFINE_MARGO_RPC_HANDLER(malleability_query_cb);
+// END

@@ -128,6 +128,9 @@ enum icc_rpc_code {
   RPC_METRIC_ALERT,
   RPC_ALERT,
   RPC_NODEALERT,
+  RPC_CHECKPOINTING,
+  RPC_MALLEABILITY_QUERY,
+  RPC_MALLEABILITY_SS,
   RPC_COUNT
 };
 
@@ -175,20 +178,34 @@ MERCURY_GEN_PROC(jobclean_in_t, ((hg_uint32_t)(jobid)))
 
 #define RPC_RESALLOC_NAME  "icc_resalloc"
 
+// CHANGE JAVI
+//MERCURY_GEN_PROC(resalloc_in_t,
+//                 ((hg_bool_t)(shrink))
+//                 ((hg_uint32_t)(ncpus)))
 MERCURY_GEN_PROC(resalloc_in_t,
                  ((hg_bool_t)(shrink))
                  ((hg_uint32_t)(ncpus))
                  ((hg_uint32_t)(nnodes)))
+// END CHANGE JAVI
+
 
 
 #define RPC_RESALLOCDONE_NAME  "icc_resallocdone"
 
+// CHANGE JAVI
+//MERCURY_GEN_PROC(resallocdone_in_t,
+//                 ((hg_uint32_t)(jobid))
+//                 ((hg_bool_t)(shrink))
+//                 ((hg_uint32_t)(ncpus))
+//                 ((hg_string_t)(hostlist)))
 MERCURY_GEN_PROC(resallocdone_in_t,
                  ((hg_uint32_t)(jobid))
                  ((hg_bool_t)(shrink))
                  ((hg_uint32_t)(ncpus))
                  ((hg_uint32_t)(nnodes))
                  ((hg_string_t)(hostlist)))
+// END CHANGE JAVI
+
 
 
 #define RPC_JOBMON_SUBMIT_NAME  "icc_jobmon_submit"
@@ -227,12 +244,46 @@ MERCURY_GEN_PROC(malleability_avail_in_t,
 
 #define RPC_MALLEABILITY_REGION_NAME  "icc_malleability_region"
 
+/* CHANGE: begin */
+//MERCURY_GEN_PROC(malleability_region_in_t,
+//                 ((hg_const_string_t)(clid))
+//                 ((uint8_t)(type)))
 MERCURY_GEN_PROC(malleability_region_in_t,
                  ((hg_const_string_t)(clid))
                  ((uint8_t)(type))
                  ((hg_int32_t)(nprocs))
-                 ((hg_int32_t)(nnodes)))
+                 ((hg_int32_t)(nnodes))
+                 ((hg_uint32_t)(jobid)))
+/* CHANGE: end */
 
+/* ALBERTO */
+#define RPC_CHECKPOINTING_NAME "icc_checkpointing"
+
+MERCURY_GEN_PROC(checkpointing_in_t,
+                 ((hg_const_string_t)(clid))
+                 ((hg_uint32_t)(jobid)))
+
+#define RPC_MALLEABILITY_QUERY_NAME "icc_malleability_query"
+MERCURY_GEN_PROC(malleability_query_in_t,
+                 ((hg_const_string_t)(clid))
+                 ((hg_uint32_t)(jobid))
+                 ((hg_uint32_t)(jobnnodes))
+                 ((hg_const_string_t)(nodelist_str)))
+
+MERCURY_GEN_PROC(malleability_query_out_t,
+                 ((hg_uint32_t)(malleability))
+                 ((hg_uint32_t)(nnodes))
+                 ((hg_const_string_t)(nodelist_str)))
+
+
+#define RPC_MALLEABILITY_SS_NAME "icc_malleability_ss"
+MERCURY_GEN_PROC(malleability_ss_in_t,
+                 ((hg_const_string_t)(clid))
+                 ((hg_bool_t)(shrink))
+                 ((hg_uint32_t)(nnodes))
+                 ((hg_uint32_t)(ncpus)))
+
+/* END */
 
 #define RPC_RECONFIGURE_NAME  "icc_reconfigure"
 #define RPC_RECONFIGURE2_NAME  "icc_reconfigure2"
@@ -274,6 +325,7 @@ MERCURY_GEN_PROC(metricalert_in_t,
 
 #define RPC_ALERT_NAME "icc_alert"
 MERCURY_GEN_PROC(alert_in_t, ((uint8_t)(type)))
+
 
 #define RPC_NODEALERT_NAME "icc_nodealert"
 MERCURY_GEN_PROC(nodealert_in_t,

@@ -26,7 +26,7 @@ struct icdb_context;
  *
  * Warning: An icdb context is NOT thread-safe.
  */
-int icdb_init(struct icdb_context **icdb);
+int icdb_init(struct icdb_context **icdb, char *ip_addr);
 
 /**
  * Finalize the connection to the IC database.
@@ -60,8 +60,8 @@ struct icdb_client {
   char nodelist[ICDB_NODELIST_LEN];
   uint16_t provid;
   uint32_t jobid;
-  uint64_t nprocs;			/* nprocesses in client */
-  int32_t reconfig_nprocs;	/* procs requested by client for malleab. */
+  uint64_t nprocs;              /* nprocesses in client */
+  int32_t reconfig_nprocs;  /* procs requested by client for malleab. */
   int32_t reconfig_nnodes;
 };
 
@@ -91,6 +91,26 @@ struct icdb_job {
   char     *nodelist;  /* need to be malloced */
 };
 
+/**
+ * Add new nodes to an IC client identified by CLID to the database.
+ *
+ ** Returns ICDB_SUCCESS or an error code in case of error.
+ */
+int icdb_addnodes(struct icdb_context *icdb, const char *clid, const char *nodelist);
+
+/**
+ * Delete new nodes to an IC client identified by CLID to the database.
+ *
+ ** Returns ICDB_SUCCESS or an error code in case of error.
+ */
+int icdb_delnodes(struct icdb_context *icdb, const char *clid, const char *nodelist);
+
+/**
+ * Get average monitor values from an CLID application.
+ *
+ ** Returns ICDB_SUCCESS or an error code in case of error.
+ */
+int icdb_getMonitor(struct icdb_context *icdb, const char *clid, double *rate_cpu, double *rate_mem, int *num_proc, double *rtime, double *ptime, double *ctime);
 /**
  * Add an IC client identified by CLID to the database.
  */

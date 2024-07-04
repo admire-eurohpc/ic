@@ -53,4 +53,14 @@ size_t hm_next(hm_t *map, size_t cursor, const char **key, const void **value);
  */
 size_t hm_length(hm_t *map);
 
+/**
+ * Function to serialize a hashmap to a file
+ */
+void serialize_hashmap(const struct hashmap *map, const char *filename);
+
+/**
+ * Function to deserialize a hashmap from a file and return a pointer to it
+ */
+struct hashmap *deserialize_hashmap(const char *filename);
+	
 #endif

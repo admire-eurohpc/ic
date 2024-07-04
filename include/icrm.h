@@ -74,9 +74,10 @@ icrmerr_t icrm_info(uint32_t jobid, uint32_t *ncpus, uint32_t *nnodes,
  *
  * The caller is responsible for freeing HOSTMAP.
  */
-icrmerr_t icrm_alloc(uint32_t jobid, uint32_t *newjobid,
-                     uint32_t *ncpus, uint32_t *nnodes,
-                     hm_t **hostmap, char errstr[ICC_ERRSTR_LEN]);
+// CHANGE JAVI
+//icrmerr_t icrm_alloc(uint32_t jobid, uint32_t *newjobid, uint32_t *ncpus,
+icrmerr_t icrm_alloc(uint32_t *newjobid, uint32_t *ncpus, uint32_t *nnodes, hm_t **hostmap, char errstr[ICC_ERRSTR_LEN]);
+// END CHANGE JAVI
 
 /**
  * Renounce the resources of job JOBID and merge them with the job for
@@ -99,6 +100,15 @@ icrmerr_t icrm_merge(uint32_t jobid, char errstr[ICC_ERRSTR_LEN]);
 icrmerr_t icrm_release_node(const char *nodename, uint32_t jobid, uint32_t ncpus,
                             char errstr[ICC_ERRSTR_LEN]);
 
+// CHANGE:  JAVI
+/**
+ * Get Hostmap from a currently running Slurm job using its JOBID.
+ *
+ * Return ICRM_SUCCESS or an error code. 
+ */
+icrmerr_t icrm_get_job_hostmap(uint32_t jobid, hm_t **hostmap,
+                               char errstr[ICC_ERRSTR_LEN]);
+// END CHANGE:  JAVI
 
 /**
  * Augment existing HOSTMAP with the resources in NEWALLOC.
@@ -107,6 +117,16 @@ icrmerr_t icrm_release_node(const char *nodename, uint32_t jobid, uint32_t ncpus
  * CPUs would be too big.
  */
 icrmerr_t icrm_update_hostmap(hm_t *hostmap, hm_t *newalloc);
+
+// CHANGE JAVI
+/**
+ * Augment existing HOSTMAP_JOB with the nodes in NEWALLOC to the job JOBID .
+ *
+ * Return ICRM_SUCCESS or ICRM_EOVERFLOW if the resulting number of
+ * CPUs would be too big.
+ */
+icrmerr_t icrm_update_hostmap_job(hm_t *hostmap_job, hm_t *newalloc, uint32_t jobid);
+// END CHANGE JAVI
 
 
 /**
@@ -125,5 +145,20 @@ icrmerr_t icrm_update_hostmap(hm_t *hostmap, hm_t *newalloc);
  * The caller is responsible for freeing the hostlist.
  */
 char *icrm_hostlist(hm_t *hostmap, char withcpus, uint32_t *ncpus_total);
+
+// CHANGE: JAVI
+/**
+ * Clear the  pending status of the job_id when the job is done allocating
+ *
+ * Return ICRM_SUCCESS or an error code.
+ */
+icrmerr_t icrm_clear_pending_job();
+
+/**
+ * Kill the pending job if there is one and wait until is signaled as empty
+ *
+ * Return ICRM_SUCCESS or an error code.
+ */
+icrmerr_t icrm_kill_wait_pending_job(char errstr[ICC_ERRSTR_LEN]);
 
 #endif

@@ -145,7 +145,7 @@ main(int argc, char **argv)
 
   struct icc_context *icc = NULL;
   if (rank == 0 && isparent()) {
-    icc_init_mpi(ICC_LOG_DEBUG, ICC_TYPE_MPI, nprocs, NULL, NULL, &icc);
+    icc_init_mpi(ICC_LOG_DEBUG, ICC_TYPE_MPI, nprocs, NULL, NULL, 0, NULL, NULL, NULL, &icc);
     if (!icc) {
       fputs("ICC could not be initialized\n", stderr);
       MPI_Finalize();

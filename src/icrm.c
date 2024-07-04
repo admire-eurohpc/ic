@@ -19,6 +19,9 @@
 #include "icc_common.h"
 #include "icrm.h"
 
+// CHANGE JAVI
+#define CWD_MAX_SIZE 10240             /* buffer size for storing CWD */
+// END CHANGE JAVI
 #define HOSTLIST_BASLEN 128             /* starting len of hostlist */
 #define HOSTLIST_MAXLEN 4096            /* reject hostlist that are too long */
 #define JOBID_MAXLEN  16                /* 9 is enough for an uint32 */
@@ -29,6 +32,25 @@
 #define CHECK_NULL(p)  if (!(p)) { return ICRM_EPARAM; }
 #define CHECK_ICRM(icrm)  { CHECK_NULL(icrm); CHECK_NULL((icrm)->errstr); }
 
+// CHANGE:  JAVI
+/* shared variable to store and kill pending jobs */
+static ABT_mutex_memory pending_job_mutex = ABT_MUTEX_INITIALIZER;
+static ABT_cond_memory pending_job_cond = ABT_COND_INITIALIZER;
+static uint32_t pending_full = 0;
+static uint32_t pending_jobid = 0;
+
+/**
+ * Callback to update pending job (if necessary) when using
+ * slurm_allocate_resources_blocking function
+ */
+static void icrm_callback_pending_job(uint32_t job_id);
+
+/**
+ * Wait until pending job is signaled as empty
+ */
+static icrmerr_t icrm_wait_pending_job();
+
+// END CHANGE:  JAVI
 
 /**
  * Return info of job JOBID in buffer JOB.
@@ -118,7 +140,7 @@ icrm_info(uint32_t jobid, uint32_t *ncpus, uint32_t *nnodes, char **nodelist,
   *ncpus = buf->job_array[0].num_cpus;
   *nnodes = buf->job_array[0].num_nodes;
 
-  hostlist_t hl = slurm_hostlist_create(buf->job_array[0].nodes);
+  struct hostlist * hl = slurm_hostlist_create(buf->job_array[0].nodes);
   if (!hl) {
     rc = ICRM_FAILURE;
     WRITERR(errstr, "icrm_info: slurm hostlist creation error");
@@ -147,6 +169,15 @@ icrm_info(uint32_t jobid, uint32_t *ncpus, uint32_t *nnodes, char **nodelist,
   }
   slurm_hostlist_destroy(hl);
 
+
+// *nodelist = strdup(buf->job_array[0].nodes);
+  // if (!nodelist) {
+    // rc = ICRM_ENOMEM;
+    // WRITERR(errstr, "icrm_info: nodelist: %s", strerror(errno));
+    // goto end;
+  // }
+
+
 end:
   if (buf) {
     slurm_free_job_info_msg(buf);
@@ -155,14 +186,21 @@ end:
 }
 
 
+// CHANGE JAVI
+//icrmerr_t
+//icrm_alloc(uint32_t jobid, uint32_t *newjobid, uint32_t *ncpus, hm_t **hostmap,
+//           char errstr[ICC_ERRSTR_LEN])
 icrmerr_t
-icrm_alloc(uint32_t jobid, uint32_t *newjobid, uint32_t *ncpus, uint32_t *nnodes,
-           hm_t **hostmap, char errstr[ICC_ERRSTR_LEN])
+icrm_alloc(uint32_t *newjobid, uint32_t *ncpus, uint32_t *nnodes, hm_t **hostmap, char errstr[ICC_ERRSTR_LEN])
+// END CHANGE JAVI
 {
   icrmerr_t rc;
-  char buf[DEPEND_MAXLEN];
+  //int sret;
+  //unsigned int wait;
+  //char buf[DEPEND_MAXLEN];
   job_desc_msg_t jobreq;
   resource_allocation_response_msg_t *resp = NULL;
+  job_step_info_response_msg_t *stepinfo = NULL;
 
   rc = ICRM_SUCCESS;
 
@@ -172,19 +210,37 @@ icrm_alloc(uint32_t jobid, uint32_t *newjobid, uint32_t *ncpus, uint32_t *nnodes
      "salloc -n$ncpus --dependency=expand:$jobid"
      wait indefinitely */
   jobreq.min_cpus = *ncpus;
+
+  // CHANGE
   jobreq.min_nodes = *nnodes;
+  //jobreq.max_cpus = *ncpus;
+  // END CHANGE
+
   jobreq.shared = 0;
   jobreq.user_id = getuid();    /* necessary on PlaFRIM... */
   jobreq.group_id = getgid();   /* idem */
 
-  snprintf(buf, DEPEND_MAXLEN, "expand:%"PRIu32, jobid);
-  jobreq.dependency = buf;
+  //CHANGE JAVI
+  // set working directory
+  char buffer_cwd[CWD_MAX_SIZE];
+  char *ptr_ret = getcwd(buffer_cwd, CWD_MAX_SIZE);
+  if (ptr_ret == NULL) {
+    WRITERR(errstr, "getcwd: %s",strerror(errno));
+    rc = ICRM_ENOMEM;
+    goto end;
+  }
+  jobreq.work_dir=buffer_cwd;
+  //END CHANGE JAVI
+
+  // CHANGE JAVI
+  //snprintf(buf, DEPEND_MAXLEN, "expand:%"PRIu32, jobid);
+  //jobreq.dependency = buf;
+  // END CHANGE JAVI
 
   *newjobid = 0;
   *ncpus = 0;
 
-  resp = slurm_allocate_resources_blocking(&jobreq, 0, NULL);
-
+  resp = slurm_allocate_resources_blocking(&jobreq, 0, icrm_callback_pending_job);
   if (resp == NULL) {
     WRITERR(errstr, "slurm_allocate_resources_blocking: %s",
             slurm_strerror(slurm_get_errno()));
@@ -193,7 +249,7 @@ icrm_alloc(uint32_t jobid, uint32_t *newjobid, uint32_t *ncpus, uint32_t *nnodes
   }
 
   *newjobid = resp->job_id;
-
+  
   /* Slurm should always fill these */
   assert(resp->num_cpu_groups >= 1);
   assert(resp->cpus_per_node);
@@ -211,8 +267,66 @@ icrm_alloc(uint32_t jobid, uint32_t *newjobid, uint32_t *ncpus, uint32_t *nnodes
     goto end;
   }
 
+  // CHANGE JAVI
+  // /* this pause makes the upcoming kill much faster than sending the
+  //    signal immediately for some reason */
+  // sleep(1);
+  // 
+  // /* 2. kill external process container .extern. It is a job step that
+  //    is launched automatically by Slurm if PrologFlags=Contain (see
+  //    slurm.conf(5)). The kill procedure is copied from Slurm scancel.c */
+  // 
+  // for (int i = 0; i < 10; i++) {
+  //   sret = slurm_kill_job_step(resp->job_id, SLURM_EXTERN_CONT, SIGKILL);
+  // 
+  //   if (sret == SLURM_SUCCESS || ((errno != ESLURM_TRANSITION_STATE_NO_UPDATE) &&
+  //                                 (errno != ESLURM_JOB_PENDING))) {
+  //     break;
+  //   }
+  //   sleep(5 + i);
+  // }
+  // 
+  // if (sret != SLURM_SUCCESS) {
+  //   sret = slurm_get_errno();
+  //   /* invalid job step = no .extern step, ignore error  */
+  //   if (sret != ESLURM_ALREADY_DONE && sret != ESLURM_INVALID_JOB_ID) {
+  //     WRITERR(errstr, "slurm_terminate_job_step: %s", slurm_strerror(slurm_get_errno()));
+  //     rc = ICRM_ERESOURCEMAN;
+  //     goto end;
+  //   }
+  // }
+  // 
+  // /* wait for the jobstep to finish (no more than JOBSTEP_CANCEL_MAXWAIT) */
+  // /* XX fixme: this can be avoided for jobs that don’t have any step */
+  // stepinfo = NULL;
+  // wait = 1;
+  // 
+  // while (1) {
+  //   sleep(wait);
+  //   wait *= 2;
+  // 
+  //   sret = slurm_get_job_steps(0, resp->job_id, NO_VAL, &stepinfo, SHOW_ALL);
+  //   if (sret != SLURM_SUCCESS) {
+  //     rc = ICRM_FAILURE;
+  //     WRITERR(errstr, "slurm_get_job_steps: %s", slurm_strerror(slurm_get_errno()));
+  //     goto end;
+  //   }
+  // 
+  //   if (stepinfo->job_step_count == 0) {
+  //     break;                    /* step has been killed */
+  //   }
+  // 
+  //   if (wait > 60) {
+  //     rc = ICRM_FAILURE;
+  //     WRITERR(errstr, "Job step did not terminate");
+  //     goto end;
+  //   }
+  // }
+  // END CHANGE JAVI
+
  end:
   if (resp) slurm_free_resource_allocation_response_msg(resp);
+  if (stepinfo) slurm_free_job_step_info_response_msg(stepinfo);
 
   return rc;
 }
@@ -230,19 +344,61 @@ icrm_merge(uint32_t jobid, char errstr[ICC_ERRSTR_LEN])
   jobdesc.min_nodes = 0;
   jobdesc.job_id = jobid;
 
+  //CHANGE JAVI
+  // set working directory
+  char buffer_cwd[CWD_MAX_SIZE];
+  char *ptr_ret = getcwd(buffer_cwd, CWD_MAX_SIZE);
+  if (ptr_ret == NULL) {
+      WRITERR(errstr, "getcwd: %s",strerror(errno));
+      rc = ICRM_ENOMEM;
+      goto end;
+  }
+  jobdesc.work_dir=buffer_cwd;
+  //END CHANGE JAVI
+      
   int sret = slurm_update_job2(&jobdesc, &resp);
   if (sret != SLURM_SUCCESS) {
     WRITERR(errstr, "slurm_update_job2: %s", slurm_strerror(slurm_get_errno()));
     rc = ICRM_ERESOURCEMAN;
+    goto end;
   } else {
     slurm_free_job_array_resp(resp);
   }
 
   /* XX maybe update Slurm environment? (see Slurm update_job.c)*/
-
+end:
   return rc;
 }
+// CHANGE:  JAVI
+icrmerr_t
+icrm_get_job_hostmap(uint32_t jobid, hm_t **hostmap,
+                     char errstr[ICC_ERRSTR_LEN])
+{
+    assert(jobid);
+    
+    icrmerr_t ret = ICRM_SUCCESS;
+    resource_allocation_response_msg_t *allocinfo = NULL;
+    
+    int sret = slurm_allocation_lookup(jobid, &allocinfo);
+    if (sret != SLURM_SUCCESS) {
+        WRITERR(errstr, "slurm_allocation_lookup: %s", slurm_strerror(slurm_get_errno()));
+        return ICRM_ERESOURCEMAN;
+    }
+    
+    (*hostmap) = get_hostmap_internal(allocinfo->node_list,
+                                      allocinfo->cpus_per_node,
+                                      allocinfo->cpu_count_reps);
 
+    fprintf(stderr, "GET JOB HOSTMAP: nodelist = %s cpuspernode = %d cpucountreps = %d\n", allocinfo->node_list, allocinfo->cpus_per_node[0], allocinfo->cpu_count_reps[0]);
+    
+    slurm_free_resource_allocation_response_msg(allocinfo);
+    
+    if (!(*hostmap)) {
+        return ICRM_ENOMEM;
+    }
+    return ret;
+}
+// CHANGE:  JAVI
 
 icrmerr_t
 icrm_release_node(const char *nodename, uint32_t jobid, uint32_t ncpus,
@@ -301,13 +457,18 @@ icrm_release_node(const char *nodename, uint32_t jobid, uint32_t ncpus,
     return ICRM_ENOMEM;
   }
 
+  // CHANGE JAVI
   if (strlen(newlist) == 0) {
-    sret = slurm_kill_job(jobid, SIGKILL, 0);
+    uint16_t signal = SIGKILL;
+    uint16_t batch_flag = 0;
+    sret = slurm_kill_job(jobid, signal, batch_flag);
     if (sret != SLURM_SUCCESS) {
       WRITERR(errstr, "slurm_kill_job: %s", slurm_strerror(slurm_get_errno()));
       ret = ICRM_ERESOURCEMAN;
+      goto end;
     }
   } else {
+  // END CHANGE JAVI
 
     /* update job, equivalent to:
        "scontrol update JobId=$JOBID NodeList=$HOSTLIST" */
@@ -318,20 +479,36 @@ icrm_release_node(const char *nodename, uint32_t jobid, uint32_t ncpus,
     jobreq.job_id = jobid;
     jobreq.req_nodes = newlist;
 
+    //CHANGE JAVI
+    // set working directory
+    char buffer_cwd[CWD_MAX_SIZE];
+    char *ptr_ret = getcwd(buffer_cwd, CWD_MAX_SIZE);
+    if (ptr_ret == NULL) {
+      WRITERR(errstr, "getcwd: %s",strerror(errno));
+      rc = ICRM_ENOMEM;
+      goto end;
+    }
+    jobreq.work_dir=buffer_cwd;
+    //END CHANGE JAVI
+
     sret = slurm_update_job2(&jobreq, &jobresp);
     if (sret != SLURM_SUCCESS) {
       WRITERR(errstr, "slurm_update_job2: %s", slurm_strerror(slurm_get_errno()));
       ret = ICRM_ERESOURCEMAN;
+      goto end;
     } else if (jobresp) {
       slurm_free_job_array_resp(jobresp);
       ret = ICRM_SUCCESS;
     }
+  // CHANGE JAVI
   }
+  // END CHANGE JAVI
 
+    
+end:
   if (newlist) {
     free(newlist);
   }
-
   return ret;
 }
 
@@ -352,12 +529,35 @@ icrm_update_hostmap(hm_t *hostmap, hm_t *newalloc)
       return ICRM_EOVERFLOW;
     }
     uint16_t ntotal = *nalloc + (ncpus ? *ncpus : 0);
+    fprintf(stderr, "icrm_update_hostmap: Host = %s - Ntotal = %d\n", host, ntotal);
     hm_set(hostmap, host, &ntotal, sizeof(ntotal));
   }
 
   return ICRM_SUCCESS;
 }
 
+// CHANGE JAVIJAVI
+icrmerr_t
+icrm_update_hostmap_job(hm_t *hostmap_job, hm_t *newalloc, uint32_t jobid)
+{
+  assert(hostmap_job);
+  assert(newalloc);
+
+  const char *host;
+  const uint16_t *nalloc;
+  size_t curs = 0;
+
+  while ((curs = hm_next(newalloc, curs, &host, (const void **)&nalloc)) != 0) {
+    const uint32_t *oldjobid = hm_get(hostmap_job, host);
+    if ((oldjobid != NULL) && ((*oldjobid)!=0)) {   /* jobid already exist */
+      return ICRM_EJOBID;
+    }
+    hm_set(hostmap_job, host, &jobid, sizeof(jobid));
+  }
+
+  return ICRM_SUCCESS;
+}
+// END CHANGE JAVI
 
 char *
 icrm_hostlist(hm_t *hostmap, char withcpus, uint32_t *ncpus_total)
@@ -504,18 +704,20 @@ get_hostmap_internal(const char *hostlist, uint16_t cpus_per_node[],
   assert(cpus_per_node);
   assert(cpus_count_reps);
 
-  hostlist_t hl;
+  struct hostlist * hl;
   uint16_t ncpus;
   uint32_t reps;
   size_t icpu;
 
   hm_t *hostmap = hm_create();
   if (!hostmap) {               /* out of memory */
+    fprintf(stderr, "get_hostmap_internal: Error hm_create");
     return NULL;
   }
 
   hl = slurm_hostlist_create(hostlist);
   if (!hl) {
+      fprintf(stderr, "get_hostmap_internal: Error slurm_hostlist_create: %s", slurm_strerror(errno));
     hm_free(hostmap);
     return NULL;
   }
@@ -531,9 +733,11 @@ get_hostmap_internal(const char *hostlist, uint16_t cpus_per_node[],
   while ((host = slurm_hostlist_shift(hl))) {
     ncpus = cpus_per_node[icpu];
     reps--;
-    if (reps == 0)
+    if (reps == 0) {
       icpu++;
-
+      reps = cpus_count_reps[icpu]; // JAVI ADDED
+    }
+    fprintf(stderr, "get_hostmap_internal: insert %s:%d", host, ncpus);
     hm_set(hostmap, host, &ncpus, sizeof(ncpus));
 
     free(host);
@@ -543,3 +747,80 @@ get_hostmap_internal(const char *hostlist, uint16_t cpus_per_node[],
 
   return hostmap;
 }
+
+// CHANGE: JAVI
+static void icrm_callback_pending_job(uint32_t jobid)
+{
+    /* make sure no other callback is accessing */
+    ABT_mutex mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&pending_job_mutex);
+    ABT_mutex_lock(mutex);
+    pending_jobid = jobid;
+    pending_full = 1;
+    ABT_mutex_unlock(mutex);
+}
+
+icrmerr_t icrm_clear_pending_job()
+{
+    icrmerr_t ret = ICRM_SUCCESS;
+
+    /* make sure no other callback is accessing */
+    ABT_mutex mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&pending_job_mutex);
+    ABT_cond cond = ABT_COND_MEMORY_GET_HANDLE(&pending_job_cond);
+    ABT_mutex_lock(mutex);
+    if (pending_full == 1) {
+        pending_jobid = 0;
+        pending_full = 0;
+    }
+    ABT_cond_signal (cond);
+    ABT_mutex_unlock(mutex);
+    
+    return ret;
+}
+
+static icrmerr_t icrm_wait_pending_job()
+{
+    icrmerr_t ret = ICRM_SUCCESS;
+
+    /* make sure no other callback is accessing */
+    ABT_mutex mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&pending_job_mutex);
+    ABT_cond cond = ABT_COND_MEMORY_GET_HANDLE(&pending_job_cond);
+    ABT_mutex_lock(mutex);
+    while (pending_full == 1) {
+        ABT_cond_wait (cond, mutex);
+    }
+    pending_jobid = 0;
+    pending_full = 0;
+    ABT_mutex_unlock(mutex);
+    
+    return ret;
+}
+
+icrmerr_t icrm_kill_wait_pending_job(char errstr[ICC_ERRSTR_LEN])
+{
+    icrmerr_t ret = ICRM_SUCCESS;
+    uint32_t jobid = 0;
+    uint32_t is_full = 0;
+
+    /* make sure no other callback is accessing */
+    ABT_mutex mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&pending_job_mutex);
+    ABT_mutex_lock(mutex);
+    is_full = pending_full;
+    jobid = pending_jobid;
+    ABT_mutex_unlock(mutex);
+    
+    // if there is a job pending
+    if (is_full == 1) {
+       uint16_t signal = SIGKILL;
+       uint16_t batch_flag = 0;
+       int sret = slurm_kill_job(jobid, signal, batch_flag);
+       if (sret != SLURM_SUCCESS) {
+         WRITERR(errstr, "icrm_kill_wait_pending_job: %s", slurm_strerror(slurm_get_errno()));
+         ret = ICRM_ERESOURCEMAN;
+         goto end;
+       }
+    }
+    ret = icrm_wait_pending_job();
+end:
+    return ret;
+}
+// END CHANGE: JAVI

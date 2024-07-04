@@ -3,7 +3,7 @@
 #include <errno.h>              /* errno, strerror */
 #include <inttypes.h>           /* uintXX */
 #include <netdb.h>              /* addrinfo */
-#include <stdbool.h>			/* bool */
+#include <stdbool.h>            /* bool */
 #include <stdio.h>
 #include <stdlib.h>             /* malloc, getenv, setenv, strtoxx */
 #include <string.h>             /* strerror */
@@ -15,11 +15,17 @@
 #include "icc_priv.h"
 #include "rpc.h"
 #include "cb.h"
+#include "icdb.h"
 #include "cbcommon.h"
 #include "flexmpi.h"
 
+#define NTHREADS 2              /* threads set aside for RPC handling */
+
 #define NBLOCKING_ES  64
 #define CHECK_ICC(icc)  if (!(icc)) { return ICC_FAILURE; }
+
+/* Variable to know if the execution is a restart (1) */
+int _run_mode;
 
 
 /* utils */
@@ -44,8 +50,12 @@ static int _strtouint32(const char *nptr, uint32_t *dest);
  * Release HOST to the resource manager. The caller must get hostlock
  * before calling this function.
  */
+//CHANGE JAVIER
+static int remove_extra_nodes(struct icc_context *icc, const char *hostlist);
+// END CHANGE JAVIER
 static int release_node(struct icc_context *icc, const char *host);
 static iccret_t clear_hostmap(hm_t *hostmap);
+char * icc_get_ip_addr(struct icc_context *icc);
 
 static int _setup_margo(enum icc_log_level log_level, struct icc_context *icc);
 static int _setup_reconfigure(struct icc_context *icc, icc_reconfigure_func_t func, void *data);
@@ -57,15 +67,26 @@ static int _register_client(struct icc_context *icc, unsigned int nprocs);
 
 int
 icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct icc_context **icc) {
-  return icc_init_mpi(log_level, typeid, 0, NULL, NULL, icc);
+  return icc_init_mpi(log_level, typeid, 0, NULL, NULL, 0, NULL, NULL, NULL, icc); /* ALBERTO - Added mode initial (0)*/
 }
 
+/* ALBERTO - New param to identify if this function is called from a restarted or a recently deployed application
 int
 icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
              int nprocs, icc_reconfigure_func_t func, void *data,
-             struct icc_context **icc_context)
+             struct icc_context **icc_context)*/
+
+int
+icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
+             int nprocs, icc_reconfigure_func_t func, void *data, int run_mode,
+             char ** ip_addr, char ** clid, const char *hostlist, struct icc_context **icc_context)
 {
   int rc;
+
+  if (run_mode)
+    margo_info(MARGO_INSTANCE_NULL, "icc (init): app mode = restart");
+  else
+    margo_info(MARGO_INSTANCE_NULL, "icc (init): app mode = initial");
 
   *icc_context = NULL;
 
@@ -79,74 +100,118 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
   icc->type = typeid;
 
   /*  apps that must be able to both receive AND send RPCs to the IC */
-  if (typeid == ICC_TYPE_MPI || typeid == ICC_TYPE_FLEXMPI ||
-      typeid == ICC_TYPE_RECONFIG2 || typeid == ICC_TYPE_ALERT)
+  if (typeid == ICC_TYPE_MPI || typeid == ICC_TYPE_FLEXMPI || typeid == ICC_TYPE_RECONFIG2 ||
+      typeid == ICC_TYPE_STOPRESTART || typeid == ICC_TYPE_ALERT)
     icc->bidirectional = 1;
 
   /* resource manager stuff */
   char *jobid, *jobstepid, *nodelist;
-  jobid = getenv("SLURM_JOB_ID");
-  if (!jobid) {
-    jobid = getenv("SLURM_JOBID");
-  }
-  jobstepid = getenv("SLURM_STEP_ID");
-  if (!jobstepid) {
-    jobstepid = getenv("SLURM_STEPID");
-  }
 
-  /* jobid is only required for registered clients */
-  if (icc->bidirectional && !jobid) {
-      margo_warning(MARGO_INSTANCE_NULL, "icc (init): job ID not found");
-  }
+  if(run_mode == 0){
+    _run_mode = 0;
 
-  if (jobid) {
-    rc = _strtouint32(jobid, &icc->jobid);
-    if (rc) {
-      margo_error(MARGO_INSTANCE_NULL, "icc (init): Error converting job id \"%s\": %s", jobid, strerror(-rc));
-      rc = ICC_FAILURE;
-      goto error;
+    jobid = getenv("SLURM_JOB_ID");
+    if (!jobid) {
+      jobid = getenv("SLURM_JOBID");
     }
-  }
+    jobstepid = getenv("SLURM_STEP_ID");
+    if (!jobstepid) {
+      jobstepid = getenv("SLURM_STEPID");
+    }
 
-  if (jobstepid) {
-    rc = _strtouint32(jobstepid, &icc->jobstepid);
-    if (rc) {
-      margo_error(MARGO_INSTANCE_NULL, "icc (init): Error converting job step id \"%s\": %s", jobstepid, strerror(-rc));
-      rc = ICC_FAILURE;
-      goto error;
+    /* jobid is only required for registered clients */
+    if (icc->bidirectional && !jobid) {
+        margo_warning(MARGO_INSTANCE_NULL, "icc (init): job ID not found");
+    }
+
+    if (jobid) {
+      rc = _strtouint32(jobid, &icc->jobid);
+      if (rc) {
+        margo_error(MARGO_INSTANCE_NULL, "icc (init): Error converting job id \"%s\": %s", jobid, strerror(-rc));
+        rc = ICC_FAILURE;
+        goto error;
+      }
+    } else {
+      icc->jobid = 0;
+    }
+
+    if (jobstepid) {
+      rc = _strtouint32(jobstepid, &icc->jobstepid);
+      if (rc) {
+        margo_error(MARGO_INSTANCE_NULL, "icc (init): Error converting job step id \"%s\": %s", jobstepid, strerror(-rc));
+        rc = ICC_FAILURE;
+        goto error;
+      }
+    } else {
+      icc->jobstepid = 0;
     }
   } else {
-    icc->jobstepid = 0;
+    _run_mode = 1;
+    // Load icc backup
+    _icc_context_load(icc, "/tmp/nek.bin");
+    nodelist = icc->nodelist;
+    
+    int digits = snprintf(NULL, 0, "%d", icc->jobid);
+    jobid = (char*)malloc(digits + 1);
+    snprintf(jobid, digits + 1, "%d", icc->jobid);
+
+    digits = snprintf(NULL, 0, "%d", icc->jobstepid);
+    jobstepid = (char*)malloc(digits + 1);
+    snprintf(jobstepid, digits + 1, "%d", icc->jobstepid);
+
+    // Do release nodes on restart
+    //icc_release_nodes(icc);
   }
 
-  /* TODO TMP: if/when using, get the nodelist from the resource manager */
-  nodelist = getenv("SLURM_JOB_NODELIST");
-  if (nodelist) {
-    icc->nodelist = strdup(nodelist);
-    if (!icc->nodelist) {
-      margo_error(icc->mid, "icc: init: nodelist failed: %s", strerror(errno));
-      rc = ICC_FAILURE;
-  	  goto error;
+  if( run_mode == 0){
+    /* TODO TMP: if/when using, get the nodelist from the resource manager */
+    // CHANGE: JAVI
+    //nodelist = getenv("ADMIRE_NODELIST");
+    nodelist = getenv("SLURM_JOB_NODELIST");
+    margo_error(MARGO_INSTANCE_NULL, "icc: init: nodelist: %s", nodelist);
+
+    // END CHANGE: JAVI
+    if (nodelist) {
+      icc->nodelist = strdup(nodelist);
+      if (!icc->nodelist) {
+        margo_error(MARGO_INSTANCE_NULL, "icc: init: nodelist failed: %s", strerror(errno));
+        rc = ICC_FAILURE;
+        goto error;
+      }
     }
   }
 
-  /* client UUID, XX could be replaced with jobid.jobstepid? */
-  uuid_t uuid;
-  uuid_generate(uuid);
-  uuid_unparse(uuid, icc->clid);
+  if(run_mode == 0) {
+    /* client UUID, XX could be replaced with jobid.jobstepid? */
+    uuid_t uuid;
+    uuid_generate(uuid);
+    uuid_unparse(uuid, icc->clid);
+  }
 
-  rc = _setup_margo(log_level, icc);
-  if (rc)
-    goto error;
+    rc = _setup_margo(log_level, icc);
+    if (rc)
+      goto error;
 
-  /* icrm requires Argobots to be setup, so goes after Margo */
-  rc = _setup_icrm(icc);
-  if (rc)
-    goto error;
+    /* Fill the IC IP addr */
+    if (ip_addr != NULL){
+      *ip_addr = icc->addr_ic_str;
+    }
+    
+    /* Fill the clid */
+    if (clid != NULL) {
+        *clid = icc->clid;
+    }
+    
+    /* icrm requires Argobots to be setup, so goes after Margo */
+    rc = _setup_icrm(icc);
+    if (rc)
+      goto error;
 
-  rc = _setup_hostmaps(icc);
-  if (rc)
-    goto error;
+  if(run_mode == 0){
+    rc = _setup_hostmaps(icc);
+    if (rc)
+      goto error;
+  }
 
   /* register reconfiguration func, automatic for FlexMPI */
   if (icc->type == ICC_TYPE_FLEXMPI || func) {
@@ -154,6 +219,26 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
     if (rc)
       goto error;
   }
+  // CHANGE: JAVI
+
+  rc = icdb_init(&(icc->icdbs_main), icc->addr_ic_str);
+  if (!icc->icdbs_main) {
+    LOG_ERROR(icc->mid, "Could not initialize IC database for main func.");
+    goto error;
+  } else if (rc != ICDB_SUCCESS) {
+    LOG_ERROR(icc->mid, "Could not initialize IC database for main func.: %s", icdb_errstr(icc->icdbs_main));
+    goto error;
+  }
+
+  rc = icdb_init(&(icc->icdbs_cb), icc->addr_ic_str);
+  if (!icc->icdbs_cb) {
+    LOG_ERROR(icc->mid, "Could not initialize IC database for client cb");
+    goto error;
+  } else if (rc != ICDB_SUCCESS) {
+    LOG_ERROR(icc->mid, "Could not initialize IC database for client cb: %s", icdb_errstr(icc->icdbs_cb));
+    goto error;
+  }
+  // END CHANGE: JAVI
 
   /* pass some data to callbacks that need it */
   margo_register_data(icc->mid, icc->rpcids[RPC_RECONFIGURE], icc, NULL);
@@ -169,14 +254,78 @@ icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid,
     goto error;
   }
 
-  /* register client last to avoid race conditions where the IC would
-     send a RPC command before the client is fully set up */
-  if (icc->bidirectional) {
-    rc = _register_client(icc, (unsigned)nprocs);
-    if (rc)
+  // CHANGE: JAVI
+  icrmerr_t icrmret;
+  char icrmerr[ICC_ERRSTR_LEN];
+  hm_t *newalloc = NULL;
+      
+    
+  if ((icc->jobid != 0) && (icc->type != ICC_TYPE_JOBMON)) {
+        /* get hostmap from current slurm jobid */
+    icrmret = icrm_get_job_hostmap(icc->jobid, &newalloc, icrmerr);
+    if (icrmret != ICRM_SUCCESS) {
+      margo_error(icc->mid, "Error Slurm (prueba): %s",icrmerr);
+      rc = ICC_FAILURE;
       goto error;
+    }
+  }
+  
+  if (newalloc != NULL) {
+    // get nodelist from current slurm jobid
+    icc->nodelist = icrm_hostlist(newalloc, 0, NULL);
+    if (!icc->nodelist) {
+      margo_error(icc->mid, "icc: init: nodelist failed: %s", strerror(errno));
+      rc = ICC_FAILURE;
+      goto error;
+    }
+  }
+  margo_info(icc->mid, "icrm_hostlist: %s",icc->nodelist);
+  // END CHANGE: JAVI
+
+  //if(run_mode == 0){
+    /* register client last to avoid race conditions where the IC would
+      send a RPC command before the client is fully set up */
+    if (icc->bidirectional) {
+      rc = _register_client(icc, (unsigned)nprocs);
+      if (rc)
+        goto error;
+    }
+  //}
+
+  if ((run_mode == 0) && (newalloc != NULL) ){
+    // CHANGE: JAVI
+    // add nodes of initial job on the icc hostmaps
+    /* add new resources to hostalloc */
+    icrmret = icrm_update_hostmap(icc->hostalloc, newalloc);
+    if (icrmret == ICRM_EOVERFLOW) {
+      margo_error(icc->mid, "Too many CPUs allocated");
+        rc = ICC_FAILURE;
+        goto error;
+    }
+
+    /* add new resources to hostjob */
+    margo_error(icc->mid, "icc_init_mpi: icrm_update_hostmap_job icc->jobid=%d",icc->jobid);
+    icrmret = icrm_update_hostmap_job(icc->hostjob, newalloc,
+                                      icc->jobid);
+    if (icrmret == ICRM_EJOBID) {
+      margo_error(icc->mid, "Host is already allocated on another jobid");
+      rc = ICC_FAILURE;
+      goto error;
+    }
+      
+    icrmret = remove_extra_nodes(icc, hostlist);
+    if (icrmret == ICRM_EJOBID) {
+      margo_error(icc->mid, "Error removing nodes not used in hostlist");
+      rc = ICC_FAILURE;
+      goto error;
+    }
+    // END CHANGE JAVI
   }
 
+
+  // Do release nodes on restart
+  icc_release_nodes(icc);
+    
   *icc_context = icc;
 
   return ICC_SUCCESS;
@@ -208,23 +357,56 @@ int
 icc_fini(struct icc_context *icc)
 {
   int rc, rpcrc;
-
+    
   rc = ICC_SUCCESS;
 
   if (!icc)
     return rc;
 
-  /* remove extra job nodes if any */
-  const char *h = NULL;
-  uint32_t j = 0;
-  size_t curs = 0;
+  margo_info(icc->mid, "icc_fini: begin\n");
 
-  while ((curs = hm_next(icc->hostjob, curs, &h, (void *)&j)) != 0) {
-    if (j) {
-      icc_release_register(icc, h, 0);
-    }
+  /* If restart pending, just backup the icc_context and finalize */
+  margo_error(icc->mid, "icc_fini: restarting = %d, icc->type = %s", icc->restarting, _icc_type_str(icc->type));
+
+  if (icc->restarting == 1 && icc->type == ICC_TYPE_STOPRESTART){
+    margo_info(icc->mid, "icc_fini: Finalizing for restart\n");
+    /* set to 0 for the backup, but restored to continue the execution */
+    icc->restarting = 0;
+    _icc_context_backup(icc, "/tmp/nek.bin");
+    icc->restarting = 1;
   }
-  icc_release_nodes(icc);
+  
+  if (icc->restarting == 0 || icc->type != ICC_TYPE_STOPRESTART){
+    // CHANGE: JAVI
+    // remove extra job nodes if any
+    const char *host = NULL;
+    uint32_t *jobid = NULL;
+    size_t curs = 0;
+    while ((curs = hm_next(icc->hostjob, curs, &host, (const void **)&jobid)) != 0) {
+      if (((*jobid) != 0) && ((*jobid) != icc->jobid)) {  // CHANGE: JAVI
+        const uint16_t *nreleased = hm_get(icc->hostrelease, host);
+        const uint16_t *nalloced = hm_get(icc->hostalloc, host);
+        uint16_t cpus_alloc = (nalloced ? *nalloced : 0);
+        uint16_t cpus_nreleased = (nreleased ? *nreleased : 0);
+      
+        uint16_t ncpus = ((cpus_alloc-cpus_nreleased)<=0 ? 0 :cpus_alloc-cpus_nreleased);
+        margo_error(icc->mid, "icc_fini: releasing host %s (ncpus=%d), jobid=%d, icc->jobid=%d\n", host, ncpus, (*jobid), icc->jobid);
+        if (ncpus > 0) icc_release_register(icc, host, ncpus); // CHANGE: JAVI
+      }
+    }
+    icc_release_nodes(icc);
+  }
+    
+  //kill pending jobs
+  char errstr[ICC_ERRSTR_LEN];
+  icrmerr_t ret = icrm_kill_wait_pending_job(errstr);
+  if (ret != ICRM_SUCCESS) {
+    margo_error(icc->mid, "icc_fini: error in icrm_kill_wait_pending_job: %s\n", errstr);
+  }
+
+  // END CHANGE: JAVI
+  
+  margo_info(icc->mid, "icc_fini: ABT_xstream_free\n");
 
   if (icc->icrm_xstream) {
     icc->icrm_terminate = 1;
@@ -232,16 +414,26 @@ icc_fini(struct icc_context *icc)
     /* pool is freed by ABT_xstream_free? */
     /* ABT_pool_free(&icc->icrm_pool); */
   }
+  
+  if (icc->restarting == 0 || icc->type != ICC_TYPE_STOPRESTART){
+    if (icc->bidirectional && icc->registered) {
+      client_deregister_in_t in;
+      in.clid = icc->clid;
 
-  if (icc->bidirectional && icc->registered) {
-    client_deregister_in_t in;
-    in.clid = icc->clid;
+      margo_info(icc->mid, "icc_fini: deregister client\n");
 
-    rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_CLIENT_DEREGISTER], &in, &rpcrc, RPC_TIMEOUT_MS_DEFAULT);
-    if (rc || rpcrc) {
-      margo_error(icc->mid, "Could not deregister target to IC");
+      rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_CLIENT_DEREGISTER], &in, &rpcrc, RPC_TIMEOUT_MS_DEFAULT);
+      if (rc || rpcrc) {
+        margo_error(icc->mid, "Could not deregister target to IC");
+      }
     }
   }
+
+  /* close connections to DB */
+  icdb_fini(&(icc->icdbs_main));
+  icdb_fini(&(icc->icdbs_cb));
+
+  margo_info(icc->mid, "icc_fini: free hostmaps\n");
 
   if (icc->nodelist) {
     free(icc->nodelist);
@@ -259,9 +451,11 @@ icc_fini(struct icc_context *icc)
     hm_free(icc->hostrelease);
   }
 
+  // CHANGE JAVI
   if (icc->hostjob) {
     hm_free(icc->hostjob);
   }
+  // END CHANGE JAVI
 
   if (icc->reconfigalloc) {
     hm_free(icc->reconfigalloc);
@@ -281,12 +475,16 @@ icc_fini(struct icc_context *icc)
     close(icc->flexmpi_sock);
   }
 
+  margo_info(icc->mid, "icc_fini: end\n");
+
   if (icc->mid) {
     if (icc->addr) {
       margo_addr_free(icc->mid, icc->addr);
     }
     margo_finalize(icc->mid);
   }
+
+  margo_info(icc->mid, "icc_fini: end of the end...\n");
 
   free(icc);
 
@@ -401,12 +599,17 @@ icc_rpc_malleability_avail(struct icc_context *icc, char *type, char *portname, 
   return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
 
-
+// CHANGE JAVI
+//int
+//icc_rpc_malleability_region(struct icc_context *icc, enum icc_malleability_region_action type, int *retcode)
 int
 icc_rpc_malleability_region(struct icc_context *icc, enum icc_malleability_region_action type, int procs_hint, int exclusive_hint, int *retcode)
+// END CHANGE JAVI
 {
   int rc;
   malleability_region_in_t in;
+
+  margo_error(icc->mid, "icc_rpc_malleability_region: begin"); //CHANGE JAVI
 
   CHECK_ICC(icc);
 
@@ -414,16 +617,25 @@ icc_rpc_malleability_region(struct icc_context *icc, enum icc_malleability_regio
     return ICC_FAILURE;
   }
 
+
   if (procs_hint < INT32_MIN || procs_hint > INT32_MAX) {
     return ICC_FAILURE;
   }
 
   in.clid = icc->clid;
-  in.type = type;
+  in.type = type; /* safe to cast type to uint8 because of the check above */
+ 
+  // CHANGE JAVI
+  in.jobid = icc->jobid;
   in.nprocs = procs_hint;
   in.nnodes = exclusive_hint ? procs_hint : 1;  /* "exclusive" = 1 node per proc */
 
+  margo_info(icc->mid, "Application %s (%d:%d) %s malleability region", in.clid, in.jobid, in.nprocs, in.type == ICC_MALLEABILITY_REGION_ENTER ? "entering" : "leaving");
+  // END CHANGE JAVI
+
   rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_MALLEABILITY_REGION], &in, retcode, RPC_TIMEOUT_MS_DEFAULT);
+
+  margo_error(icc->mid, "icc_rpc_malleability_region: end"); // CHANGE JAVI
 
   return rc ? ICC_FAILURE : ICC_SUCCESS;
 }
@@ -653,9 +865,12 @@ int
 icc_release_register(struct icc_context *icc, const char *host, uint16_t ncpus)
 {
   CHECK_ICC(icc);
+
   if (!host) {
     return ICC_EINVAL;
   }
+
+  margo_info(icc->mid, "icc_release_register: START %s:%d", host, ncpus);
 
   int rc = ICC_SUCCESS;
 
@@ -671,25 +886,30 @@ icc_release_register(struct icc_context *icc, const char *host, uint16_t ncpus)
     n = (unsigned int)ncpus + (nreleased ? *nreleased : 0);
   }
 
-  if (n > UINT16_MAX || n < ncpus) {     /* overflow */
+  if (n > UINT16_MAX || n < ncpus) {          /* overflow */
     margo_error(icc->mid, "Too many CPUs to release");
     rc = ICC_FAILURE;
   }
-
-  if (n > (nalloced ? *nalloced : 0)) {  /* inconsistency */
+  else if (n > (nalloced ? *nalloced : 0)) {  /* inconsistency */
     /* catch all cases where nalloced = 0 since n is > 0  */
     margo_error(icc->mid, "Too many CPUs released %s:%"PRIu16" (got %"PRIu16")",
                 host, ncpus, (nalloced ? *nalloced : 0));
     rc = ICC_FAILURE;
-  } else {                              /* register CPU(s) for release */
+  }
+  else {                                      /* register CPU(s) for release */
     rc = hm_set(icc->hostrelease, host, &n, sizeof(n));
     if (rc == -1) {
       rc = ICC_ENOMEM;
     }
+    // CHANGE JAVI
+    else {
+        rc = ICC_SUCCESS;
+    }
+    // END CHANGE JAVI
   }
 
   ABT_rwlock_unlock(icc->hostlock);
-
+  margo_info(icc->mid, "icc_release_register: END");
   return rc;
 }
 
@@ -697,25 +917,201 @@ icc_release_register(struct icc_context *icc, const char *host, uint16_t ncpus)
 int
 icc_release_nodes(struct icc_context *icc)
 {
+  margo_info(icc->mid, "icc_release_nodes: START - hostrelease = %d",hm_length(icc->hostrelease));
   CHECK_ICC(icc);
 
-  int rc;
+  int rc=ICC_SUCCESS;
+    
   const char *host;
   size_t curs = 0;
 
   ABT_rwlock_wrlock(icc->hostlock);
 
-  while ((curs = hm_next(icc->hostrelease, curs, &host, NULL)) != 0) {
-    rc = release_node(icc, host);
-    if (rc != ICC_SUCCESS) {
-      break;
+  // CHANGE JAVI
+  uint16_t *ncpus_rem;
+
+  //while ((curs = hm_next(icc->hostrelease, curs, &host, NULL)) != 0) {
+  while ((curs = hm_next(icc->hostrelease, curs, &host, (const void **)&ncpus_rem)) != 0) {
+    margo_debug(icc->mid, "icc_release_nodes: host:cpusReleased %s:%"PRIu16, host, *ncpus_rem);
+    
+    const uint16_t *ncpus_alo = hm_get(icc->hostalloc, host);
+    assert(ncpus_alo);
+      margo_debug(icc->mid, "icc_release_nodes: host:cpusallocated %s:%"PRIu16, host, *ncpus_alo);
+
+      
+    if (((*ncpus_rem) > 0) && ((*ncpus_rem) >= (*ncpus_alo))) {
+      margo_debug(icc->mid, "icc_release_nodes: remove node %s",host);
+      rc = release_node(icc, host);
+      if (rc != ICC_SUCCESS) {
+        break;
+      }
     }
+
   }
+  //if (icc->hostrelease) {
+  //  hm_free(icc->hostrelease);
+  //}
+  //icc->hostrelease = hm_create();
+  //if (!icc->hostrelease) {
+  //  ABT_rwlock_unlock(icc->hostlock);
+  //  return ICC_FAILURE;
+  //}
+  // END CHANGE JAVI
+
+  margo_info(icc->mid, "icc_release_nodes: END");
 
   ABT_rwlock_unlock(icc->hostlock);
 
   return rc;
 }
+
+// ALBERTO ????
+int
+icc_remove_node(struct icc_context *icc, const char *host, uint16_t ncpus)
+{
+  CHECK_ICC(icc);
+
+  if (!host || !ncpus)
+    return ICC_EINVAL;
+
+  if (ncpus <= 0) {
+    return ICC_EINVAL;
+  }
+
+  int rc = ICC_SUCCESS;
+
+  ABT_rwlock_wrlock(icc->hostlock);
+
+  const uint16_t *nreleased = hm_get(icc->hostrelease, host);
+  const uint16_t *nalloced = hm_get(icc->hostalloc, host);
+
+  unsigned int n = (unsigned int)ncpus + (nreleased ? *nreleased : 0);
+
+  if (n > UINT16_MAX || n < ncpus) {          /* overflow */
+    margo_error(icc->mid, "Too many CPUs to release");
+    rc = ICC_FAILURE;
+  }
+  else if (n > (nalloced ? *nalloced : 0)) {  /* inconsistency */
+    /* catch all cases where nalloced = 0 since n is > 0  */
+    margo_error(icc->mid, "Too many CPUs released %s:%"PRIu16" (got %"PRIu16")",
+                host, ncpus, (nalloced ? *nalloced : 0));
+    rc = ICC_FAILURE;
+  }
+  else {                                      /* register CPU(s) for release */
+    rc = hm_set(icc->hostrelease, host, &n, sizeof(n));
+    if (rc == -1) {
+      rc = ICC_ENOMEM;
+    }
+    /* CHANGE: begin */
+    else {
+        rc = ICC_SUCCESS;
+    }
+    /* CHANGE: end */
+  }
+
+  ABT_rwlock_unlock(icc->hostlock);
+  return rc;
+}
+
+/*ALBERTO 05092023*/
+
+int
+icc_rpc_malleability_ss(struct icc_context *icc, int *retcode){
+  int rc;
+  malleability_ss_in_t in;
+
+  CHECK_ICC(icc);
+
+  in.clid = icc->clid;
+
+  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_MALLEABILITY_SS], &in, retcode, RPC_TIMEOUT_MS_DEFAULT);
+
+  return rc ? ICC_FAILURE : ICC_SUCCESS;
+}
+
+/*END 05092023*/
+
+
+/*ALBERTO 26062023*/
+
+int
+icc_rpc_checkpointing(struct icc_context *icc, int *retcode)
+{
+  int rc;
+  checkpointing_in_t in;
+
+  CHECK_ICC(icc);
+
+  in.clid = icc->clid;
+
+  rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_CHECKPOINTING], &in, retcode, RPC_TIMEOUT_MS_DEFAULT);
+
+  return rc ? ICC_FAILURE : ICC_SUCCESS;
+}
+
+
+int
+icc_rpc_malleability_query(struct icc_context *icc, int *malleability, int *nnodes, char **nodelist)
+{
+  malleability_query_in_t in;
+  malleability_query_out_t resp;
+
+  CHECK_ICC(icc);
+
+  in.clid = icc->clid;
+
+  //rc = rpc_send(icc->mid, icc->addr, icc->rpcids[RPC_MALLEABILITY_QUERY], &in, retcode, RPC_TIMEOUT_MS_DEFAULT); //rpc_send
+  //rpc_send(margo_instance_id mid, hg_addr_t addr, hg_id_t rpcid, void *in, void *retcode, double timeout_ms)
+
+  assert(icc->addr);
+  assert(icc->rpcids[RPC_MALLEABILITY_QUERY]);
+
+  hg_return_t hret;
+  hg_handle_t handle;
+
+  hret = margo_create(icc->mid, icc->addr, icc->rpcids[RPC_MALLEABILITY_QUERY], &handle);
+  if (hret != HG_SUCCESS) {
+    margo_error(icc->mid, "Margo RPC creation failure: %s", HG_Error_to_string(hret));
+    return -1;
+  }
+
+  hret = margo_forward_timed(handle, &in, RPC_TIMEOUT_MS_DEFAULT);
+  if (hret != HG_SUCCESS) {
+    margo_error(icc->mid, "Margo RPC forwarding failure: %s", HG_Error_to_string(hret));
+
+    if (hret != HG_NOENTRY) {
+      hret = margo_destroy(handle);
+    }
+    return -1;
+  }
+
+  hret = margo_get_output(handle, &resp);
+  if (hret != HG_SUCCESS) {
+    margo_error(icc->mid, "Could not get RPC output: %s", HG_Error_to_string(hret));
+  }
+  else {
+    margo_info(icc->mid, "icc_rpc_malleability_query: malleability:nnodes:hostlist %d:%d:%s",resp.malleability, resp.nnodes, resp.nodelist_str);
+    *malleability = resp.malleability;
+    *nnodes = resp.nnodes;
+    *nodelist = (char *)calloc(strlen(resp.nodelist_str)+1, 1);
+    strcpy(*nodelist,resp.nodelist_str);
+    hret = margo_free_output(handle, &resp);
+    if (hret != HG_SUCCESS) {
+      margo_error(icc->mid, "Could not free RPC output: %s", HG_Error_to_string(hret));
+    }
+  }
+
+  hret = margo_destroy(handle);
+  if (hret != HG_SUCCESS) {
+    margo_error(icc->mid, "Could not destroy Margo RPC handle: %s", HG_Error_to_string(hret));
+    return -1;
+  }
+
+  return hret ? ICC_FAILURE : ICC_SUCCESS;
+}
+
+/*END ALBERTO*/
+
 
 static iccret_t
 clear_hostmap(hm_t *hostmap)
@@ -734,9 +1130,54 @@ clear_hostmap(hm_t *hostmap)
   return rc;
 }
 
+//CHANGE JAVIER
+static int remove_extra_nodes(struct icc_context *icc, const char *hostlist)
+{
+    iccret_t rc = ICC_SUCCESS;
+
+    if (hostlist == NULL) {
+        return rc;
+    }
+    margo_error(icc->mid, "remove_extra_nodes: begin %s", hostlist);
+
+    int length=strlen(hostlist)+1;
+    char *aux_hostlist=(char *)malloc(length);
+    bzero(aux_hostlist,length);
+    char *aux2_hostlist=(char *)malloc(length);
+    bzero(aux2_hostlist,length);
+    char *hostname=(char *)malloc(length);
+    bzero(hostname,length);
+    strcpy(aux_hostlist,hostlist);
+    int ret = 0;
+    do {
+        uint16_t ncpus = 0;
+        ret = sscanf(aux_hostlist, "%[^:]:%hd,%s", hostname, &ncpus, aux2_hostlist);
+        strcpy(aux_hostlist,aux2_hostlist);
+        bzero(aux2_hostlist,length);
+        const uint16_t *nalloced = hm_get(icc->hostalloc, hostname);
+        uint16_t nremove=(nalloced ? (*nalloced)-ncpus : -1*ncpus);
+        if (nremove > 0) rc = icc_release_register(icc, hostname, nremove);
+        if (rc != ICC_SUCCESS) {
+            break;
+        }
+        bzero(hostname,length);
+    } while(ret > 2);
+    
+    free(aux_hostlist);
+    free(aux2_hostlist);
+    free(hostname);
+
+    margo_error(icc->mid, "remove_extra_nodes: end %s", hostlist);
+
+    return rc;
+}
+
+//END CHANGE JAVIER
+
 static int
 release_node(struct icc_context *icc, const char *host)
 {
+  margo_info(icc->mid, "release_node: START");
   CHECK_ICC(icc);
   if (!host) {
     return ICC_EINVAL;
@@ -747,14 +1188,20 @@ release_node(struct icc_context *icc, const char *host)
     return ICC_SUCCESS;
   }
 
-  /* get job associated with host */
+  // CHANGE #MUL-JOBS
   const uint32_t *jobid = hm_get(icc->hostjob, host);
   if (!jobid) {
     return ICC_EINVAL;
   }
+  // END CHANGE #MUL-JOBS
 
   char icrmerr[ICC_ERRSTR_LEN];
+
+  // CHANGE JAVI
+  //int rc = icrm_release_node(host, icc->jobid, *nreleased, icrmerr);
   int rc = icrm_release_node(host, *jobid, *nreleased, icrmerr);
+  // END CHANGE JAVI
+
   if (rc == ICRM_SUCCESS) {
     margo_debug(icc->mid, "Released %s:%"PRIu16, host, *nreleased);
     uint16_t nocpu = 0;
@@ -765,9 +1212,19 @@ release_node(struct icc_context *icc, const char *host)
     if (hm_set(icc->hostalloc, host, &nocpu, sizeof(nocpu)) == -1) {
       return ICC_ENOMEM;
     }
+ 
+    // CHANGE JAVI
     if (hm_set(icc->hostjob, host, &nojobid, sizeof(nojobid)) == -1) {
       return ICC_ENOMEM;
     }
+      
+    // remove node from redis database
+    int rcdb = icdb_delnodes(icc->icdbs_main, icc->clid, host);
+    if (rcdb != ICDB_SUCCESS) {
+      return ICC_ENOMEM;
+    }
+    // END CHANGE JAVI
+
 
   } else {
     margo_info(icc->mid, "Not releasing node %s", host);
@@ -779,6 +1236,7 @@ release_node(struct icc_context *icc, const char *host)
     }
   }
 
+  margo_info(icc->mid, "release_node: END");
   return rc;
 }
 
@@ -832,12 +1290,19 @@ _setup_margo(enum icc_log_level log_level, struct icc_context *icc)
   }
   fclose(f);
 
+
+  /* Parse ic_addr for redis */
+  sscanf(addr_str, "%*[^:]://%[^:]", icc->addr_ic_str);
+  margo_info(icc->mid, "IP IC addr: %s", icc->addr_ic_str);
+
+
   hret = margo_addr_lookup(icc->mid, addr_str, &icc->addr);
   if (hret != HG_SUCCESS) {
     margo_error(icc->mid, "Could not get Margo address from IC address file: %s", HG_Error_to_string(hret));
     rc = ICC_FAILURE;
     goto end;
   }
+
 
   /* register RPCs. Note that if the callback is not NULL the client
      is able to send AND receive the RPC */
@@ -846,7 +1311,6 @@ _setup_margo(enum icc_log_level log_level, struct icc_context *icc)
   }
 
   icc->rpcids[RPC_TEST] = MARGO_REGISTER(icc->mid, RPC_TEST_NAME, test_in_t, rpc_out_t, test_cb);
-
   icc->rpcids[RPC_JOBMON_SUBMIT] = MARGO_REGISTER(icc->mid, RPC_JOBMON_SUBMIT_NAME, jobmon_submit_in_t, rpc_out_t, NULL);
   icc->rpcids[RPC_JOBMON_EXIT] = MARGO_REGISTER(icc->mid, RPC_JOBMON_EXIT_NAME, jobmon_exit_in_t, rpc_out_t, NULL);
   icc->rpcids[RPC_ADHOC_NODES] = MARGO_REGISTER(icc->mid, RPC_ADHOC_NODES_NAME, adhoc_nodes_in_t, rpc_out_t, NULL);
@@ -872,7 +1336,7 @@ _setup_margo(enum icc_log_level log_level, struct icc_context *icc)
     icc->rpcids[RPC_JOBCLEAN] = MARGO_REGISTER(icc->mid, RPC_JOBCLEAN_NAME, jobclean_in_t, rpc_out_t, NULL);
   }
 
-  if (icc->type == ICC_TYPE_MPI || icc->type == ICC_TYPE_FLEXMPI) {
+  if (icc->type == ICC_TYPE_MPI || icc->type == ICC_TYPE_FLEXMPI || icc->type == ICC_TYPE_STOPRESTART) {
     icc->rpcids[RPC_RECONFIGURE] = MARGO_REGISTER(icc->mid, RPC_RECONFIGURE_NAME, reconfigure_in_t, rpc_out_t, reconfigure_cb);
     icc->rpcids[RPC_RESALLOC] = MARGO_REGISTER(icc->mid, RPC_RESALLOC_NAME, resalloc_in_t, rpc_out_t, resalloc_cb);
     icc->rpcids[RPC_RESALLOCDONE] = MARGO_REGISTER(icc->mid, RPC_RESALLOCDONE_NAME, resallocdone_in_t, rpc_out_t, NULL);
@@ -892,10 +1356,13 @@ _setup_reconfigure(struct icc_context *icc, icc_reconfigure_func_t func, void *d
 {
   CHECK_ICC(icc);
 
+  margo_error(icc->mid, "SETUP RECONFIGURE: data = %s", data);
+
   icc->flexhandle = NULL;
 
   if (icc->type == ICC_TYPE_FLEXMPI && !func) {
     /* XX TMP: dlsym FlexMPI reconfiguration function... */
+    margo_error(icc->mid, "SETUP RECONFIGURE: Entering in icc->type == FlexMPI && !func");
     icc->flexmpi_func = icc_flexmpi_func(icc->mid, &icc->flexhandle);
     if (!icc->flexmpi_func) {
       margo_info(icc->mid, "No FlexMPI reconfigure function, falling back to socket");
@@ -907,11 +1374,12 @@ _setup_reconfigure(struct icc_context *icc, icc_reconfigure_func_t func, void *d
         return ICC_FAILURE;
       }
     }
-  } else if (!func) {
+  }else if (!func) {
     margo_error(icc->mid, "Invalid reconfigure function");
     return ICC_FAILURE;
   }
 
+  margo_error(icc->mid, "SETUP RECONFIGURE: setting icc->reconfig func and data");
   icc->reconfig_func = func;
   icc->reconfig_data = data;
 
@@ -962,14 +1430,16 @@ _setup_hostmaps(struct icc_context *icc)
   if (!icc->hostrelease)
     return ICC_FAILURE;
 
+  // CHANGE JAVI
   icc->hostjob = hm_create();
   if (!icc->hostjob)
     return ICC_FAILURE;
+  // END CHANGE JAVI
 
   icc->reconfigalloc = hm_create();
   if (!icc->reconfigalloc)
     return ICC_FAILURE;
-
+ 
   return ICC_SUCCESS;
 }
 
@@ -1002,6 +1472,8 @@ _register_client(struct icc_context *icc, unsigned int nprocs)
     }
   }
 
+  margo_info(icc->mid, "Client register addr = %s", addr_str);
+
   rpc_in.nprocs = nprocs;
   rpc_in.addr_str = addr_str;
   rpc_in.jobid = icc->jobid;
@@ -1027,6 +1499,106 @@ _register_client(struct icc_context *icc, unsigned int nprocs)
   return rc;
 }
 
+/* ALBERTO - Functions to Store and Load the ICC_CONTEXT for stop and restart apps*/
+
+/**
+ * Write a string into a file
+*/
+void 
+_write_string(FILE *file, const char *str) {
+    if(str == NULL){
+      size_t len = 0;
+      fwrite(&len, sizeof(size_t), 1, file);
+    } else {
+      size_t len = strlen(str);
+      fwrite(&len, sizeof(size_t), 1, file);
+      fwrite(str, len, 1, file);
+    }
+}
+
+/**
+ * Read a string from file
+*/
+char *
+_read_string(FILE *file) {
+    size_t len;
+    fread(&len, sizeof(size_t), 1, file);
+    if (len == 0)
+      return NULL;
+
+    char *str = (char *)malloc(len + 1);
+    fread(str, len, 1, file);
+    str[len] = '\0';
+    return str;
+}
+
+/**
+ * Store relevant data from icc_context to a binary file
+*/
+void 
+_icc_context_backup(struct icc_context *icc, char *filename){
+    FILE *file = fopen(filename, "wb");
+    if (file == NULL) {
+        perror("Error opening file");
+    }
+
+    fwrite(icc, sizeof(struct icc_context), 1, file);
+    _write_string(file, icc->nodelist);
+    _write_string(file, icc->jobnodelist);
+
+    fclose(file);
+
+    /* Now store hashmaps*/
+    serialize_hashmap(icc->hostalloc, "hostalloc.map");
+    serialize_hashmap(icc->hostrelease, "hostrelease.map");
+    serialize_hashmap(icc->reconfigalloc, "reconfigalloc.map");
+    serialize_hashmap(icc->hostjob, "hostjob.map");
+
+    /*Debug*/
+    margo_info(icc->mid, "ICC hostalloc (BAK) size = %d", hm_length(icc->hostalloc));
+    margo_info(icc->mid, "ICC hostrelease (BAK) size = %d", hm_length(icc->hostrelease));
+    margo_info(icc->mid, "ICC reconfigalloc (BAK) size = %d", hm_length(icc->reconfigalloc));
+    margo_info(icc->mid, "ICC hostjob (BAK) size = %d", hm_length(icc->hostjob));
+
+}
+
+/**
+ * Load relevant data from binary file to icc_context
+*/
+void 
+_icc_context_load(struct icc_context *icc, char *filename){
+    FILE *file = fopen(filename, "rb");
+    if (file == NULL) {
+        perror("Error opening file");
+    }
+
+    struct icc_context read_context;
+    fread(&read_context, sizeof(struct icc_context), 1, file);
+    icc->registered = read_context.registered;
+    icc->jobid = read_context.jobid;
+    icc->jobstepid = read_context.jobstepid;
+    strcpy(icc->clid, read_context.clid);
+    icc->type = read_context.type;
+
+    icc->nodelist = _read_string(file);
+    icc->jobnodelist = _read_string(file);
+
+    fclose(file);
+
+    /* Now load the hashmaps*/
+    icc->hostalloc = deserialize_hashmap("hostalloc.map");
+    icc->hostrelease = deserialize_hashmap("hostrelease.map");
+    icc->reconfigalloc = deserialize_hashmap("reconfigalloc.map");
+    icc->hostjob = deserialize_hashmap("hostjob.map");
+
+
+    /*Debug*/
+    margo_info(icc->mid, "ICC hostalloc (LOAD) size = %d", hm_length(icc->hostalloc));
+    margo_info(icc->mid, "ICC hostrelease (LOAD) size = %d", hm_length(icc->hostrelease));
+    margo_info(icc->mid, "ICC reconfigalloc (LOAD) size = %d", hm_length(icc->reconfigalloc));
+    margo_info(icc->mid, "ICC hostjob (LOAD) size = %d", hm_length(icc->hostjob));
+}
+
 
 static inline const char *
 _icc_type_str(enum icc_client_type type)
@@ -1046,8 +1618,11 @@ _icc_type_str(enum icc_client_type type)
    return "iosets";
   case ICC_TYPE_RECONFIG2:
    return "reconfig2";
-  case ICC_TYPE_ALERT:
+ case ICC_TYPE_ALERT:
    return "alert";
+  /*ALBERTO*/
+  case ICC_TYPE_STOPRESTART:
+   return "stoprestart";
   default:
     return "error";
   }
@@ -1081,3 +1656,10 @@ _strtouint32(const char *nptr, uint32_t *dest)
 
   return 0;
 }
+
+char * 
+icc_get_ip_addr(struct icc_context *icc){
+  return icc->addr_ic_str;
+}
+
+

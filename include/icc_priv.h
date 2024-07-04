@@ -22,6 +22,10 @@ struct icc_context {
   uint32_t          jobid;              /* resource manager job id */
   uint32_t          jobstepid;          /* resource manager jobstep id */
   char              clid[UUID_STR_LEN]; /* client uuid */
+  // CHANGE: JAVI
+  struct icdb_context *icdbs_main;      /* connection to DB for main icc functions*/
+  struct icdb_context *icdbs_cb;        /* connection to DB for client callbacks */
+  // END CHANGE: JAVI
   enum icc_client_type type;            /* client type */
 
   /* can be modified on reconfiguration order, need lock */
@@ -62,6 +66,10 @@ struct icc_context {
   void                  *flexhandle;    /* dlopen handle to FlexMPI lib */
   int                   flexmpi_sock;
   flexmpi_reconfigure_t flexmpi_func;
+
+  /* Stop and restart specific*/
+  int   restarting; /* 1  means current iteration is a restart, 0 means there is no restarting*/
+  char addr_ic_str[ICC_ADDR_LEN]; /* send the IC IP addr to FlexMPI for Redis connection */
 };
 
 #endif

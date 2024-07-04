@@ -1,6 +1,10 @@
 CC := gcc
 
 PREFIX ?=$(HOME)/.local
+#PREFIX ?=/usr/local
+SLURM_DIR ?= /opt/slurm-23.11.1-fix
+
+
 PKG_CONFIG_PATH := $(PREFIX)/lib/pkgconfig
 INSTALL_PATH_LIB := $(PREFIX)/lib
 INSTALL_PATH_BIN := $(PREFIX)/bin
@@ -14,6 +18,7 @@ export PKG_CONFIG_PATH
 includedir := include
 sourcedir := src
 exampledir := examples
+standalonedir := src_standalone
 
 icc_header := icc.h
 
@@ -27,14 +32,15 @@ ifeq ($(.SHELLSTATUS),0)
 CPPFLAGS_SLURM != $(PKG_CONFIG) --cflags slurm
 LIBS_SLURM != $(PKG_CONFIG) --libs slurm
 else
-CPPFLAGS_SLURM :=
-LIBS_SLURM := -lslurm
+CPPFLAGS_SLURM := -I$(SLURM_DIR)/include
+LIBS_SLURM := -L$(SLURM_DIR)/lib -lslurm
 endif
 
 libicc_so := libicc.so
 libicc_soname :=  $(libicc_so).$(ICC_MAJOR)
 libicc_realname := $(libicc_soname).$(ICC_MINOR)
 
+icc_standalone_bin := icc_standalone
 icc_server_bin := icc_server
 icc_client_bin := icc_client
 icc_jobcleaner_bin := icc_jobcleaner
@@ -42,24 +48,24 @@ icc_jobcleaner_bin := icc_jobcleaner
 libslurmadmcli_so := libslurmadmcli.so
 libslurmadhoccli_so := libslurmadhoccli.so
 libslurmjobmon_so := libslurmjobmon.so
-libslurmjobmon2_so := libslurmjobmon2.so
+#############libslurmjobmon2_so := libslurmjobmon2.so
 testapp_bin := testapp
 
-sources := hashmap.c server.c rpc.c cb.c cbcommon.c icdb.c icrm.c icc.c flexmpi.c
-sources += slurmjobmon.c slurmjobmon2.c slurmadhoccli.c jobcleaner.c
-sources += client.c testapp.c spawn.c synthio.c writer.c test.c lowmem.c
-
-sources += ${ENABLE_SLURMADMCLI:true=slurmadmcli.c}
+sources := hashmap.c server.c rpc.c cb.c cbserver.c cbcommon.c icdb.c icrm.c icc.c flexmpi.c
+############sources += slurmadmcli.c slurmjobmon.c slurmjobmon2.c slurmadhoccli.c jobcleaner.c
+sources += slurmadmcli.c slurmjobmon.c slurmjobmon2.c slurmadhoccli.c jobcleaner.c
+#sources += client.c testapp.c spawn.c synthio.c writer.c mpitest.c test.c standalone.c
+sources += client.c testapp.c spawn.c synthio.c writer.c test.c standalone.c
 
 # keep libicc in front
-binaries := $(libicc_so) server client jobcleaner $(libslurmjobmon_so) $(libslurmjobmon2_so) $(libslurmadhoccli_so) spawn synthio writer lowmem
-
-binaries += ${ENABLE_SLURMADMCLI:true=$(libslurmadmcli_so)}
+#binaries := $(libicc_so) server client jobcleaner $(libslurmadmcli_so) $(libslurmjobmon_so) $(libslurmjobmon2_so) $(libslurmadhoccli_so) spawn synthio writer mpitest
+##############binaries := $(libicc_so) server client jobcleaner $(libslurmjobmon_so) $(libslurmjobmon2_so) spawn synthio writer
+binaries := $(libicc_so) server client jobcleaner $(libslurmjobmon_so) spawn synthio writer standalone
 
 objects := $(sources:.c=.o)
 depends := $(sources:.c=.d)
 
-vpath %.c $(sourcedir) $(exampledir)
+vpath %.c $(sourcedir) $(exampledir) $(standalonedir)
 
 CPPFLAGS := -I$(includedir) -MMD
 CFLAGS := -std=gnu99 -Wall -Wextra -Werror=uninitialized -O0 -g
@@ -80,6 +86,7 @@ install: all
 	ln -rsf $(INSTALL_PATH_LIB)/$(libicc_realname) $(INSTALL_PATH_LIB)/$(libicc_soname)
 	ln -rsf $(INSTALL_PATH_LIB)/$(libicc_realname) $(INSTALL_PATH_LIB)/$(libicc_so)
 	$(INSTALL) -m 644 $(includedir)/$(icc_header) $(INSTALL_PATH_INCLUDE)
+	$(INSTALL) -m 755 standalone $(INSTALL_PATH_BIN)/$(icc_standalone_bin)
 	$(INSTALL) -m 755 server $(INSTALL_PATH_BIN)/$(icc_server_bin)
 	$(INSTALL) -m 755 client $(INSTALL_PATH_BIN)/$(icc_client_bin)
 	$(INSTALL) -m 755 jobcleaner $(INSTALL_PATH_BIN)/$(icc_jobcleaner_bin)
@@ -87,14 +94,15 @@ install: all
 	$(INSTALL) -m 755 scripts/icc_client.sh $(INSTALL_PATH_BIN)/icc_client.sh
 	$(INSTALL) -m 755 scripts/admire_mpiexec.sh $(INSTALL_PATH_BIN)/admire_mpiexec
 	$(INSTALL) -m 755 scripts/admire_srun.sh $(INSTALL_PATH_BIN)/admire_srun
-	$(INSTALL) -m 755 scripts/afs $(INSTALL_PATH_BIN)/afs
-	$(INSTALL) -m 755 scripts/areg $(INSTALL_PATH_BIN)/areg
+	#####$(INSTALL) -m 755 scripts/afs $(INSTALL_PATH_BIN)/afs
+	#####$(INSTALL) -m 755 scripts/areg $(INSTALL_PATH_BIN)/areg
 	# $(INSTALL) -m 755 $(testapp_bin) $(INSTALL_PATH_BIN)
 
 uninstall:
 	$(RM) $(INSTALL_PATH_INCLUDE)/$(icc_header)
 	$(RM) $(INSTALL_PATH_LIB)/$(libicc_soname) $(INSTALL_PATH_LIB)/$(libicc_so)
 	$(RM) $(INSTALL_PATH_LIB)/$(libicc_realname)
+	$(RM) $(INSTALL_PATH_BIN)/$(icc_standalone_bin)
 	$(RM) $(INSTALL_PATH_BIN)/$(icc_server_bin)
 	$(RM) $(INSTALL_PATH_BIN)/$(icc_client_bin)
 	$(RM) $(INSTALL_PATH_BIN)/$(icc_jobcleaner_bin)
@@ -120,17 +128,21 @@ icdb.o: CPPFLAGS += `$(PKG_CONFIG) --cflags hiredis uuid`
 
 icrm.o: CPPFLAGS += $(CPPFLAGS_SLURM)
 
+standalone: standalone.o
+standalone: CPPFLAGS += $(CPPFLAGS_SLURM)
+standalone: LDLIBS += -lm $(LIBS_SLURM) -L. -licc -Wl,--no-undefined,-rpath-link=${PREFIX}/lib
+
 server: icdb.o icrm.o rpc.o cbcommon.o cbserver.o hashmap.o
 server: CPPFLAGS += `$(PKG_CONFIG) --cflags margo uuid`
 server: LDLIBS += -lm `$(PKG_CONFIG) --libs margo hiredis` $(LIBS_SLURM) -Wl,--no-undefined
 
-$(libicc_so): rpc.o cb.o cbcommon.o flexmpi.o icrm.o hashmap.o
+#$(libicc_so): rpc.o cb.o cbcommon.o flexmpi.o icrm.o hashmap.o
+$(libicc_so): icdb.o rpc.o cb.o cbcommon.o flexmpi.o icrm.o hashmap.o
 $(libicc_so): CPPFLAGS += `$(PKG_CONFIG) --cflags margo uuid`
-$(libicc_so): LDLIBS += `$(PKG_CONFIG) --libs margo uuid` $(LIBS_SLURM) -ldl -Wl,--no-undefined,-h$(libicc_soname)
+#$(libicc_so): LDLIBS += `$(PKG_CONFIG) --libs margo uuid` $(LIBS_SLURM) -ldl -Wl,--no-undefined,-h$(libicc_soname)
+$(libicc_so): LDLIBS += `$(PKG_CONFIG) --libs margo uuid hiredis` $(LIBS_SLURM) -ldl -Wl,--no-undefined,-h$(libicc_soname)
 
 client: LDLIBS += -L. -licc -Wl,--no-undefined,-rpath-link=${PREFIX}/lib
-
-lowmem: LDLIBS += -L. -licc -Wl,--no-undefined,-rpath-link=${PREFIX}/lib
 
 jobcleaner: LDLIBS += -L. -licc -Wl,--no-undefined,-rpath-link=${PREFIX}/lib
 
@@ -156,12 +168,12 @@ mpitest: LDLIBS += -L$(PREFIX)/lib -lempi `$(PKG_CONFIG) --libs mpich` -L. -licc
 
 slurmjobmon.o slurmadhoccli.o slurmadmcli.o: CPPFLAGS += $(CPPFLAGS_SLURM)
 
-slurmjobmon2.o: CPPFLAGS += $(CPPFLAGS_SLURM) `$(PKG_CONFIG) --cflags hiredis`
+################slurmjobmon2.o: CPPFLAGS += $(CPPFLAGS_SLURM) `$(PKG_CONFIG) --cflags hiredis`
 
 # cannot use -Wl,--no-undefined here because some Spank symbols in
 # libslurm have LOCAL binding
 $(libslurmjobmon_so) $(libslurmadhoccli_so): LDLIBS += $(LIBS_SLURM) -L. -licc
-$(libslurmjobmon2_so): LDLIBS += $(LIBS_SLURM) `$(PKG_CONFIG) --libs hiredis`
+###############$(libslurmjobmon2_so): LDLIBS += $(LIBS_SLURM) `$(PKG_CONFIG) --libs hiredis`
 
 $(libslurmadmcli_so): CPPFLAGS += `$(PKG_CONFIG) --cflags scord`
 $(libslurmadmcli_so): LDLIBS += `$(PKG_CONFIG) --libs scord` $(LIBS_SLURM)

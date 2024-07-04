@@ -6,6 +6,7 @@
 #include "cb.h"
 #include "rpc.h"                /* for RPC i/o structs */
 #include "icrm.h"
+#include "icdb.h"
 #include "icc_priv.h"
 
 #define MARGO_GET_INPUT(h,in,hret)  hret = margo_get_input(h, &in);	\
@@ -112,6 +113,7 @@ resalloc_cb(hg_handle_t h)
 
   mid = margo_hg_handle_get_instance(h);
   assert(mid);
+  margo_info(mid, "resalloc_cb: begin"); // CHANGE JAVI
 
   out.rc = ICC_SUCCESS;
 
@@ -127,13 +129,31 @@ resalloc_cb(hg_handle_t h)
     goto respond;
   }
 
+  // CHANGE: JAVI
+  // if shrinking kill pending jobs and wait until in_resalloc == 0
+  if (in.shrink) {
+    icrmerr_t ret = ICRM_SUCCESS;
+    char errstr[ICC_ERRSTR_LEN];
+    margo_info(mid, "resalloc_cb: begin icrm_kill_wait_pending_job");
+    ret = icrm_kill_wait_pending_job(errstr);
+    margo_info(mid, "resalloc_cb: end icrm_kill_wait_pending_job");
+    if (ret != ICRM_SUCCESS) {
+      margo_error(mid, "resalloc_cb: icrm_kill_wait_pending_job error: %s",errstr);
+      goto respond;
+    }
+  }
+  // END CHANGE: JAVI
+
   /* make sure no reconfiguration RPC is running */
   ABT_mutex mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&resalloc_mutex);
+  margo_info(mid, "resalloc_cb: lock"); // CHANGE JAVI
   ABT_mutex_lock(mutex);
-
+    
   if (in_resalloc) {
     out.rc = RPC_EAGAIN;
     ABT_mutex_unlock(mutex);
+    margo_info(mid, "resalloc_cb: unlock error"); // CHANGE JAVI
+
     goto respond;
   } else {
     in_resalloc = 1;
@@ -142,10 +162,15 @@ resalloc_cb(hg_handle_t h)
 
   /* shrinking request can be dealt with immediately */
   if (in.shrink) {
+    /* ALBERTO - Indicate if there is a restarting pending */
+    if (icc->type == ICC_TYPE_STOPRESTART)
+      icc->restarting = 1;
 
     if (icc->reconfig_func) {
+      margo_info(mid, "resalloc_cb: call reconfig_func"); // CHANGE JAVI
       /* call callback immediately if available */
-      ret = icc->reconfig_func(in.shrink, in.ncpus, NULL, icc->reconfig_data);
+      ret = icc->reconfig_func(in.shrink, in.ncpus, NULL, icc->reconfig_data); /*ALBERTO - I need the hostlist, not NULL. Or new_nodes_list with the default values */
+      margo_info(mid, "resalloc_cb: exit reconfig_func"); // CHANGE JAVI
       out.rc = ret ? RPC_FAILURE : RPC_SUCCESS;
     } else if (icc->type == ICC_TYPE_FLEXMPI) {
       ret = icc_flexmpi_reconfigure(icc->mid, in.shrink, in.ncpus, NULL, icc->flexmpi_func, icc->flexmpi_sock);
@@ -156,10 +181,10 @@ resalloc_cb(hg_handle_t h)
       icc->reconfig_flag = ICC_RECONFIG_SHRINK;
       ABT_rwlock_unlock(icc->hostlock);
     }
-
     ABT_mutex_lock(mutex);
     in_resalloc = 0;
     ABT_mutex_unlock(mutex);
+
     goto respond;
   }
 
@@ -197,6 +222,7 @@ resalloc_cb(hg_handle_t h)
   }
 
  respond:
+  margo_info(mid, "resalloc_cb: end"); // CHANGE JAVI
   MARGO_RESPOND(h, out, hret)
   MARGO_DESTROY_HANDLE(h, hret);
 }
@@ -207,29 +233,37 @@ static void
 alloc_th(struct alloc_args *args)
 {
   struct icc_context *icc = args->icc;
-
+  ABT_mutex mutex;
+    
+  margo_info(icc->mid, "alloc_th: begin"); //CHANGE JAVI
+    
   resallocdone_in_t in = { 0 };
   in.ncpus = args->ncpus;
   in.nnodes = args->nnodes;
   in.jobid = icc->jobid;
-
-  uint32_t newjob;
-
+    
+  uint32_t newjobid;
+    
   /* allocation request: blocking call */
   hm_t *newalloc;
   char icrmerr[ICC_ERRSTR_LEN];
-  icrmerr_t icrmret = icrm_alloc(icc->jobid, &newjob, &in.ncpus, &args->nnodes, &newalloc,
-                             icrmerr);
-  if (icrmret != ICRM_SUCCESS) {
+  // CHANGE JAVI
+  //icrmerr_t icrmret = icrm_alloc(icc->jobid, &newjobid, &in.ncpus, &in.nnodes, &newalloc, icrmerr);
+  icrmerr_t icrmret = icrm_alloc(&newjobid, &in.ncpus, &in.nnodes, &newalloc, icrmerr);
+  if (icrmret == ICRM_ERESOURCEMAN) {
+    margo_error(icc->mid, "alloc_th: Error allocating job: %s", icrmerr);
+    goto end; //CHANGE: JAVI
+    // END CHANGE JAVI
+  } else if (icrmret != ICRM_SUCCESS) {
     margo_error(icc->mid, "icrm_alloc error: %s", icrmerr);
-    goto end;
+    goto error; //CHANGE: JAVI
   }
 
   in.hostlist = icrm_hostlist(newalloc, 1, NULL);
   if (!in.hostlist) {
     icrmret = ICRM_ENOMEM;
     margo_error(icc->mid, "icrm_hostlist error: out of memory");
-    goto end;
+    goto error; //CHANGE: JAVI
   }
 
   margo_debug(icc->mid, "Job %"PRIu32" resource allocation of %"PRIu32" cpus in %"PRIu32" nodes (%s)", in.jobid, in.ncpus, in.nnodes, in.hostlist);
@@ -238,27 +272,46 @@ alloc_th(struct alloc_args *args)
      hostmap needs to be updated atomically */
   ABT_rwlock_wrlock(icc->hostlock);
 
-  /* add new resources to hostalloc etc. */
+  // CHANGE JAVI
+  //icrmret = icrm_merge(newjobid, icrmerr);
+  //if (icrmret != ICRM_SUCCESS) {
+  //  margo_error(icc->mid, "icrm_renounce error: %s", icrmerr);
+  //  goto error;
+  //}
+  // END CHANGE JAVI
+
+  /* add new resources to hostalloc */
   icrmret = icrm_update_hostmap(icc->hostalloc, newalloc);
   if (icrmret == ICRM_EOVERFLOW) {
     margo_error(icc->mid, "Too many CPUs allocated");
     ABT_rwlock_unlock(icc->hostlock);
-    goto end;
+    goto error; //CHANGE: JAVI
   }
 
   icrmret = icrm_update_hostmap(icc->reconfigalloc, newalloc);
   if (icrmret == ICRM_EOVERFLOW) {
     margo_error(icc->mid, "Too many CPUs allocated");
     ABT_rwlock_unlock(icc->hostlock);
-    goto end;
+    goto error; //CHANGE: JAVI
   }
-
-  /* update host:jobid map */
-  const char *h;
-  size_t curs = 0;
-  while ((curs = hm_next(newalloc, curs, &h, NULL)) != 0) {
-    hm_set(icc->hostjob, h, &newjob, sizeof(newjob));
+  // CHANGE JAVI
+  icrmret = icrm_update_hostmap_job(icc->hostjob, newalloc, newjobid);
+  if (icrmret != ICDB_SUCCESS) {
+    margo_error(icc->mid, "Host is already allocated on another jobid");
+    ABT_rwlock_unlock(icc->hostlock);
+    goto error; //CHANGE: JAVI
   }
+    
+  // add hostlist to redis database
+  char *nodelist = icrm_hostlist(newalloc, 0, NULL);
+  int icdbret = icdb_addnodes(icc->icdbs_cb, icc->clid, nodelist);
+  free(nodelist);
+  if (icdbret != ICDB_SUCCESS) {
+      margo_error(icc->mid, "New hosts ca not be added to redis");
+      ABT_rwlock_unlock(icc->hostlock);
+      goto error; //CHANGE: JAVI
+  }
+  // END CHANGE JAVI
 
   ABT_rwlock_unlock(icc->hostlock);
 
@@ -268,12 +321,16 @@ alloc_th(struct alloc_args *args)
                         &in, &rpcret, RPC_TIMEOUT_MS_DEFAULT);
   if (ret != ICC_SUCCESS) {
     margo_error(icc->mid, "Error sending RPC_RESALLOCDONE");
-    goto end;
+    goto error; //CHANGE: JAVI
   }
 
   if (rpcret == RPC_WAIT) {            /* do not do reconfigure */
     margo_debug(icc->mid, "Job %"PRIu32": not reconfiguring", in.jobid);
+    goto error; //CHANGE: JAVI
   } else if (rpcret == RPC_SUCCESS) {  /* prepare reconfiguration */
+    /* ALBERTO - Indicate if there is a restarting pending */
+    if (icc->type == ICC_TYPE_STOPRESTART)
+      icc->restarting = 1;
 
     if (icc->reconfig_func) {
       /* call callback immediately if available */
@@ -289,14 +346,22 @@ alloc_th(struct alloc_args *args)
     }
   } else {
     margo_error(icc->mid, "Error in RPC_RESALLOCDONE");
+    goto error; //CHANGE: JAVI
   }
 
-  ABT_mutex mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&resalloc_mutex);
+
+end:   //CHANGE: JAVI
+  mutex = ABT_MUTEX_MEMORY_GET_HANDLE(&resalloc_mutex);
+margo_info(icc->mid, "alloc_th: before lock"); //CHANGE JAVI
   ABT_mutex_lock(mutex);
   in_resalloc = 0;
   ABT_mutex_unlock(mutex);
+  margo_info(icc->mid, "alloc_th: after lock"); //CHANGE JAVI
 
- end:
+error:   //CHANGE: JAVI
+  margo_info(icc->mid, "alloc_th: icrm_clear_pending_job"); //CHANGE JAVI
+  icrm_clear_pending_job(); //CHANGE: JAVI
+  margo_info(icc->mid, "alloc_th: end"); //CHANGE JAVI
   free(args);
   if (newalloc)
     hm_free(newalloc);
@@ -363,6 +428,7 @@ reconfigure2_cb(hg_handle_t h)
   }
 }
 DEFINE_MARGO_RPC_HANDLER(reconfigure2_cb);
+
 
 void
 lowmem_cb(hg_handle_t h)

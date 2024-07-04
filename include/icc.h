@@ -38,6 +38,7 @@ enum icc_client_type {
   ICC_TYPE_UNDEFINED,
   ICC_TYPE_MPI,
   ICC_TYPE_FLEXMPI,
+  ICC_TYPE_STOPRESTART,
   ICC_TYPE_JOBCLEANER,
   ICC_TYPE_JOBMON,
   ICC_TYPE_ADHOCCLI,
@@ -86,11 +87,13 @@ int icc_init(enum icc_log_level log_level, enum icc_client_type typeid, struct i
  * this client, returned for example by MPI_Comm_size. Also register
  * FUNC to be called by libicc on receiving a reconfiguration RPC with
  * DATA passed back as-is to FUNC.
+ * 
+ * RUN_MODE 0 for initial execution and 1 for restarted app
  *
  * Return ICC_SUCCESS or an error code.
  */
-int icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid, int nprocs, icc_reconfigure_func_t func, void *data, struct icc_context **icc);
-
+/*int icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid, int nprocs, icc_reconfigure_func_t func, void *data, struct icc_context **icc);*/
+int icc_init_mpi(enum icc_log_level log_level, enum icc_client_type typeid, int nprocs, icc_reconfigure_func_t func, void *data, int run_mode, char ** ic_addr, char ** clid, const char *hostlist, struct icc_context **icc);
 
 /**
  * Finalize the ICC client instance associated with the context passed as argument.
@@ -270,12 +273,16 @@ enum icc_malleability_region_action {
  *
  * Return ICC_SUCCESS or an error code.
  */
+/* CHANGE: begin */
+/* procs_hint is a hint of the num. of procs to remove/add */
+/* excl_nodes_hint is a hint of using one node per proc. or not */
+//int icc_rpc_malleability_region(struct icc_context *icc, enum icc_malleability_region_action type, int *retcode);
 int icc_rpc_malleability_region(struct icc_context *icc, enum icc_malleability_region_action type, int procs_hint, int exclusive_hint, int *retcode);
+/* CHANGE: end */
 
 /**
  * Alerts
  */
-
 enum icc_alert_type {
   ICC_ALERT_UNDEFINED = 0,
   ICC_ALERT_IO,
@@ -308,7 +315,6 @@ int icc_rpc_metric_alert(struct icc_context * icc,  char * source, char * name, 
  */
 int icc_rpc_alert(struct icc_context *icc, enum icc_alert_type type, int *retcode);
 
-
 /**
  * Node alert
  */
@@ -321,5 +327,54 @@ int icc_rpc_alert(struct icc_context *icc, enum icc_alert_type type, int *retcod
  * Return ICC_SUCCESS or an error code.
  */
 int icc_rpc_nodealert(struct icc_context *icc, enum icc_alert_type type, const char *node, int *retcode);
+
+/*ALBERTO 26062023 */
+/**
+ * Register NCPUS on HOST for release. The resources will be actually
+ * released to the resource manager when calling icc_release_nodes()
+ * (which see).
+ *
+ * Return ICC_SUCCESS or an error code.
+ */
+int icc_remove_node(struct icc_context *icc, const char *host, uint16_t ncpus);
+
+/**
+ * RPC checkpointing: application asks the IC if it has to execute a checkpoint phase..
+ *
+ * RETCODE is filled with 0 if no checkpoint needed, 1 otherwhise. .
+ *
+ * Return ICC_SUCCESS or an error code.
+ */
+int icc_rpc_checkpointing();
+
+/**
+ * RPC malleability query: application asks the IC for the malleability decision
+ *
+ * RETURN if malleability, nnodes to add/remove, and nodelist to add/remove
+ *
+ * Return ICC_SUCCESS or an error code.
+ */
+int icc_rpc_malleability_query(struct icc_context *icc, int *malleability, int *nnodes, char **nodelist);
+/*END ALBERTO 26062023*/
+
+/*ALBERTO 05092023*/
+/**
+ * RPC malleability query: application asks the IC for the malleability decision
+ *
+ * RETURN if malleability, nnodes to add/remove, and nodelist to add/remove
+ *
+ * Return ICC_SUCCESS or an error code.
+ */
+int icc_rpc_malleability_ss(struct icc_context *icc, int *retcode);
+
+/**
+ * Backup relevant data from icc_context to file
+*/
+void _icc_context_backup(struct icc_context *icc, char *filename);
+
+/**
+ * Load relevant data from binary file to icc_context
+*/
+void _icc_context_load(struct icc_context *icc, char *filename);
 
 #endif

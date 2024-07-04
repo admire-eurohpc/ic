@@ -51,7 +51,7 @@ main(int argc, char **argv)
 
   /* root only */
   if (!ischild && rank == 0) {
-    icc_init_mpi(ICC_LOG_DEBUG, ICC_TYPE_MPI, size, reconfigure, &data, &data.icc);
+    icc_init_mpi(ICC_LOG_DEBUG, ICC_TYPE_MPI, size, reconfigure, &data, 0, NULL, NULL, NULL, &data.icc);
     assert(data.icc);
   }
 
