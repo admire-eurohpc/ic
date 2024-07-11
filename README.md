@@ -1,8 +1,63 @@
-# libicc: The intelligent controller communication library
+# IC: The Intelligent Controller
 
-## Dependencies
+## Description of the Intelligent Controller
 
-The libicc depends on Margo, which itself depends on a couple of
+The IC is a multi-criteria distributed component that integrates cross-layer data to gain a holistic view of
+the system and dynamically steer the system components. This enhances the I/O system behavior and enables
+anticipatory decisions for resource allocation. 
+
+From the point of view of a resource manager, the IC is the component responsible for coordinating the
+allocation of the available resources for the jobs that request them. To do this, it integrates a module that
+allows itself to communicate with Slurm. Slurm is the most widely used resource manager. It provides a
+versatile platform for task management, resource allocation, and job scheduling in a distributed environment.
+It also facilitates efficient resource management, job monitoring, and the implementation of custom allocation
+policies. Slurm uses job queues to manage and prioritize tasks submitted by users, executing them according
+to allocation policies that may consider factors such as user priority, resource availability, and time constraints.
+
+The Intelligent Controller (IC) is a software written using the C language. As stated before, it is designed in a
+client-server fashion. The connection protocol between the server and the client library is a custom RPC-based
+API. client applications can access the IC services by linking to the IC library (libicc). Libicc is broad and
+includes the interfaces to all different type of IC clients: applications, batch scheduler, monitoring system, etc.
+
+For faster development and to avoid the pitfalls of a homegrown system, the custom RPC-based API is
+based on the use of Mercury library. It is well in use in the HPC community, actively developed under
+the umbrella of the Mochi project and portable to different platforms thanks to its use of libfabric,
+including platform where TCP sockets are not available. Its main advantage for us is the set of macros it
+offers to serialize and deserialize RPC arguments, a tedious task if done from scratch. It is based around an
+asynchronous-adjacent programming style, with “callbacks” passed to non-blocking functions and queued for
+later execution. Network progress and callback execution have to be made explicitely. While flexible and
+allowing for fine-grained control, it is a more exotic programming style, arguably more convoluted and harder
+to use. Fortunately, the Mochi project also provides Margo, a library wrapping Mercury’s callback model into a
+simpler, more linear programming model with the help of the Argobots user-level threading library. While
+not anticipated, this meant that the controller was multi-threaded from the get-go, a fact which simplified later
+addition to the software.
+
+The Intelligent Controller is a stateful component, and thus needs to store and organize some information. But
+the hard work of collecting, aggregating and sorting through all the data from the various ADMIRE applications
+and modules is offloaded to the monitoring infrastructure, the IC needs are thus relatively lightweight: sort and
+query applications identifiers and node lists, transiently store some computation results. For this. The Redis
+in-memory database was chosen because it provides data structures that are sophisticated enough to serve our
+simple query needs and is easy to deploy and use from a C library. As an added benefit, it supports being
+distributed which will come in handy should the controller evolve towards a more distributed design.
+
+
+## Basic architecture of the Inteligent Controller
+
+The basic architecture of the Intelligent Controller suite is a client-server one where the two main elements are
+the following:
+
+- IC server: This component is implemented as a centralized server process where all the application,
+monitoring systems, etc. connects to provided information of the system/applications and to collect
+malleability actions to be executed.
+
+- IC client library: This component is the link between the IC server and the applications, monitoring
+systems and other ADMIRE components. It is implemented as a library that is linked with the application
+executable. It also includes the Slurm module which uses the Slurm API to execute all the malleability
+commands that the IC server has decided to do related to this application.
+
+## Installation Dependencies
+
+The icc depends on Margo, which itself depends on a couple of
 libraries. The following versions have been tested and confirmed to
 work:
 - libfabric 1.12.1 (needed for a stable ofi+tcp provider!)
@@ -136,9 +191,9 @@ Note that the PREFIX environment variable must be set at compilation
 time, so that the pkg-config file takes it into account.
 
 
-## Compiling libicc
+## Compiling IC
 
-libicc is developed in the ADMIRE Git repository, in the `src/ic`
+icc is developed in the ADMIRE Git repository, in the `src/ic`
 directory. Assuming all the required libraries are in `/usr/local`,
 the library, the server executable and the example clients executables
 can be compiled and installed with:
@@ -147,7 +202,7 @@ make install PREFIX=/usr/local PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
 ```
 
 
-## Running the ICC
+## Running the IC
 
 Note: if the dependent libraries are stored in a non-standard
 directory, e.g. `/usr/local/lib`, run with the environment variable
